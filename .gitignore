@@ -1,0 +1,51 @@
+# --- Go ---
+/kview
+/kview.exe
+*.exe
+*.out
+*.test
+*.prof
+*.pprof
+*.cover
+*.log
+
+# Go build cache / tooling
+/bin/
+/dist/
+/tmp/
+.idea/
+.vscode/
+.DS_Store
+
+# Go modules
+/vendor/
+
+# --- UI (Vite/Node) ---
+ui/node_modules/
+ui/dist/
+ui/.vite/
+ui/npm-debug.log*
+ui/yarn-debug.log*
+ui/yarn-error.log*
+ui/pnpm-debug.log*
+
+# --- Embedded UI output (we store placeholder in git, build outputs are copied here) ---
+internal/server/ui_dist/*
+!internal/server/ui_dist/.keep
+!internal/server/ui_dist/index.html
+
+# --- Local env / secrets ---
+.env
+.env.*
+!.env.example
+
+# kube / local configs
+.kube/
+*.kubeconfig
+*.pem
+*.crt
+*.key
+
+# direnv
+.envrc
+.direnv/
