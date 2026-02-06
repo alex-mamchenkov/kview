@@ -103,6 +103,10 @@ This file tracks notable changes and decisions to make future sessions easier.
   - resources sections for volumes, security context, DNS/aliases, topology spread
   - logs improvements: filter, pretty, line limits, wrap
 
+## 2026-02-06 — DTO package refactor
+### Backend
+- Moved Pod and Deployment details DTO structs into `internal/kube/dto` package with no JSON contract changes.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

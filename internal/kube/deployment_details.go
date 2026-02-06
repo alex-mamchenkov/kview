@@ -14,108 +14,10 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"kview/internal/cluster"
+	"kview/internal/kube/dto"
 )
 
-type DeploymentDetailsDTO struct {
-	Summary  DeploymentSummaryDTO  `json:"summary"`
-	Conditions []DeploymentConditionDTO `json:"conditions"`
-	Rollout   DeploymentRolloutDTO `json:"rollout"`
-	ReplicaSets []DeploymentReplicaSetDTO `json:"replicaSets"`
-	Pods     []DeploymentPodDTO    `json:"pods"`
-	Spec     DeploymentSpecDTO     `json:"spec"`
-	YAML     string               `json:"yaml"`
-}
-
-type DeploymentSummaryDTO struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Strategy  string `json:"strategy"`
-	Selector  string `json:"selector"`
-	Desired   int32  `json:"desired"`
-	Current   int32  `json:"current"`
-	Ready     int32  `json:"ready"`
-	Available int32  `json:"available"`
-	UpToDate  int32  `json:"upToDate"`
-	AgeSec    int64  `json:"ageSec"`
-}
-
-type DeploymentConditionDTO struct {
-	Type               string `json:"type"`
-	Status             string `json:"status"`
-	Reason             string `json:"reason,omitempty"`
-	Message            string `json:"message,omitempty"`
-	LastTransitionTime int64  `json:"lastTransitionTime,omitempty"`
-}
-
-type DeploymentRolloutDTO struct {
-	CurrentRevision        string   `json:"currentRevision,omitempty"`
-	ObservedGeneration     int64    `json:"observedGeneration"`
-	Generation             int64    `json:"generation"`
-	ProgressDeadlineExceeded bool   `json:"progressDeadlineExceeded"`
-	LastRolloutStart       int64    `json:"lastRolloutStart,omitempty"`
-	LastRolloutComplete    int64    `json:"lastRolloutComplete,omitempty"`
-	InProgress             bool     `json:"inProgress"`
-	Warnings               []string `json:"warnings,omitempty"`
-	MissingReplicas        int32    `json:"missingReplicas"`
-	UnavailableReplicas    int32    `json:"unavailableReplicas"`
-}
-
-type DeploymentReplicaSetDTO struct {
-	Name          string `json:"name"`
-	Revision      int32  `json:"revision"`
-	Desired       int32  `json:"desired"`
-	Current       int32  `json:"current"`
-	Ready         int32  `json:"ready"`
-	AgeSec        int64  `json:"ageSec"`
-	Status        string `json:"status"`
-	IsActive      bool   `json:"isActive"`
-	UnhealthyPods bool   `json:"unhealthyPods"`
-}
-
-type DeploymentPodDTO struct {
-	Name     string `json:"name"`
-	Phase    string `json:"phase"`
-	Ready    string `json:"ready"`
-	Restarts int32  `json:"restarts"`
-	Node     string `json:"node,omitempty"`
-	AgeSec   int64  `json:"ageSec"`
-}
-
-type DeploymentSpecDTO struct {
-	PodTemplate   PodTemplateSummaryDTO       `json:"podTemplate"`
-	Scheduling    DeploymentSchedulingDTO     `json:"scheduling"`
-	Volumes       []VolumeDTO                 `json:"volumes,omitempty"`
-	Metadata      DeploymentMetadataDTO       `json:"metadata"`
-}
-
-type PodTemplateSummaryDTO struct {
-	Containers     []ContainerSummaryDTO `json:"containers,omitempty"`
-	InitContainers []ContainerSummaryDTO `json:"initContainers,omitempty"`
-	ImagePullSecrets []string            `json:"imagePullSecrets,omitempty"`
-}
-
-type ContainerSummaryDTO struct {
-	Name          string `json:"name"`
-	Image         string `json:"image,omitempty"`
-	CPURequest    string `json:"cpuRequest,omitempty"`
-	CPULimit      string `json:"cpuLimit,omitempty"`
-	MemoryRequest string `json:"memoryRequest,omitempty"`
-	MemoryLimit   string `json:"memoryLimit,omitempty"`
-}
-
-type DeploymentSchedulingDTO struct {
-	NodeSelector             map[string]string             `json:"nodeSelector,omitempty"`
-	AffinitySummary          string                        `json:"affinitySummary,omitempty"`
-	Tolerations              []TolerationDTO               `json:"tolerations,omitempty"`
-	TopologySpreadConstraints []TopologySpreadConstraintDTO `json:"topologySpreadConstraints,omitempty"`
-}
-
-type DeploymentMetadataDTO struct {
-	Labels      map[string]string `json:"labels,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-}
-
-func GetDeploymentDetails(ctx context.Context, c *cluster.Clients, namespace, name string) (*DeploymentDetailsDTO, error) {
+func GetDeploymentDetails(ctx context.Context, c *cluster.Clients, namespace, name string) (*dto.DeploymentDetailsDTO, error) {
 	dep, err := c.Clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
@@ -157,7 +59,7 @@ func GetDeploymentDetails(ctx context.Context, c *cluster.Clients, namespace, na
 		age = int64(now.Sub(dep.CreationTimestamp.Time).Seconds())
 	}
 
-	summary := DeploymentSummaryDTO{
+	summary := dto.DeploymentSummaryDTO{
 		Name:      dep.Name,
 		Namespace: dep.Namespace,
 		Strategy:  strategy,
@@ -170,7 +72,7 @@ func GetDeploymentDetails(ctx context.Context, c *cluster.Clients, namespace, na
 		AgeSec:    age,
 	}
 
-	conditions := make([]DeploymentConditionDTO, 0, len(dep.Status.Conditions))
+	conditions := make([]dto.DeploymentConditionDTO, 0, len(dep.Status.Conditions))
 	var progressingCond *appsv1.DeploymentCondition
 	var availableCond *appsv1.DeploymentCondition
 	var failedCond *appsv1.DeploymentCondition
@@ -180,7 +82,7 @@ func GetDeploymentDetails(ctx context.Context, c *cluster.Clients, namespace, na
 		if !cond.LastTransitionTime.IsZero() {
 			lt = cond.LastTransitionTime.Unix()
 		}
-		conditions = append(conditions, DeploymentConditionDTO{
+		conditions = append(conditions, dto.DeploymentConditionDTO{
 			Type:               string(cond.Type),
 			Status:             string(cond.Status),
 			Reason:             cond.Reason,
@@ -229,7 +131,7 @@ func GetDeploymentDetails(ctx context.Context, c *cluster.Clients, namespace, na
 		unavailableReplicas = 0
 	}
 
-	rollout := DeploymentRolloutDTO{
+	rollout := dto.DeploymentRolloutDTO{
 		CurrentRevision:          dep.Annotations["deployment.kubernetes.io/revision"],
 		ObservedGeneration:       dep.Status.ObservedGeneration,
 		Generation:               dep.Generation,
@@ -252,26 +154,26 @@ func GetDeploymentDetails(ctx context.Context, c *cluster.Clients, namespace, na
 		return nil, err
 	}
 
-	spec := DeploymentSpecDTO{
-		PodTemplate: PodTemplateSummaryDTO{
+	spec := dto.DeploymentSpecDTO{
+		PodTemplate: dto.PodTemplateSummaryDTO{
 			Containers:       mapContainerSummaries(dep.Spec.Template.Spec.Containers),
 			InitContainers:   mapContainerSummaries(dep.Spec.Template.Spec.InitContainers),
 			ImagePullSecrets: mapImagePullSecrets(dep.Spec.Template.Spec.ImagePullSecrets),
 		},
-		Scheduling: DeploymentSchedulingDTO{
-			NodeSelector:             dep.Spec.Template.Spec.NodeSelector,
-			AffinitySummary:          summarizeAffinity(dep.Spec.Template.Spec.Affinity),
-			Tolerations:              mapTolerations(dep.Spec.Template.Spec.Tolerations),
+		Scheduling: dto.DeploymentSchedulingDTO{
+			NodeSelector:              dep.Spec.Template.Spec.NodeSelector,
+			AffinitySummary:           summarizeAffinity(dep.Spec.Template.Spec.Affinity),
+			Tolerations:               mapTolerations(dep.Spec.Template.Spec.Tolerations),
 			TopologySpreadConstraints: mapTopologySpread(dep.Spec.Template.Spec.TopologySpreadConstraints),
 		},
-		Volumes:  mapVolumes(dep.Spec.Template.Spec.Volumes),
-		Metadata: DeploymentMetadataDTO{
+		Volumes: mapVolumes(dep.Spec.Template.Spec.Volumes),
+		Metadata: dto.DeploymentMetadataDTO{
 			Labels:      dep.Spec.Template.Labels,
 			Annotations: dep.Spec.Template.Annotations,
 		},
 	}
 
-	return &DeploymentDetailsDTO{
+	return &dto.DeploymentDetailsDTO{
 		Summary:     summary,
 		Conditions:  conditions,
 		Rollout:     rollout,
@@ -295,14 +197,14 @@ func conditionUpdateTime(cond *appsv1.DeploymentCondition) int64 {
 	return 0
 }
 
-func mapContainerSummaries(ctns []corev1.Container) []ContainerSummaryDTO {
+func mapContainerSummaries(ctns []corev1.Container) []dto.ContainerSummaryDTO {
 	if len(ctns) == 0 {
 		return nil
 	}
-	out := make([]ContainerSummaryDTO, 0, len(ctns))
+	out := make([]dto.ContainerSummaryDTO, 0, len(ctns))
 	for _, c := range ctns {
 		res := mapContainerResources(c.Resources)
-		out = append(out, ContainerSummaryDTO{
+		out = append(out, dto.ContainerSummaryDTO{
 			Name:          c.Name,
 			Image:         c.Image,
 			CPURequest:    res.CPURequest,
@@ -314,7 +216,7 @@ func mapContainerSummaries(ctns []corev1.Container) []ContainerSummaryDTO {
 	return out
 }
 
-func listDeploymentReplicaSets(ctx context.Context, c *cluster.Clients, dep *appsv1.Deployment, selector string) ([]DeploymentReplicaSetDTO, map[string]struct{}, error) {
+func listDeploymentReplicaSets(ctx context.Context, c *cluster.Clients, dep *appsv1.Deployment, selector string) ([]dto.DeploymentReplicaSetDTO, map[string]struct{}, error) {
 	listOpts := metav1.ListOptions{}
 	if selector != "" {
 		listOpts.LabelSelector = selector
@@ -325,7 +227,7 @@ func listDeploymentReplicaSets(ctx context.Context, c *cluster.Clients, dep *app
 	}
 
 	now := time.Now()
-	out := make([]DeploymentReplicaSetDTO, 0, len(rss.Items))
+	out := make([]dto.DeploymentReplicaSetDTO, 0, len(rss.Items))
 	rsNameSet := map[string]struct{}{}
 
 	highestRevision := int32(0)
@@ -361,7 +263,7 @@ func listDeploymentReplicaSets(ctx context.Context, c *cluster.Clients, dep *app
 			status = "ScaledDown"
 		}
 		unhealthy := rs.Status.Replicas > 0 && rs.Status.ReadyReplicas < rs.Status.Replicas
-		out = append(out, DeploymentReplicaSetDTO{
+		out = append(out, dto.DeploymentReplicaSetDTO{
 			Name:          rs.Name,
 			Revision:      rev,
 			Desired:       desired,
@@ -384,7 +286,7 @@ func listDeploymentReplicaSets(ctx context.Context, c *cluster.Clients, dep *app
 	return out, rsNameSet, nil
 }
 
-func listDeploymentPods(ctx context.Context, c *cluster.Clients, namespace, selector string, rsNames map[string]struct{}) ([]DeploymentPodDTO, error) {
+func listDeploymentPods(ctx context.Context, c *cluster.Clients, namespace, selector string, rsNames map[string]struct{}) ([]dto.DeploymentPodDTO, error) {
 	listOpts := metav1.ListOptions{}
 	if selector != "" {
 		listOpts.LabelSelector = selector
@@ -395,7 +297,7 @@ func listDeploymentPods(ctx context.Context, c *cluster.Clients, namespace, sele
 	}
 
 	now := time.Now()
-	out := make([]DeploymentPodDTO, 0, len(pods.Items))
+	out := make([]dto.DeploymentPodDTO, 0, len(pods.Items))
 	for _, p := range pods.Items {
 		if !isPodOwnedByReplicaSet(&p, rsNames) {
 			continue
@@ -414,7 +316,7 @@ func listDeploymentPods(ctx context.Context, c *cluster.Clients, namespace, sele
 		if !p.CreationTimestamp.IsZero() {
 			age = int64(now.Sub(p.CreationTimestamp.Time).Seconds())
 		}
-		out = append(out, DeploymentPodDTO{
+		out = append(out, dto.DeploymentPodDTO{
 			Name:     p.Name,
 			Phase:    string(p.Status.Phase),
 			Ready:    fmtReady(readyCount, totalCount),
