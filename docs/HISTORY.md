@@ -107,6 +107,11 @@ This file tracks notable changes and decisions to make future sessions easier.
 ### Backend
 - Moved Pod and Deployment details DTO structs into `internal/kube/dto` package with no JSON contract changes.
 
+## 2026-02-06 — Frontend helper deduplication
+### UI
+- Centralized formatting helpers (timestamp, age, value fallback) into shared utilities.
+- Centralized Kubernetes UI mappings for phase/status/condition/event chip colors.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

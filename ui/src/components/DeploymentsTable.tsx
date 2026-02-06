@@ -22,6 +22,8 @@ import {
 } from "@mui/x-data-grid";
 import { apiGet } from "../api";
 import DeploymentDrawer from "./DeploymentDrawer";
+import { fmtAge } from "../utils/format";
+import { eventChipColor, statusChipColor } from "../utils/k8sUi";
 
 type Deployment = {
   name: string;
@@ -72,45 +74,9 @@ const cols: GridColDef[] = [
     headerName: "Age",
     width: 130,
     type: "number",
-    renderCell: (p) => formatAge(Number((p.row as any)?.ageSec)),
+    renderCell: (p) => fmtAge(Number((p.row as any)?.ageSec), "table"),
   },
 ];
-
-function formatAge(sec: number): string {
-  if (sec == null || Number.isNaN(sec) || sec < 0) return "-";
-  const d = Math.floor(sec / 86400);
-  const h = Math.floor((sec % 86400) / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-function statusChipColor(status: string): "success" | "warning" | "error" | "default" {
-  switch (status) {
-    case "Available":
-      return "success";
-    case "Progressing":
-      return "warning";
-    case "Paused":
-      return "default";
-    case "ScaledDown":
-      return "default";
-    default:
-      return "default";
-  }
-}
-
-function eventChipColor(kind: string): "success" | "warning" | "error" | "default" {
-  switch (kind) {
-    case "Normal":
-      return "success";
-    case "Warning":
-      return "warning";
-    default:
-      return "default";
-  }
-}
 
 type QuickFilter = { label: string; value: string };
 

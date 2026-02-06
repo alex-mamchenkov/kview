@@ -23,6 +23,8 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../api";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import PodDrawer from "./PodDrawer";
+import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
+import { conditionStatusColor, eventChipColor, phaseChipColor } from "../utils/k8sUi";
 
 type DeploymentDetails = {
   summary: DeploymentSummary;
@@ -137,69 +139,11 @@ type ContainerSummary = {
   memoryLimit?: string;
 };
 
-function fmtTs(unix: number) {
-  if (!unix) return "";
-  const d = new Date(unix * 1000);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(
-    d.getMinutes()
-  )}:${pad(d.getSeconds())}`;
-}
-
-function eventChipColor(kind: string): "success" | "warning" | "error" | "default" {
-  switch (kind) {
-    case "Normal":
-      return "success";
-    case "Warning":
-      return "warning";
-    default:
-      return "default";
-  }
-}
-
-function valueOrDash(val?: string | number | null) {
-  if (val === undefined || val === null || val === "") return "-";
-  return String(val);
-}
-
-function fmtAge(seconds?: number) {
-  if (!seconds || seconds < 0) return "-";
-  const mins = Math.floor(seconds / 60);
-  if (mins < 1) return `${seconds}s`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 1) return `${mins}m`;
-  const days = Math.floor(hours / 24);
-  if (days < 1) return `${hours}h`;
-  return `${days}d`;
-}
-
 function isConditionHealthy(cond: DeploymentCondition) {
   if (cond.type === "ReplicaFailure") {
     return cond.status !== "True";
   }
   return cond.status === "True";
-}
-
-function conditionStatusColor(status: string): "success" | "warning" | "error" | "default" {
-  if (status === "True") return "success";
-  if (status === "False") return "error";
-  if (status === "Unknown") return "warning";
-  return "default";
-}
-
-function podPhaseChipColor(phase: string): "success" | "warning" | "error" | "default" {
-  switch (phase) {
-    case "Running":
-      return "success";
-    case "Pending":
-      return "warning";
-    case "Failed":
-      return "error";
-    case "Succeeded":
-      return "default";
-    default:
-      return "default";
-  }
 }
 
 export default function DeploymentDrawer(props: {
@@ -568,7 +512,7 @@ export default function DeploymentDrawer(props: {
                           >
                             <TableCell>{p.name}</TableCell>
                             <TableCell>
-                              <Chip size="small" label={p.phase} color={podPhaseChipColor(p.phase)} />
+                              <Chip size="small" label={p.phase} color={phaseChipColor(p.phase)} />
                             </TableCell>
                             <TableCell>{p.ready}</TableCell>
                             <TableCell>{p.restarts}</TableCell>
