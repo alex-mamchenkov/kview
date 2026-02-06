@@ -122,6 +122,19 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Hardened API error parsing for JSON, text, and HTML responses with consistent error shape.
 - Added guards for missing/partial data and unknown enums in Pod/Deployment drawers.
 
+## 2026-02-06 — Services list + details
+### Backend
+- Added Services endpoints:
+  - `/api/namespaces/{ns}/services`
+  - `/api/namespaces/{ns}/services/{name}`
+  - `/api/namespaces/{ns}/services/{name}/events`
+- Added Services list/detail DTOs (type, ports, selectors, traffic, endpoints summary).
+
+### UI
+- Added Services table with columns for type, cluster IPs, ports, endpoints summary, age.
+- Added Service drawer with tabs: Overview, Endpoints, Events, YAML.
+- Enabled navigation: Service → Pod drawer for endpoint targets.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

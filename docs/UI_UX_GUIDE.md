@@ -100,6 +100,9 @@ This document describes the current UI/UX behavior as implemented. It is a contr
   - Table age: `Xd Yh`, `Xh Ym`, or `Xm` (compact).
   - Detail age: `Xs`, `Xm`, `Xh`, or `Xd` (single unit).
 - **Missing values**: always render as `"-"`.
+- **Key/value chips**:
+  - Use compact chips for `key=value` lists (labels, annotations, selectors).
+  - Provide a hover hint with the full `key=value` string to reveal long values.
 - **Monospace usage**:
   - Use monospace for code-like or identifier-heavy values when displayed in key/value grids.
   - YAML and Logs are always monospace with line numbers.

@@ -28,12 +28,21 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - single selection
   - refresh interval + last refresh timestamp
   - last event summary
+- Services view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
 - Deployment details drawer:
   - overview summary + conditions
   - rollout summary + diagnostics
   - ReplicaSets table
   - pods list with click-through to Pod drawer
   - spec summary (template, scheduling, volumes, metadata)
+  - events, YAML
+- Service details drawer:
+  - overview summary + ports + traffic notes
+  - endpoints list with click-through to Pod drawer
   - events, YAML
 - Pod details drawer:
   - overview summary + health conditions
