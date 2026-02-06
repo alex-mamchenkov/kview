@@ -68,6 +68,39 @@ function tryPrettyJSONLine(line: string): string | null {
   }
 }
 
+function eventChipColor(kind: string): "success" | "warning" | "error" | "default" {
+  switch (kind) {
+    case "Normal":
+      return "success";
+    case "Warning":
+      return "warning";
+    default:
+      return "default";
+  }
+}
+
+function formatPrettyWithLineNumbers(lines: string[]): { text: string; hiddenLineNumbers: Set<number> } {
+  const out: string[] = [];
+  const hidden = new Set<number>();
+  let lineNo = 1;
+
+  lines.forEach((line) => {
+    const prettyStr = tryPrettyJSONLine(line);
+    if (prettyStr) {
+      const parts = prettyStr.split("\n");
+      parts.forEach((p, i) => {
+        out.push(p);
+        if (i > 0) hidden.add(lineNo);
+        lineNo++;
+      });
+    } else {
+      out.push(line);
+      lineNo++;
+    }
+  });
+  return { text: out.join("\n"), hiddenLineNumbers: hidden };
+}
+
 export default function PodDrawer(props: {
   open: boolean;
   onClose: () => void;
@@ -86,10 +119,13 @@ export default function PodDrawer(props: {
   const [logsFilter, setLogsFilter] = useState<string>("");
   const [pretty, setPretty] = useState<boolean>(false);
   const [following, setFollowing] = useState<boolean>(false);
+  const [lineLimit, setLineLimit] = useState<number>(500);
+  const [wrapLines, setWrapLines] = useState<boolean>(false);
 
   // Store log entries as array for filtering + pretty formatting
   const [logLines, setLogLines] = useState<string[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
+  const logScrollRef = useRef<HTMLDivElement | null>(null);
 
   const ns = props.namespace;
   const name = props.podName;
@@ -120,7 +156,9 @@ export default function PodDrawer(props: {
     const qs = new URLSearchParams();
     if (container) qs.set("container", container);
     qs.set("follow", "1");
-    qs.set("tail", "200");
+    if (lineLimit > 0) {
+      qs.set("tail", String(Math.min(lineLimit, 5000)));
+    }
 
     const ws = new WebSocket(wsURL(`${logWsBase}?${qs.toString()}`, props.token));
     wsRef.current = ws;
@@ -172,6 +210,7 @@ export default function PodDrawer(props: {
     setLogLines([]);
     setLogsFilter("");
     setPretty(false);
+    setWrapLines(false);
     stopLogs();
 
     setLoading(true);
@@ -199,30 +238,31 @@ export default function PodDrawer(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.open, name, ns, props.token]);
 
-  const renderedLogs = useMemo(() => {
+  const { renderedLogs, hiddenLineNumbers } = useMemo(() => {
     const q = logsFilter.trim().toLowerCase();
 
     const filtered = q
       ? logLines.filter((l) => l.toLowerCase().includes(q))
       : logLines;
 
+    const limited = lineLimit > 0 ? filtered.slice(-lineLimit) : filtered;
+
     if (!pretty) {
-      return filtered.join("\n");
+      return { renderedLogs: limited.join("\n"), hiddenLineNumbers: new Set<number>() };
     }
 
     // Pretty: try parse each line as JSON; if parsed -> pretty multi-line
     // If not JSON -> keep as-is line.
-    const out: string[] = [];
-    for (const line of filtered) {
-      const prettyStr = tryPrettyJSONLine(line);
-      if (prettyStr) {
-        out.push(prettyStr);
-      } else {
-        out.push(line);
-      }
-    }
-    return out.join("\n\n");
-  }, [logLines, logsFilter, pretty]);
+    const formatted = formatPrettyWithLineNumbers(limited);
+    return { renderedLogs: formatted.text, hiddenLineNumbers: formatted.hiddenLineNumbers };
+  }, [logLines, logsFilter, pretty, lineLimit]);
+
+  useEffect(() => {
+    if (!following) return;
+    const el = logScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [renderedLogs, following]);
 
   const summary = details?.summary;
 
@@ -270,10 +310,10 @@ export default function PodDrawer(props: {
               <Tab label="Logs" />
             </Tabs>
 
-            <Box sx={{ mt: 2, flexGrow: 1, overflow: "auto" }}>
+            <Box sx={{ mt: 2, flexGrow: 1, minHeight: 0, overflow: "hidden" }}>
               {/* SUMMARY */}
               {tab === 0 && (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
                   <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
                     <Chip label={`Phase: ${summary?.phase || "-"}`} />
                     <Chip label={`Ready: ${summary?.ready || "-"}`} />
@@ -289,16 +329,19 @@ export default function PodDrawer(props: {
 
               {/* EVENTS */}
               {tab === 1 && (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
                   {events.length === 0 ? (
                     <Typography variant="body2">No events found for this Pod.</Typography>
                   ) : (
                     events.map((e, idx) => (
                       <Box key={idx} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.25 }}>
                         <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
-                          <Typography variant="subtitle2">
-                            {e.type} — {e.reason} (x{e.count})
-                          </Typography>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                            <Chip size="small" label={e.type || "Unknown"} color={eventChipColor(e.type)} />
+                            <Typography variant="subtitle2">
+                              {e.reason} (x{e.count})
+                            </Typography>
+                          </Box>
                           <Typography variant="caption" color="text.secondary">
                             {fmtTs(e.lastSeen)}
                           </Typography>
@@ -314,7 +357,7 @@ export default function PodDrawer(props: {
 
               {/* YAML */}
               {tab === 2 && (
-                <Box sx={{ border: "1px solid #ddd", borderRadius: 2, overflow: "hidden" }}>
+                <Box sx={{ border: "1px solid #ddd", borderRadius: 2, overflow: "auto", height: "100%" }}>
                   <SyntaxHighlighter language="yaml" showLineNumbers wrapLongLines>
                     {details?.yaml || ""}
                   </SyntaxHighlighter>
@@ -323,7 +366,7 @@ export default function PodDrawer(props: {
 
               {/* LOGS */}
               {tab === 3 && (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, height: "100%" }}>
                   <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
                     <FormControl size="small" sx={{ minWidth: 220 }}>
                       <InputLabel id="container-label">Container</InputLabel>
@@ -344,6 +387,22 @@ export default function PodDrawer(props: {
                       </Select>
                     </FormControl>
 
+                    <FormControl size="small" sx={{ minWidth: 140 }}>
+                      <InputLabel id="lines-label">Lines</InputLabel>
+                      <Select
+                        labelId="lines-label"
+                        label="Lines"
+                        value={lineLimit}
+                        onChange={(e) => setLineLimit(Number(e.target.value))}
+                      >
+                        {[100, 500, 1000, 5000].map((n) => (
+                          <MenuItem key={n} value={n}>
+                            {n}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+
                     <TextField
                       size="small"
                       label="Filter pattern"
@@ -354,7 +413,12 @@ export default function PodDrawer(props: {
 
                     <FormControlLabel
                       control={<Switch checked={pretty} onChange={(e) => setPretty(e.target.checked)} />}
-                      label="Pretty JSON"
+                      label="Pretty"
+                    />
+
+                    <FormControlLabel
+                      control={<Switch checked={wrapLines} onChange={(e) => setWrapLines(e.target.checked)} />}
+                      label="Wrap lines"
                     />
 
                     <Box sx={{ flexGrow: 1 }} />
@@ -367,8 +431,27 @@ export default function PodDrawer(props: {
                     </Button>
                   </Box>
 
-                  <Box sx={{ border: "1px solid #ddd", borderRadius: 2, overflow: "hidden" }}>
-                    <SyntaxHighlighter language={pretty ? "json" : "text"} wrapLongLines showLineNumbers>
+                  <Box
+                    ref={logScrollRef}
+                    sx={{ border: "1px solid #ddd", borderRadius: 2, overflow: "auto", flexGrow: 1 }}
+                  >
+                    <SyntaxHighlighter
+                      key={`${pretty}-${wrapLines}`}
+                      language={pretty ? "json" : "text"}
+                      wrapLongLines={wrapLines}
+                      showLineNumbers
+                      lineNumberStyle={(lineNumber) =>
+                        hiddenLineNumbers.has(lineNumber) ? { visibility: "hidden" } : {}
+                      }
+                      customStyle={{
+                        margin: 0,
+                        background: "transparent",
+                        whiteSpace: wrapLines ? "pre-wrap" : "pre",
+                      }}
+                      codeTagProps={{
+                        style: { whiteSpace: wrapLines ? "pre-wrap" : "pre" },
+                      }}
+                    >
                       {renderedLogs || ""}
                     </SyntaxHighlighter>
                   </Box>

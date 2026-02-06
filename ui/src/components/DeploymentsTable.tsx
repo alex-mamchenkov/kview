@@ -21,16 +21,17 @@ import {
   GridToolbarContainer,
 } from "@mui/x-data-grid";
 import { apiGet } from "../api";
-import PodDrawer from "./PodDrawer";
+import DeploymentDrawer from "./DeploymentDrawer";
 
-type Pod = {
+type Deployment = {
   name: string;
   namespace: string;
-  node?: string;
-  phase: string;
   ready: string;
-  restarts: number;
+  upToDate: number;
+  available: number;
+  strategy: string;
   ageSec: number;
+  status: string;
   lastEvent?: {
     type: string;
     reason: string;
@@ -38,28 +39,29 @@ type Pod = {
   };
 };
 
-type Row = Pod & { id: string };
+type Row = Deployment & { id: string };
 
 const cols: GridColDef[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
   {
-    field: "phase",
-    headerName: "Phase",
-    width: 130,
+    field: "status",
+    headerName: "Status",
+    width: 150,
     renderCell: (p) => {
-      const phase = String(p.value || "");
-      return <Chip size="small" label={phase || "-"} color={phaseChipColor(phase)} />;
+      const status = String(p.value || "");
+      return <Chip size="small" label={status || "-"} color={statusChipColor(status)} />;
     },
   },
-  { field: "ready", headerName: "Ready", width: 110 },
-  { field: "restarts", headerName: "Restarts", width: 120, type: "number" },
-  { field: "node", headerName: "Node", flex: 1, minWidth: 180 },
+  { field: "ready", headerName: "Ready", width: 130 },
+  { field: "upToDate", headerName: "Up-to-date", width: 130, type: "number" },
+  { field: "available", headerName: "Available", width: 120, type: "number" },
+  { field: "strategy", headerName: "Strategy", width: 140 },
   {
     field: "lastEvent",
     headerName: "Last Event",
     width: 200,
     renderCell: (p) => {
-      const ev = (p.row as any).lastEvent as Pod["lastEvent"] | undefined;
+      const ev = (p.row as any).lastEvent as Deployment["lastEvent"] | undefined;
       if (!ev?.reason) return "-";
       return <Chip size="small" label={ev.reason} color={eventChipColor(ev.type)} />;
     },
@@ -84,15 +86,15 @@ function formatAge(sec: number): string {
   return `${m}m`;
 }
 
-function phaseChipColor(phase: string): "success" | "warning" | "error" | "default" {
-  switch (phase) {
-    case "Running":
+function statusChipColor(status: string): "success" | "warning" | "error" | "default" {
+  switch (status) {
+    case "Available":
       return "success";
-    case "Pending":
+    case "Progressing":
       return "warning";
-    case "Failed":
-      return "error";
-    case "Succeeded":
+    case "Paused":
+      return "default";
+    case "ScaledDown":
       return "default";
     default:
       return "default";
@@ -147,7 +149,7 @@ const refreshOptions = [
   { label: "60s", value: 60 },
 ];
 
-function PodsToolbar(props: {
+function DeploymentsToolbar(props: {
   filter: string;
   setFilter: (v: string) => void;
   selectedQuickFilter: string | null;
@@ -180,7 +182,7 @@ function PodsToolbar(props: {
       <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
         <TextField
           size="small"
-          label="Filter (name/node/phase)"
+          label="Filter (name/strategy)"
           value={props.filter}
           onChange={(e) => onFilterChange(e.target.value)}
           sx={{ minWidth: 340 }}
@@ -210,11 +212,7 @@ function PodsToolbar(props: {
           </Select>
         </FormControl>
         <Box sx={{ flexGrow: 1 }} />
-        <Button
-          variant="contained"
-          onClick={props.onOpenSelected}
-          disabled={!props.hasSelection}
-        >
+        <Button variant="contained" onClick={props.onOpenSelected} disabled={!props.hasSelection}>
           Open
         </Button>
       </Box>
@@ -236,21 +234,21 @@ function PodsToolbar(props: {
   );
 }
 
-export default function PodsTable({ token, namespace }: { token: string; namespace: string }) {
+export default function DeploymentsTable({ token, namespace }: { token: string; namespace: string }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [err, setErr] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>([]);
-  const selectedPodName = useMemo(() => {
+  const selectedName = useMemo(() => {
     if (!selectionModel.length) return null;
     const id = String(selectionModel[0]); // `${ns}/${name}`
     const parts = id.split("/");
     return parts.length >= 2 ? parts.slice(1).join("/") : null;
   }, [selectionModel]);
 
-  const [drawerPod, setDrawerPod] = useState<string | null>(null);
+  const [drawerName, setDrawerName] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("");
   const [selectedQuickFilter, setSelectedQuickFilter] = useState<string | null>(null);
   const [refreshSec, setRefreshSec] = useState<number>(10);
@@ -262,9 +260,9 @@ export default function PodsTable({ token, namespace }: { token: string; namespa
       setLoading(true);
       setErr("");
       try {
-        const res = await apiGet<any>(`/api/namespaces/${encodeURIComponent(namespace)}/pods`, token);
-        const items: Pod[] = res.items || [];
-        const mapped: Row[] = items.map((p) => ({ ...p, id: `${p.namespace}/${p.name}` }));
+        const res = await apiGet<any>(`/api/namespaces/${encodeURIComponent(namespace)}/deployments`, token);
+        const items: Deployment[] = res.items || [];
+        const mapped: Row[] = items.map((d) => ({ ...d, id: `${d.namespace}/${d.name}` }));
         setRows(mapped);
         setLastRefresh(new Date());
         setSelectionModel([]);
@@ -282,9 +280,9 @@ export default function PodsTable({ token, namespace }: { token: string; namespa
     if (!namespace || refreshSec <= 0) return;
     const t = setInterval(async () => {
       try {
-        const res = await apiGet<any>(`/api/namespaces/${encodeURIComponent(namespace)}/pods`, token);
-        const items: Pod[] = res.items || [];
-        const mapped: Row[] = items.map((p) => ({ ...p, id: `${p.namespace}/${p.name}` }));
+        const res = await apiGet<any>(`/api/namespaces/${encodeURIComponent(namespace)}/deployments`, token);
+        const items: Deployment[] = res.items || [];
+        const mapped: Row[] = items.map((d) => ({ ...d, id: `${d.namespace}/${d.name}` }));
         setRows(mapped);
         setLastRefresh(new Date());
       } catch {
@@ -298,27 +296,23 @@ export default function PodsTable({ token, namespace }: { token: string; namespa
     const q = filter.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) => {
-      return (
-        r.name.toLowerCase().includes(q) ||
-        (r.node || "").toLowerCase().includes(q) ||
-        (r.phase || "").toLowerCase().includes(q)
-      );
+      return r.name.toLowerCase().includes(q) || (r.strategy || "").toLowerCase().includes(q);
     });
   }, [rows, filter]);
 
   const quickFilters = useMemo(() => buildQuickFilters(rows), [rows]);
 
   function openSelected() {
-    if (!selectedPodName) return;
-    setDrawerPod(selectedPodName);
+    if (!selectedName) return;
+    setDrawerName(selectedName);
   }
 
-  const ToolbarAny = PodsToolbar as any;
+  const ToolbarAny = DeploymentsToolbar as any;
 
   return (
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6" sx={{ mb: 1 }}>
-        Pods — {namespace}
+        Deployments — {namespace}
       </Typography>
 
       {err ? (
@@ -336,7 +330,7 @@ export default function PodsTable({ token, namespace }: { token: string; namespa
             hideFooterSelectedRowCount
             rowSelectionModel={selectionModel}
             onRowSelectionModelChange={(m) => setSelectionModel(m)}
-            onRowDoubleClick={(p) => setDrawerPod((p.row as any).name as string)}
+            onRowDoubleClick={(p) => setDrawerName((p.row as any).name as string)}
             initialState={{
               sorting: { sortModel: [{ field: "name", sort: "asc" }] },
             }}
@@ -348,7 +342,7 @@ export default function PodsTable({ token, namespace }: { token: string; namespa
                 selectedQuickFilter,
                 setSelectedQuickFilter,
                 onOpenSelected: openSelected,
-                hasSelection: !!selectedPodName,
+                hasSelection: !!selectedName,
                 refreshSec,
                 setRefreshSec,
                 quickFilters,
@@ -363,14 +357,13 @@ export default function PodsTable({ token, namespace }: { token: string; namespa
         </Typography>
       </Box>
 
-      <PodDrawer
-        open={!!drawerPod}
-        onClose={() => setDrawerPod(null)}
+      <DeploymentDrawer
+        open={!!drawerName}
+        onClose={() => setDrawerName(null)}
         token={token}
         namespace={namespace}
-        podName={drawerPod}
+        deploymentName={drawerName}
       />
     </Paper>
   );
 }
-

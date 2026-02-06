@@ -49,6 +49,28 @@ This file tracks notable changes and decisions to make future sessions easier.
   - plugin available in one direnv environment but not another → recommended ensuring PATH includes plugin (often `$HOME/.krew/bin`).
 - RBAC limitation: user can list namespaces but not access `default` → UI allows namespace selection and persists it.
 
+## 2026-02-06 — Deployments + table/UX upgrades
+### Backend
+- Added Deployments endpoints:
+  - `/api/namespaces/{ns}/deployments`
+  - `/api/namespaces/{ns}/deployments/{name}`
+  - `/api/namespaces/{ns}/deployments/{name}/events`
+- Added latest-event summary support for list views (Pods + Deployments).
+- Removed `managedFields` from YAML output to avoid noisy `f:`/`v:` fields.
+
+### UI
+- Added Deployments table + drawer (Summary/Events/YAML).
+- Table upgrades (Pods + Deployments):
+  - Age fix, refresh interval selector, last refresh timestamp.
+  - Last Event column with color coding.
+  - Quick filters based on name patterns:
+    - `^(master|release|test|dev).*$ → $1`
+    - `^([^\s-]+-[^\s-]+)-.+$ → $1`
+  - Quick filters appear on a dedicated row; 3+ matches only; selected filter highlights and toggles.
+- Drawer upgrades:
+  - Events type color chips.
+  - Logs: line limits, follow auto-scroll, pretty mode line numbering, wrap toggle, sticky controls.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

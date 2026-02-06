@@ -20,6 +20,14 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - sorting
   - filtering
   - single selection
+  - refresh interval + last refresh timestamp
+  - last event summary
+- Deployments view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
+  - last event summary
 - Pod details drawer:
   - summary
   - events
@@ -28,7 +36,9 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
     - container selector
     - follow / stop (WebSocket)
     - text filter
-    - pretty JSON mode
+    - line limits
+    - pretty mode
+    - wrap toggle
 - RBAC-friendly behavior:
   - does not assume access to `default` namespace
   - handles Forbidden responses gracefully

@@ -16,6 +16,7 @@ type PodDTO struct {
 	Ready     string `json:"ready"`
 	Restarts  int32  `json:"restarts"`
 	AgeSec    int64  `json:"ageSec"`
+	LastEvent *EventBriefDTO `json:"lastEvent,omitempty"`
 }
 
 func ListPods(ctx context.Context, c *cluster.Clients, namespace string) ([]PodDTO, error) {
@@ -24,9 +25,16 @@ func ListPods(ctx context.Context, c *cluster.Clients, namespace string) ([]PodD
 		return nil, err
 	}
 
+	latestEvents, _ := LatestEventsByObject(ctx, c, namespace, "Pod")
+
 	now := time.Now()
 	out := make([]PodDTO, 0, len(pods.Items))
 	for _, p := range pods.Items {
+		var lastEvent *EventBriefDTO
+		if ev, ok := latestEvents[p.Name]; ok {
+			evCopy := ev
+			lastEvent = &evCopy
+		}
 		var readyCount, totalCount int
 		var restarts int32
 
@@ -51,6 +59,7 @@ func ListPods(ctx context.Context, c *cluster.Clients, namespace string) ([]PodD
 			Ready:     fmtReady(readyCount, totalCount),
 			Restarts:  restarts,
 			AgeSec:    age,
+			LastEvent: lastEvent,
 		})
 	}
 	return out, nil

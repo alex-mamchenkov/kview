@@ -23,7 +23,9 @@ func GetPodDetails(ctx context.Context, c *cluster.Clients, namespace, name stri
 	}
 
 	// YAML
-	b, err := json.Marshal(pod)
+	podCopy := pod.DeepCopy()
+	podCopy.ManagedFields = nil
+	b, err := json.Marshal(podCopy)
 	if err != nil {
 		return nil, err
 	}

@@ -37,6 +37,7 @@ These rules are meant for future ChatGPT sessions working on this repository.
 - Avoid adding heavy dependencies unless the UX value is clear.
 - Keep all technical docs (README, comments) in English unless explicitly requested otherwise.
   - (User-facing conversation may be Russian; code/docs are English.)
+- Do not create git commits; the user will handle all commits.
 
 ## Testing / safety
 - Anything that mutates cluster state (delete pod, rollback) should:
