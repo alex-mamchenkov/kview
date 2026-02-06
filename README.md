@@ -33,6 +33,11 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - filtering
   - single selection
   - refresh interval + last refresh timestamp
+- Ingresses view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
 - Deployment details drawer:
   - overview summary + conditions
   - rollout summary + diagnostics
@@ -43,6 +48,11 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
 - Service details drawer:
   - overview summary + ports + traffic notes
   - endpoints list with click-through to Pod drawer
+  - events, YAML
+- Ingress details drawer:
+  - overview summary + warnings
+  - rules grouped by host
+  - TLS entries
   - events, YAML
 - Pod details drawer:
   - overview summary + health conditions

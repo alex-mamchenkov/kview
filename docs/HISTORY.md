@@ -135,6 +135,21 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Added Service drawer with tabs: Overview, Endpoints, Events, YAML.
 - Enabled navigation: Service → Pod drawer for endpoint targets.
 
+## 2026-02-07 — Ingresses list + details
+### Backend
+- Added Ingresses endpoints:
+  - `/api/namespaces/{ns}/ingresses`
+  - `/api/namespaces/{ns}/ingresses/{name}`
+  - `/api/namespaces/{ns}/ingresses/{name}/events`
+- Added Ingresses list/detail DTOs (class, hosts, TLS, addresses, rules, default backend).
+- Added derived warnings for missing backend services and zero-ready endpoints.
+- Added ingress class resolution with annotation/default-class fallbacks.
+
+### UI
+- Added Ingresses table with columns for class, hosts, TLS, address, age.
+- Added Ingress drawer with tabs: Overview, Rules, TLS, Events, YAML.
+- Enabled navigation: Ingress → Service drawer (and onward to Pods).
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

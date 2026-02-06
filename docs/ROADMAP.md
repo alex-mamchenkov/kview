@@ -51,7 +51,7 @@ Understand **how traffic reaches workloads**.
   - Linked Pods navigation
   - Events, YAML
 
-- [ ] Ingresses
+- [x] Ingresses
   - Hosts and paths
   - Backend Services
   - TLS configuration

@@ -4,6 +4,7 @@ import Sidebar from "./components/Sidebar";
 import PodsTable from "./components/PodsTable";
 import DeploymentsTable from "./components/DeploymentsTable";
 import ServicesTable from "./components/ServicesTable";
+import IngressesTable from "./components/IngressesTable";
 import { apiGet, apiPost } from "./api";
 import { loadState, saveState, toggleFavouriteNamespace, type Section } from "./state";
 
@@ -164,6 +165,7 @@ export default function App() {
           <DeploymentsTable token={token} namespace={namespace} />
         ) : null}
         {section === "services" && namespace ? <ServicesTable token={token} namespace={namespace} /> : null}
+        {section === "ingresses" && namespace ? <IngressesTable token={token} namespace={namespace} /> : null}
         {/* later: jobs */}
       </Box>
     </Box>

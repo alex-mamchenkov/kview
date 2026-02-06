@@ -1,0 +1,59 @@
+package dto
+
+type IngressListItemDTO struct {
+	Name             string   `json:"name"`
+	Namespace        string   `json:"namespace"`
+	IngressClassName string   `json:"ingressClassName"`
+	Hosts            []string `json:"hosts"`
+	TLSCount         int32    `json:"tlsCount"`
+	Addresses        []string `json:"addresses"`
+	AgeSec           int64    `json:"ageSec"`
+}
+
+type IngressDetailsDTO struct {
+	Summary        IngressSummaryDTO   `json:"summary"`
+	Rules          []IngressRuleDTO    `json:"rules"`
+	TLS            []IngressTLSDTO     `json:"tls"`
+	DefaultBackend *IngressBackendDTO  `json:"defaultBackend,omitempty"`
+	Warnings       IngressWarningsDTO  `json:"warnings"`
+	YAML           string              `json:"yaml"`
+}
+
+type IngressSummaryDTO struct {
+	Name             string            `json:"name"`
+	Namespace        string            `json:"namespace"`
+	IngressClassName string            `json:"ingressClassName"`
+	Addresses        []string          `json:"addresses"`
+	Hosts            []string          `json:"hosts"`
+	TLSCount         int32             `json:"tlsCount"`
+	AgeSec           int64             `json:"ageSec"`
+	Labels           map[string]string `json:"labels,omitempty"`
+	Annotations      map[string]string `json:"annotations,omitempty"`
+}
+
+type IngressRuleDTO struct {
+	Host  string           `json:"host"`
+	Paths []IngressPathDTO `json:"paths"`
+}
+
+type IngressPathDTO struct {
+	Path               string `json:"path"`
+	PathType           string `json:"pathType"`
+	BackendServiceName string `json:"backendServiceName"`
+	BackendServicePort string `json:"backendServicePort"`
+}
+
+type IngressTLSDTO struct {
+	SecretName string   `json:"secretName"`
+	Hosts      []string `json:"hosts"`
+}
+
+type IngressBackendDTO struct {
+	ServiceName string `json:"serviceName"`
+	ServicePort string `json:"servicePort"`
+}
+
+type IngressWarningsDTO struct {
+	MissingBackendServices []string `json:"missingBackendServices,omitempty"`
+	NoReadyEndpoints       []string `json:"noReadyEndpoints,omitempty"`
+}
