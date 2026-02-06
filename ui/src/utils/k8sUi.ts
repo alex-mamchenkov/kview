@@ -1,6 +1,6 @@
 type ChipColor = "success" | "warning" | "error" | "default";
 
-export function phaseChipColor(phase: string): ChipColor {
+export function phaseChipColor(phase?: string | null): ChipColor {
   switch (phase) {
     case "Running":
       return "success";
@@ -15,7 +15,7 @@ export function phaseChipColor(phase: string): ChipColor {
   }
 }
 
-export function eventChipColor(kind: string): ChipColor {
+export function eventChipColor(kind?: string | null): ChipColor {
   switch (kind) {
     case "Normal":
       return "success";
@@ -26,14 +26,14 @@ export function eventChipColor(kind: string): ChipColor {
   }
 }
 
-export function conditionStatusColor(status: string): ChipColor {
+export function conditionStatusColor(status?: string | null): ChipColor {
   if (status === "True") return "success";
   if (status === "False") return "error";
   if (status === "Unknown") return "warning";
   return "default";
 }
 
-export function statusChipColor(status: string): ChipColor {
+export function statusChipColor(status?: string | null): ChipColor {
   switch (status) {
     case "Available":
       return "success";

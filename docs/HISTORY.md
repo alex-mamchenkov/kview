@@ -117,6 +117,11 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Extracted shared drawer primitives (section headers, key/value grids, empty/error states).
 - Refactored Pod and Deployment drawers to reuse shared components with identical UX.
 
+## 2026-02-06 — Frontend defensive hardening
+### UI
+- Hardened API error parsing for JSON, text, and HTML responses with consistent error shape.
+- Added guards for missing/partial data and unknown enums in Pod/Deployment drawers.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

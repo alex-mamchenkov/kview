@@ -182,14 +182,14 @@ export default function DeploymentDrawer(props: {
         `/api/namespaces/${encodeURIComponent(ns)}/deployments/${encodeURIComponent(name)}`,
         props.token
       );
-      const item: DeploymentDetails = det.item;
+      const item: DeploymentDetails | null = det?.item ?? null;
       setDetails(item);
 
       const ev = await apiGet<any>(
         `/api/namespaces/${encodeURIComponent(ns)}/deployments/${encodeURIComponent(name)}/events`,
         props.token
       );
-      setEvents(ev.items || []);
+      setEvents(ev?.items || []);
     })()
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false));
@@ -298,18 +298,18 @@ export default function DeploymentDrawer(props: {
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {(details?.conditions || []).map((c) => {
+                            {(details?.conditions || []).map((c, idx) => {
                               const unhealthy = !isConditionHealthy(c);
                               return (
                                 <TableRow
-                                  key={c.type}
+                                  key={c.type || String(idx)}
                                   sx={{
                                     backgroundColor: unhealthy ? "rgba(211, 47, 47, 0.08)" : "transparent",
                                   }}
                                 >
-                                  <TableCell>{c.type}</TableCell>
+                                  <TableCell>{valueOrDash(c.type)}</TableCell>
                                   <TableCell>
-                                    <Chip size="small" label={c.status} color={conditionStatusColor(c.status)} />
+                                    <Chip size="small" label={valueOrDash(c.status)} color={conditionStatusColor(c.status)} />
                                   </TableCell>
                                   <TableCell>{valueOrDash(c.reason)}</TableCell>
                                   <TableCell sx={{ maxWidth: 320, whiteSpace: "pre-wrap" }}>
@@ -344,7 +344,15 @@ export default function DeploymentDrawer(props: {
                             label: "Observed / Spec Generation",
                             value: `${valueOrDash(rollout?.observedGeneration)} / ${valueOrDash(rollout?.generation)}`,
                           },
-                          { label: "Progress Deadline", value: rollout?.progressDeadlineExceeded ? "Exceeded" : "OK" },
+                          {
+                            label: "Progress Deadline",
+                            value:
+                              rollout?.progressDeadlineExceeded === undefined
+                                ? "-"
+                                : rollout.progressDeadlineExceeded
+                                ? "Exceeded"
+                                : "OK",
+                          },
                           { label: "Last Rollout Start", value: rollout?.lastRolloutStart ? fmtTs(rollout.lastRolloutStart) : "-" },
                           {
                             label: "Last Rollout Complete",
@@ -381,24 +389,24 @@ export default function DeploymentDrawer(props: {
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {(details?.replicaSets || []).map((rs) => (
+                            {(details?.replicaSets || []).map((rs, idx) => (
                               <TableRow
-                                key={rs.name}
+                                key={rs.name || String(idx)}
                                 sx={{
                                   backgroundColor: rs.unhealthyPods ? "rgba(255, 152, 0, 0.12)" : "transparent",
                                 }}
                               >
                                 <TableCell>{rs.revision}</TableCell>
-                                <TableCell>{rs.name}</TableCell>
-                                <TableCell>{rs.desired}</TableCell>
-                                <TableCell>{rs.current}</TableCell>
-                                <TableCell>{rs.ready}</TableCell>
+                                <TableCell>{valueOrDash(rs.name)}</TableCell>
+                                <TableCell>{valueOrDash(rs.desired)}</TableCell>
+                                <TableCell>{valueOrDash(rs.current)}</TableCell>
+                                <TableCell>{valueOrDash(rs.ready)}</TableCell>
                                 <TableCell>{fmtAge(rs.ageSec)}</TableCell>
                                 <TableCell>
                                   <Box sx={{ display: "flex", gap: 0.5, alignItems: "center", flexWrap: "wrap" }}>
                                     <Chip
                                       size="small"
-                                      label={rs.status}
+                                      label={valueOrDash(rs.status)}
                                       color={rs.status === "Active" ? "success" : "default"}
                                     />
                                     {rs.isActive && <Chip size="small" label="Current" color="primary" />}
@@ -473,19 +481,19 @@ export default function DeploymentDrawer(props: {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {(details?.pods || []).map((p) => (
+                        {(details?.pods || []).map((p, idx) => (
                           <TableRow
-                            key={p.name}
+                            key={p.name || String(idx)}
                             hover
-                            onClick={() => setDrawerPod(p.name)}
-                            sx={{ cursor: "pointer" }}
+                            onClick={() => p.name && setDrawerPod(p.name)}
+                            sx={{ cursor: p.name ? "pointer" : "default" }}
                           >
-                            <TableCell>{p.name}</TableCell>
+                            <TableCell>{valueOrDash(p.name)}</TableCell>
                             <TableCell>
-                              <Chip size="small" label={p.phase} color={phaseChipColor(p.phase)} />
+                              <Chip size="small" label={valueOrDash(p.phase)} color={phaseChipColor(p.phase)} />
                             </TableCell>
-                            <TableCell>{p.ready}</TableCell>
-                            <TableCell>{p.restarts}</TableCell>
+                            <TableCell>{valueOrDash(p.ready)}</TableCell>
+                            <TableCell>{valueOrDash(p.restarts)}</TableCell>
                             <TableCell>{valueOrDash(p.node)}</TableCell>
                             <TableCell>{fmtAge(p.ageSec)}</TableCell>
                           </TableRow>
@@ -520,9 +528,9 @@ export default function DeploymentDrawer(props: {
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {(details?.spec?.podTemplate?.containers || []).map((c) => (
-                              <TableRow key={c.name}>
-                                <TableCell>{c.name}</TableCell>
+                            {(details?.spec?.podTemplate?.containers || []).map((c, idx) => (
+                              <TableRow key={c.name || String(idx)}>
+                                <TableCell>{valueOrDash(c.name)}</TableCell>
                                 <TableCell sx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>
                                   {valueOrDash(c.image)}
                                 </TableCell>
@@ -555,9 +563,9 @@ export default function DeploymentDrawer(props: {
                               </TableRow>
                             </TableHead>
                             <TableBody>
-                              {(details?.spec?.podTemplate?.initContainers || []).map((c) => (
-                                <TableRow key={c.name}>
-                                  <TableCell>{c.name}</TableCell>
+                            {(details?.spec?.podTemplate?.initContainers || []).map((c, idx) => (
+                              <TableRow key={c.name || String(idx)}>
+                                <TableCell>{valueOrDash(c.name)}</TableCell>
                                   <TableCell sx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>
                                     {valueOrDash(c.image)}
                                   </TableCell>
@@ -582,9 +590,11 @@ export default function DeploymentDrawer(props: {
                           <EmptyState message="No image pull secrets." sx={{ mt: 0.5 }} />
                         ) : (
                           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
-                            {(details?.spec?.podTemplate?.imagePullSecrets || []).map((s) => (
-                              <Chip key={s} size="small" label={s} />
-                            ))}
+                            {(details?.spec?.podTemplate?.imagePullSecrets || [])
+                              .filter((s): s is string => !!s)
+                              .map((s) => (
+                                <Chip key={s} size="small" label={s} />
+                              ))}
                           </Box>
                         )}
                       </Box>
@@ -635,7 +645,7 @@ export default function DeploymentDrawer(props: {
                             </TableHead>
                             <TableBody>
                               {(details?.spec?.scheduling?.tolerations || []).map((t, idx) => (
-                                <TableRow key={`${t.key}-${idx}`}>
+                                <TableRow key={`${t.key ?? "toleration"}-${idx}`}>
                                   <TableCell>{valueOrDash(t.key)}</TableCell>
                                   <TableCell>{valueOrDash(t.operator)}</TableCell>
                                   <TableCell>{valueOrDash(t.value)}</TableCell>
@@ -666,9 +676,9 @@ export default function DeploymentDrawer(props: {
                             </TableHead>
                             <TableBody>
                               {(details?.spec?.scheduling?.topologySpreadConstraints || []).map((t, idx) => (
-                                <TableRow key={`${t.topologyKey}-${idx}`}>
+                                <TableRow key={`${t.topologyKey ?? "topology"}-${idx}`}>
                                   <TableCell>{valueOrDash(t.topologyKey)}</TableCell>
-                                  <TableCell>{t.maxSkew}</TableCell>
+                                  <TableCell>{valueOrDash(t.maxSkew)}</TableCell>
                                   <TableCell>{valueOrDash(t.whenUnsatisfiable)}</TableCell>
                                   <TableCell>{valueOrDash(t.labelSelector)}</TableCell>
                                 </TableRow>
@@ -697,9 +707,9 @@ export default function DeploymentDrawer(props: {
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {(details?.spec?.volumes || []).map((v) => (
-                              <TableRow key={v.name}>
-                                <TableCell>{v.name}</TableCell>
+                            {(details?.spec?.volumes || []).map((v, idx) => (
+                              <TableRow key={v.name || String(idx)}>
+                                <TableCell>{valueOrDash(v.name)}</TableCell>
                                 <TableCell>{valueOrDash(v.type)}</TableCell>
                                 <TableCell>{valueOrDash(v.source)}</TableCell>
                               </TableRow>
@@ -759,7 +769,7 @@ export default function DeploymentDrawer(props: {
                           <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
                             <Chip size="small" label={e.type || "Unknown"} color={eventChipColor(e.type)} />
                             <Typography variant="subtitle2">
-                              {e.reason} (x{e.count})
+                              {valueOrDash(e.reason)} (x{valueOrDash(e.count)})
                             </Typography>
                           </Box>
                           <Typography variant="caption" color="text.secondary">
@@ -767,7 +777,7 @@ export default function DeploymentDrawer(props: {
                           </Typography>
                         </Box>
                         <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", mt: 0.5 }}>
-                          {e.message}
+                          {valueOrDash(e.message)}
                         </Typography>
                       </Box>
                     ))

@@ -393,16 +393,19 @@ export default function PodDrawer(props: {
         `/api/namespaces/${encodeURIComponent(ns)}/pods/${encodeURIComponent(name)}`,
         props.token
       );
-      const item: PodDetails = det.item;
+      const item: PodDetails | null = det?.item ?? null;
       setDetails(item);
 
       // default container
-      const containers = item.containers || [];
-      const containerNames = containers.map((c) => c.name);
+      const containers = item?.containers || [];
+      const containerNames = containers.map((c) => c.name).filter((n): n is string => !!n);
       setContainer(containerNames[0] || "");
       setExpandedContainers(() => {
         const next: Record<string, boolean> = {};
-        const unhealthy = containers.filter((c) => !isContainerHealthy(c)).map((c) => c.name);
+        const unhealthy = containers
+          .filter((c) => !isContainerHealthy(c))
+          .map((c) => c.name)
+          .filter((n): n is string => !!n);
         if (unhealthy.length > 0) {
           unhealthy.forEach((n) => {
             next[n] = true;
@@ -420,7 +423,7 @@ export default function PodDrawer(props: {
         `/api/namespaces/${encodeURIComponent(ns)}/pods/${encodeURIComponent(name)}/events`,
         props.token
       );
-      setEvents(ev.items || []);
+      setEvents(ev?.items || []);
     })()
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false));
@@ -455,7 +458,7 @@ export default function PodDrawer(props: {
 
   const summary = details?.summary;
   const hasUnhealthyConditions = (details?.conditions || []).some((c) => !isConditionHealthy(c));
-  const eventContainers = (details?.containers || []).map((c) => c.name);
+  const eventContainers = (details?.containers || []).map((c) => c.name).filter((n): n is string => !!n);
   const filteredEvents = useMemo(() => {
     if (!eventsContainerFilter) return events;
     return events.filter((e) => parseContainerFromFieldPath(e.fieldPath) === eventsContainerFilter);
@@ -557,18 +560,18 @@ export default function PodDrawer(props: {
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {(details?.conditions || []).map((c) => {
+                            {(details?.conditions || []).map((c, idx) => {
                               const unhealthy = !isConditionHealthy(c);
                               return (
                                 <TableRow
-                                  key={c.type}
+                                  key={c.type || String(idx)}
                                   sx={{
                                     backgroundColor: unhealthy ? "rgba(211, 47, 47, 0.08)" : "transparent",
                                   }}
                                 >
-                                  <TableCell>{c.type}</TableCell>
+                                  <TableCell>{valueOrDash(c.type)}</TableCell>
                                   <TableCell>
-                                    <Chip size="small" label={c.status} color={conditionStatusColor(c.status)} />
+                                    <Chip size="small" label={valueOrDash(c.status)} color={conditionStatusColor(c.status)} />
                                   </TableCell>
                                   <TableCell>{valueOrDash(c.reason)}</TableCell>
                                   <TableCell sx={{ maxWidth: 320, whiteSpace: "pre-wrap" }}>
@@ -641,7 +644,7 @@ export default function PodDrawer(props: {
                             </TableHead>
                             <TableBody>
                               {(details?.lifecycle?.tolerations || []).map((t, idx) => (
-                                <TableRow key={`${t.key}-${idx}`}>
+                                <TableRow key={`${t.key ?? "toleration"}-${idx}`}>
                                   <TableCell>{valueOrDash(t.key)}</TableCell>
                                   <TableCell>{valueOrDash(t.operator)}</TableCell>
                                   <TableCell>{valueOrDash(t.value)}</TableCell>
@@ -664,22 +667,23 @@ export default function PodDrawer(props: {
                   {(details?.containers || []).length === 0 ? (
                     <EmptyState message="No containers found for this Pod." />
                   ) : (
-                    (details?.containers || []).map((ctn) => {
+                    (details?.containers || []).map((ctn, idx) => {
                       const unhealthy = !isContainerHealthy(ctn);
-                      const envQuery = envQueryByContainer[ctn.name] || "";
-                      const showRaw = envShowRawByContainer[ctn.name] || false;
+                      const containerKey = ctn.name ?? String(idx);
+                      const envQuery = envQueryByContainer[containerKey] || "";
+                      const showRaw = envShowRawByContainer[containerKey] || false;
                       const envFiltered = (ctn.env || []).filter((e) =>
-                        e.name.toLowerCase().includes(envQuery.toLowerCase())
+                        String(e.name ?? "").toLowerCase().includes(envQuery.toLowerCase())
                       );
 
                       return (
                         <Accordion
-                          key={ctn.name}
-                          expanded={!!expandedContainers[ctn.name]}
+                          key={containerKey}
+                          expanded={!!expandedContainers[containerKey]}
                           onChange={() =>
                             setExpandedContainers((prev) => ({
                               ...prev,
-                              [ctn.name]: !prev[ctn.name],
+                              [containerKey]: !prev[containerKey],
                             }))
                           }
                           sx={{
@@ -688,7 +692,7 @@ export default function PodDrawer(props: {
                         >
                           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                             <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", flexGrow: 1 }}>
-                              <Typography variant="subtitle2">{ctn.name}</Typography>
+                              <Typography variant="subtitle2">{valueOrDash(ctn.name)}</Typography>
                               <Chip size="small" label={ctn.state || "Unknown"} color={containerStateColor(ctn.state)} />
                               <Chip
                                 size="small"
@@ -782,7 +786,7 @@ export default function PodDrawer(props: {
                                       onChange={(e) =>
                                         setEnvQueryByContainer((prev) => ({
                                           ...prev,
-                                          [ctn.name]: e.target.value,
+                                          [containerKey]: e.target.value,
                                         }))
                                       }
                                     />
@@ -793,7 +797,7 @@ export default function PodDrawer(props: {
                                           onChange={(e) =>
                                             setEnvShowRawByContainer((prev) => ({
                                               ...prev,
-                                              [ctn.name]: e.target.checked,
+                                              [containerKey]: e.target.checked,
                                             }))
                                           }
                                         />
@@ -817,9 +821,9 @@ export default function PodDrawer(props: {
                                       </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                      {envFiltered.map((e) => (
-                                        <TableRow key={e.name}>
-                                          <TableCell>{e.name}</TableCell>
+                                      {envFiltered.map((e, envIdx) => (
+                                        <TableRow key={`${containerKey}-env-${e.name ?? envIdx}`}>
+                                          <TableCell>{valueOrDash(e.name)}</TableCell>
                                           <TableCell>
                                             {e.source === "Value"
                                               ? valueOrDash(e.value)
@@ -852,11 +856,13 @@ export default function PodDrawer(props: {
                                       </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                      {ctn.mounts.map((m) => (
-                                        <TableRow key={`${ctn.name}-${m.mountPath}`}>
-                                          <TableCell>{m.mountPath}</TableCell>
-                                          <TableCell>{m.name}</TableCell>
-                                          <TableCell>{m.readOnly ? "ReadOnly" : "ReadWrite"}</TableCell>
+                                      {(ctn.mounts || []).map((m, mountIdx) => (
+                                        <TableRow key={`${containerKey}-${m.mountPath ?? mountIdx}`}>
+                                          <TableCell>{valueOrDash(m.mountPath)}</TableCell>
+                                          <TableCell>{valueOrDash(m.name)}</TableCell>
+                                          <TableCell>
+                                            {m.readOnly === undefined ? "-" : m.readOnly ? "ReadOnly" : "ReadWrite"}
+                                          </TableCell>
                                           <TableCell>{valueOrDash(m.subPath)}</TableCell>
                                         </TableRow>
                                       ))}
@@ -883,7 +889,7 @@ export default function PodDrawer(props: {
                                       { label: "Readiness", probe: ctn.probes?.readiness },
                                       { label: "Startup", probe: ctn.probes?.startup },
                                     ].map((p) => (
-                                      <TableRow key={`${ctn.name}-${p.label}`}>
+                                      <TableRow key={`${containerKey}-${p.label}`}>
                                         <TableCell>{p.label}</TableCell>
                                         <TableCell>{formatProbeDetails(p.probe)}</TableCell>
                                         <TableCell>{p.probe?.initialDelaySeconds ?? "-"}</TableCell>
@@ -928,9 +934,9 @@ export default function PodDrawer(props: {
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {(details?.resources?.volumes || []).map((v) => (
-                              <TableRow key={v.name}>
-                                <TableCell>{v.name}</TableCell>
+                            {(details?.resources?.volumes || []).map((v, idx) => (
+                              <TableRow key={v.name || String(idx)}>
+                                <TableCell>{valueOrDash(v.name)}</TableCell>
                                 <TableCell>{valueOrDash(v.type)}</TableCell>
                                 <TableCell>{valueOrDash(v.source)}</TableCell>
                               </TableRow>
@@ -950,9 +956,11 @@ export default function PodDrawer(props: {
                         <EmptyState message="No image pull secrets." />
                       ) : (
                         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                          {(details?.resources?.imagePullSecrets || []).map((s) => (
-                            <Chip key={s} size="small" label={s} />
-                          ))}
+                          {(details?.resources?.imagePullSecrets || [])
+                            .filter((s): s is string => !!s)
+                            .map((s) => (
+                              <Chip key={s} size="small" label={s} />
+                            ))}
                         </Box>
                       )}
                     </AccordionDetails>
@@ -1001,12 +1009,12 @@ export default function PodDrawer(props: {
                               </TableRow>
                             </TableHead>
                             <TableBody>
-                              {(details?.resources?.podSecurityContext?.sysctls || []).map((s) => (
-                                <TableRow key={s.name}>
-                                  <TableCell>{s.name}</TableCell>
-                                  <TableCell>{s.value}</TableCell>
-                                </TableRow>
-                              ))}
+                            {(details?.resources?.podSecurityContext?.sysctls || []).map((s, idx) => (
+                              <TableRow key={s.name || String(idx)}>
+                                <TableCell>{valueOrDash(s.name)}</TableCell>
+                                <TableCell>{valueOrDash(s.value)}</TableCell>
+                              </TableRow>
+                            ))}
                             </TableBody>
                           </Table>
                         </Box>
@@ -1033,16 +1041,19 @@ export default function PodDrawer(props: {
                               </TableRow>
                             </TableHead>
                             <TableBody>
-                              {(details?.resources?.containerSecurityContexts || []).map((c) => (
-                                <TableRow key={c.name}>
-                                  <TableCell>{c.name}</TableCell>
+                            {(details?.resources?.containerSecurityContexts || []).map((c, idx) => (
+                              <TableRow key={`${c.name ?? "container"}-${idx}`}>
+                                <TableCell>{valueOrDash(c.name)}</TableCell>
                                   <TableCell>{valueOrDash(c.runAsUser)}</TableCell>
                                   <TableCell>{valueOrDash(c.runAsGroup)}</TableCell>
                                   <TableCell>{valueOrDash(c.privileged)}</TableCell>
                                   <TableCell>{valueOrDash(c.readOnlyRootFilesystem)}</TableCell>
                                   <TableCell>{valueOrDash(c.allowPrivilegeEscalation)}</TableCell>
                                   <TableCell>
-                                    {[...(c.capabilitiesAdd || []).map((cap) => `+${cap}`), ...(c.capabilitiesDrop || []).map((cap) => `-${cap}`)].join(", ") || "-"}
+                                    {[
+                                      ...(c.capabilitiesAdd || []).map((cap) => `+${cap}`),
+                                      ...(c.capabilitiesDrop || []).map((cap) => `-${cap}`),
+                                    ].join(", ") || "-"}
                                   </TableCell>
                                   <TableCell>{valueOrDash(c.seccompProfile)}</TableCell>
                                 </TableRow>
@@ -1077,9 +1088,9 @@ export default function PodDrawer(props: {
                           </TableHead>
                           <TableBody>
                             {(details?.resources?.hostAliases || []).map((h, idx) => (
-                              <TableRow key={`${h.ip}-${idx}`}>
-                                <TableCell>{h.ip}</TableCell>
-                                <TableCell>{h.hostnames.join(", ")}</TableCell>
+                              <TableRow key={`${h.ip ?? "host"}-${idx}`}>
+                                <TableCell>{valueOrDash(h.ip)}</TableCell>
+                                <TableCell>{(h.hostnames || []).join(", ") || "-"}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -1107,9 +1118,9 @@ export default function PodDrawer(props: {
                           </TableHead>
                           <TableBody>
                             {(details?.resources?.topologySpreadConstraints || []).map((t, idx) => (
-                              <TableRow key={`${t.topologyKey}-${idx}`}>
+                              <TableRow key={`${t.topologyKey ?? "topology"}-${idx}`}>
                                 <TableCell>{valueOrDash(t.topologyKey)}</TableCell>
-                                <TableCell>{t.maxSkew}</TableCell>
+                                <TableCell>{valueOrDash(t.maxSkew)}</TableCell>
                                 <TableCell>{valueOrDash(t.whenUnsatisfiable)}</TableCell>
                                 <TableCell>{valueOrDash(t.labelSelector)}</TableCell>
                               </TableRow>
@@ -1153,7 +1164,7 @@ export default function PodDrawer(props: {
                           <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
                             <Chip size="small" label={e.type || "Unknown"} color={eventChipColor(e.type)} />
                             <Typography variant="subtitle2">
-                              {e.reason} (x{e.count})
+                              {valueOrDash(e.reason)} (x{valueOrDash(e.count)})
                             </Typography>
                             {parseContainerFromFieldPath(e.fieldPath) && (
                               <Chip size="small" label={parseContainerFromFieldPath(e.fieldPath)} />
@@ -1164,7 +1175,7 @@ export default function PodDrawer(props: {
                           </Typography>
                         </Box>
                         <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", mt: 0.5 }}>
-                          {e.message}
+                          {valueOrDash(e.message)}
                         </Typography>
                       </Box>
                     ))
@@ -1193,11 +1204,14 @@ export default function PodDrawer(props: {
                         value={container}
                         onChange={(e) => setContainer(String(e.target.value))}
                       >
-                        {(details?.containers || []).map((c) => (
-                          <MenuItem key={c.name} value={c.name}>
-                            {c.name}
-                          </MenuItem>
-                        ))}
+                        {(details?.containers || [])
+                          .map((c) => c.name)
+                          .filter((n): n is string => !!n)
+                          .map((name) => (
+                            <MenuItem key={name} value={name}>
+                              {name}
+                            </MenuItem>
+                          ))}
                         {(!details?.containers || details.containers.length === 0) && (
                           <MenuItem value="">(no containers)</MenuItem>
                         )}
