@@ -23,6 +23,12 @@ import {
 import { apiGet } from "../api";
 import { fmtAge, valueOrDash } from "../utils/format";
 import IngressDrawer from "./IngressDrawer";
+import {
+  loadListTextFilter,
+  loadQuickFilterSelection,
+  saveListTextFilter,
+  saveQuickFilterSelection,
+} from "../state";
 
 type Ingress = {
   name: string;
@@ -92,7 +98,7 @@ const cols: GridColDef[] = [
   },
 ];
 
-type QuickFilter = { label: string; value: string };
+type QuickFilter = { id: string; label: string; value: string };
 
 const quickFilterPatterns: Array<{ re: RegExp; label: (m: RegExpMatchArray) => string }> = [
   { re: /^(master|release|test|dev).*$/i, label: (m) => m[1].toLowerCase() },
@@ -117,7 +123,7 @@ function buildQuickFilters(rows: Row[]): QuickFilter[] {
   return Array.from(counts.entries())
     .filter(([, c]) => c >= 3)
     .sort((a, b) => b[1] - a[1])
-    .map(([k, c]) => ({ label: `${k} (${c})`, value: k }));
+    .map(([k, c]) => ({ id: k, label: `${k} (${c})`, value: k }));
 }
 
 const refreshOptions = [
@@ -229,8 +235,11 @@ export default function IngressesTable({ token, namespace }: { token: string; na
   }, [selectionModel]);
 
   const [drawerName, setDrawerName] = useState<string | null>(null);
-  const [filter, setFilter] = useState<string>("");
-  const [selectedQuickFilter, setSelectedQuickFilter] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string>(() => loadListTextFilter());
+  const [selectedQuickFilter, setSelectedQuickFilter] = useState<string | null>(() => {
+    const stored = loadQuickFilterSelection();
+    return stored.length > 0 ? stored[0] : null;
+  });
   const [refreshSec, setRefreshSec] = useState<number>(10);
 
   useEffect(() => {
@@ -287,6 +296,33 @@ export default function IngressesTable({ token, namespace }: { token: string; na
 
   const quickFilters = useMemo(() => buildQuickFilters(rows), [rows]);
 
+  useEffect(() => {
+    if (!lastRefresh) return;
+    const stored = loadQuickFilterSelection();
+    const available = new Set(quickFilters.map((q) => q.id));
+    const next = stored.find((id) => available.has(id)) || null;
+
+    if (next !== selectedQuickFilter) {
+      setSelectedQuickFilter(next);
+    }
+    if (next && filter !== next) {
+      setFilter(next);
+    }
+    if (!next && stored.length > 0) {
+      saveQuickFilterSelection([]);
+    }
+  }, [quickFilters, selectedQuickFilter, filter, lastRefresh]);
+
+  function setFilterPersist(value: string) {
+    setFilter(value);
+    saveListTextFilter(value);
+  }
+
+  function setSelectedQuickFilterPersist(value: string | null) {
+    setSelectedQuickFilter(value);
+    saveQuickFilterSelection(value ? [value] : []);
+  }
+
   function openSelected() {
     if (!selectedName) return;
     setDrawerName(selectedName);
@@ -323,9 +359,9 @@ export default function IngressesTable({ token, namespace }: { token: string; na
             slotProps={{
               toolbar: {
                 filter,
-                setFilter,
+                setFilter: setFilterPersist,
                 selectedQuickFilter,
-                setSelectedQuickFilter,
+                setSelectedQuickFilter: setSelectedQuickFilterPersist,
                 onOpenSelected: openSelected,
                 hasSelection: !!selectedName,
                 refreshSec,
