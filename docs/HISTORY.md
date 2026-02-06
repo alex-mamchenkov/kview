@@ -112,6 +112,11 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Centralized formatting helpers (timestamp, age, value fallback) into shared utilities.
 - Centralized Kubernetes UI mappings for phase/status/condition/event chip colors.
 
+## 2026-02-06 — Drawer UI component extraction
+### UI
+- Extracted shared drawer primitives (section headers, key/value grids, empty/error states).
+- Refactored Pod and Deployment drawers to reuse shared components with identical UX.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

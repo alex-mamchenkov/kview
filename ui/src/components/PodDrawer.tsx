@@ -33,6 +33,10 @@ import { apiGet } from "../api";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { conditionStatusColor, eventChipColor } from "../utils/k8sUi";
+import Section from "./shared/Section";
+import KeyValueTable from "./shared/KeyValueTable";
+import EmptyState from "./shared/EmptyState";
+import ErrorState from "./shared/ErrorState";
 
 type PodDetails = {
   summary: PodSummary;
@@ -511,9 +515,7 @@ export default function PodDrawer(props: {
             <CircularProgress />
           </Box>
         ) : err ? (
-          <Typography color="error" sx={{ whiteSpace: "pre-wrap" }}>
-            {err}
-          </Typography>
+          <ErrorState message={err} />
         ) : (
           <>
             <Tabs value={tab} onChange={(_, v) => setTab(v)}>
@@ -530,16 +532,7 @@ export default function PodDrawer(props: {
               {tab === 0 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
                   <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
-                    <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 1.5 }}>
-                      {summaryItems.map((item) => (
-                        <Box key={item.label}>
-                          <Typography variant="caption" color="text.secondary">
-                            {item.label}
-                          </Typography>
-                          <Typography variant="body2">{item.value}</Typography>
-                        </Box>
-                      ))}
-                    </Box>
+                    <KeyValueTable rows={summaryItems} columns={3} />
                   </Box>
 
                   <Accordion defaultExpanded={hasUnhealthyConditions}>
@@ -551,7 +544,7 @@ export default function PodDrawer(props: {
                     </AccordionSummary>
                     <AccordionDetails>
                       {(details?.conditions || []).length === 0 ? (
-                        <Typography variant="body2">No conditions reported.</Typography>
+                        <EmptyState message="No conditions reported." />
                       ) : (
                         <Table size="small">
                           <TableHead>
@@ -604,34 +597,15 @@ export default function PodDrawer(props: {
                       <Typography variant="subtitle2">Lifecycle & Scheduling</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
-                      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 1.5 }}>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Restart Policy
-                          </Typography>
-                          <Typography variant="body2">{valueOrDash(details?.lifecycle?.restartPolicy)}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Priority Class
-                          </Typography>
-                          <Typography variant="body2">{valueOrDash(details?.lifecycle?.priorityClass)}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Preemption Policy
-                          </Typography>
-                          <Typography variant="body2">{valueOrDash(details?.lifecycle?.preemptionPolicy)}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Affinity
-                          </Typography>
-                          <Typography variant="body2">
-                            {valueOrDash(details?.lifecycle?.affinitySummary)}
-                          </Typography>
-                        </Box>
-                      </Box>
+                      <KeyValueTable
+                        columns={2}
+                        rows={[
+                          { label: "Restart Policy", value: details?.lifecycle?.restartPolicy },
+                          { label: "Priority Class", value: details?.lifecycle?.priorityClass },
+                          { label: "Preemption Policy", value: details?.lifecycle?.preemptionPolicy },
+                          { label: "Affinity", value: details?.lifecycle?.affinitySummary },
+                        ]}
+                      />
 
                       <Box sx={{ mt: 2 }}>
                         <Typography variant="caption" color="text.secondary">
@@ -639,7 +613,7 @@ export default function PodDrawer(props: {
                         </Typography>
                         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
                           {Object.entries(details?.lifecycle?.nodeSelector || {}).length === 0 ? (
-                            <Typography variant="body2">None</Typography>
+                            <EmptyState message="None" />
                           ) : (
                             Object.entries(details?.lifecycle?.nodeSelector || {}).map(([k, v]) => (
                               <Chip key={k} size="small" label={`${k}=${v}`} />
@@ -653,9 +627,7 @@ export default function PodDrawer(props: {
                           Tolerations
                         </Typography>
                         {(details?.lifecycle?.tolerations || []).length === 0 ? (
-                          <Typography variant="body2" sx={{ mt: 0.5 }}>
-                            None
-                          </Typography>
+                          <EmptyState message="None" sx={{ mt: 0.5 }} />
                         ) : (
                           <Table size="small" sx={{ mt: 0.5 }}>
                             <TableHead>
@@ -690,7 +662,7 @@ export default function PodDrawer(props: {
               {tab === 1 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, height: "100%", overflow: "auto" }}>
                   {(details?.containers || []).length === 0 ? (
-                    <Typography variant="body2">No containers found for this Pod.</Typography>
+                    <EmptyState message="No containers found for this Pod." />
                   ) : (
                     (details?.containers || []).map((ctn) => {
                       const unhealthy = !isContainerHealthy(ctn);
@@ -729,182 +701,112 @@ export default function PodDrawer(props: {
                           </AccordionSummary>
                           <AccordionDetails>
                             <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                              <Box>
-                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                                  Runtime
-                                </Typography>
-                                <Box
-                                  sx={{
-                                    display: "grid",
-                                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                                    gap: 1.5,
-                                    mt: 1,
-                                  }}
-                                >
-                                  <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      Image
-                                    </Typography>
-                                    {ctn.imageId ? (
-                                      <Tooltip title={`Image ID: ${ctn.imageId}`} arrow>
+                              <Section title="Runtime" dividerPlacement="content">
+                                <KeyValueTable
+                                  columns={3}
+                                  sx={{ mt: 1 }}
+                                  rows={[
+                                    {
+                                      label: "Image",
+                                      value: ctn.imageId ? (
+                                        <Tooltip title={`Image ID: ${ctn.imageId}`} arrow>
+                                          <Typography
+                                            variant="body2"
+                                            sx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+                                          >
+                                            {valueOrDash(ctn.image)}
+                                          </Typography>
+                                        </Tooltip>
+                                      ) : (
                                         <Typography
                                           variant="body2"
                                           sx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
                                         >
                                           {valueOrDash(ctn.image)}
                                         </Typography>
-                                      </Tooltip>
-                                    ) : (
-                                      <Typography
-                                        variant="body2"
-                                        sx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
-                                      >
-                                        {valueOrDash(ctn.image)}
-                                      </Typography>
-                                    )}
-                                  </Box>
-                                  <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      State
-                                    </Typography>
-                                    <Typography variant="body2">{valueOrDash(ctn.state)}</Typography>
-                                  </Box>
-                                  <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      Reason
-                                    </Typography>
-                                    <Typography variant="body2">{valueOrDash(ctn.reason)}</Typography>
-                                  </Box>
-                                  <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      Message
-                                    </Typography>
-                                    <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-                                      {valueOrDash(ctn.message)}
-                                    </Typography>
-                                  </Box>
-                                  <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      Started At
-                                    </Typography>
-                                    <Typography variant="body2">
-                                      {ctn.startedAt ? fmtTs(ctn.startedAt) : "-"}
-                                    </Typography>
-                                  </Box>
-                                  <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      Finished At
-                                    </Typography>
-                                    <Typography variant="body2">
-                                      {ctn.finishedAt ? fmtTs(ctn.finishedAt) : "-"}
-                                    </Typography>
-                                  </Box>
-                                  <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      Last Termination Reason
-                                    </Typography>
-                                    <Typography variant="body2">{valueOrDash(ctn.lastTerminationReason)}</Typography>
-                                  </Box>
-                                  <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      Last Termination Message
-                                    </Typography>
-                                    <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-                                      {valueOrDash(ctn.lastTerminationMessage)}
-                                    </Typography>
-                                  </Box>
-                                  <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      Last Termination At
-                                    </Typography>
-                                    <Typography variant="body2">
-                                      {ctn.lastTerminationAt ? fmtTs(ctn.lastTerminationAt) : "-"}
-                                    </Typography>
-                                  </Box>
-                                </Box>
-                              </Box>
+                                      ),
+                                    },
+                                    { label: "State", value: valueOrDash(ctn.state) },
+                                    { label: "Reason", value: valueOrDash(ctn.reason) },
+                                    {
+                                      label: "Message",
+                                      value: (
+                                        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                                          {valueOrDash(ctn.message)}
+                                        </Typography>
+                                      ),
+                                    },
+                                    { label: "Started At", value: ctn.startedAt ? fmtTs(ctn.startedAt) : "-" },
+                                    { label: "Finished At", value: ctn.finishedAt ? fmtTs(ctn.finishedAt) : "-" },
+                                    { label: "Last Termination Reason", value: valueOrDash(ctn.lastTerminationReason) },
+                                    {
+                                      label: "Last Termination Message",
+                                      value: (
+                                        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                                          {valueOrDash(ctn.lastTerminationMessage)}
+                                        </Typography>
+                                      ),
+                                    },
+                                    { label: "Last Termination At", value: ctn.lastTerminationAt ? fmtTs(ctn.lastTerminationAt) : "-" },
+                                  ]}
+                                />
+                              </Section>
 
-                              <Divider />
+                              <Section title="Resources" dividerPlacement="content">
+                                <KeyValueTable
+                                  columns={2}
+                                  sx={{ mt: 1 }}
+                                  rows={[
+                                    {
+                                      label: "CPU Requests / Limits",
+                                      value: `${valueOrDash(ctn.resources?.cpuRequest)} / ${valueOrDash(ctn.resources?.cpuLimit)}`,
+                                    },
+                                    {
+                                      label: "Memory Requests / Limits",
+                                      value: `${valueOrDash(ctn.resources?.memoryRequest)} / ${valueOrDash(ctn.resources?.memoryLimit)}`,
+                                    },
+                                    { label: "QoS Impact", value: valueOrDash(summary?.qosClass) },
+                                  ]}
+                                />
+                              </Section>
 
-                              <Box>
-                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                                  Resources
-                                </Typography>
-                                <Box
-                                  sx={{
-                                    display: "grid",
-                                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                                    gap: 1.5,
-                                    mt: 1,
-                                  }}
-                                >
-                                  <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      CPU Requests / Limits
-                                    </Typography>
-                                    <Typography variant="body2">
-                                      {valueOrDash(ctn.resources?.cpuRequest)} / {valueOrDash(ctn.resources?.cpuLimit)}
-                                    </Typography>
+                              <Section
+                                title="Environment"
+                                dividerPlacement="content"
+                                actions={
+                                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                                    <TextField
+                                      size="small"
+                                      label="Filter"
+                                      value={envQuery}
+                                      onChange={(e) =>
+                                        setEnvQueryByContainer((prev) => ({
+                                          ...prev,
+                                          [ctn.name]: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                    <FormControlLabel
+                                      control={
+                                        <Switch
+                                          checked={showRaw}
+                                          onChange={(e) =>
+                                            setEnvShowRawByContainer((prev) => ({
+                                              ...prev,
+                                              [ctn.name]: e.target.checked,
+                                            }))
+                                          }
+                                        />
+                                      }
+                                      label="Raw values"
+                                    />
                                   </Box>
-                                  <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      Memory Requests / Limits
-                                    </Typography>
-                                    <Typography variant="body2">
-                                      {valueOrDash(ctn.resources?.memoryRequest)} / {valueOrDash(ctn.resources?.memoryLimit)}
-                                    </Typography>
-                                  </Box>
-                                  <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      QoS Impact
-                                    </Typography>
-                                    <Typography variant="body2">{valueOrDash(summary?.qosClass)}</Typography>
-                                  </Box>
-                                </Box>
-                              </Box>
-
-                              <Divider />
-
-                              <Box>
-                                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                                    Environment
-                                  </Typography>
-                                  <Box sx={{ flexGrow: 1 }} />
-                                  <TextField
-                                    size="small"
-                                    label="Filter"
-                                    value={envQuery}
-                                    onChange={(e) =>
-                                      setEnvQueryByContainer((prev) => ({
-                                        ...prev,
-                                        [ctn.name]: e.target.value,
-                                      }))
-                                    }
-                                  />
-                                  <FormControlLabel
-                                    control={
-                                      <Switch
-                                        checked={showRaw}
-                                        onChange={(e) =>
-                                          setEnvShowRawByContainer((prev) => ({
-                                            ...prev,
-                                            [ctn.name]: e.target.checked,
-                                          }))
-                                        }
-                                      />
-                                    }
-                                    label="Raw values"
-                                  />
-                                </Box>
+                                }
+                              >
                                 {(ctn.env || []).length === 0 ? (
-                                  <Typography variant="body2" sx={{ mt: 1 }}>
-                                    No environment variables.
-                                  </Typography>
+                                  <EmptyState message="No environment variables." sx={{ mt: 1 }} />
                                 ) : envFiltered.length === 0 ? (
-                                  <Typography variant="body2" sx={{ mt: 1 }}>
-                                    No environment variables match the filter.
-                                  </Typography>
+                                  <EmptyState message="No environment variables match the filter." sx={{ mt: 1 }} />
                                 ) : (
                                   <Table size="small" sx={{ mt: 1 }}>
                                     <TableHead>
@@ -934,18 +836,11 @@ export default function PodDrawer(props: {
                                     </TableBody>
                                   </Table>
                                 )}
-                              </Box>
+                              </Section>
 
-                              <Divider />
-
-                              <Box>
-                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                                  Mounts & Volumes
-                                </Typography>
+                              <Section title="Mounts & Volumes" dividerPlacement="content">
                                 {(ctn.mounts || []).length === 0 ? (
-                                  <Typography variant="body2" sx={{ mt: 1 }}>
-                                    No mounts defined.
-                                  </Typography>
+                                  <EmptyState message="No mounts defined." sx={{ mt: 1 }} />
                                 ) : (
                                   <Table size="small" sx={{ mt: 1 }}>
                                     <TableHead>
@@ -968,14 +863,9 @@ export default function PodDrawer(props: {
                                     </TableBody>
                                   </Table>
                                 )}
-                              </Box>
+                              </Section>
 
-                              <Divider />
-
-                              <Box>
-                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                                  Probes
-                                </Typography>
+                              <Section title="Probes" divider={false}>
                                 <Table size="small" sx={{ mt: 1 }}>
                                   <TableHead>
                                     <TableRow>
@@ -1008,7 +898,7 @@ export default function PodDrawer(props: {
                                     ))}
                                   </TableBody>
                                 </Table>
-                              </Box>
+                              </Section>
                             </Box>
                           </AccordionDetails>
                         </Accordion>
@@ -1027,7 +917,7 @@ export default function PodDrawer(props: {
                     </AccordionSummary>
                     <AccordionDetails>
                       {(details?.resources?.volumes || []).length === 0 ? (
-                        <Typography variant="body2">No volumes defined.</Typography>
+                        <EmptyState message="No volumes defined." />
                       ) : (
                         <Table size="small">
                           <TableHead>
@@ -1057,7 +947,7 @@ export default function PodDrawer(props: {
                     </AccordionSummary>
                     <AccordionDetails>
                       {(details?.resources?.imagePullSecrets || []).length === 0 ? (
-                        <Typography variant="body2">No image pull secrets.</Typography>
+                        <EmptyState message="No image pull secrets." />
                       ) : (
                         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
                           {(details?.resources?.imagePullSecrets || []).map((s) => (
@@ -1076,52 +966,27 @@ export default function PodDrawer(props: {
                       <Typography variant="caption" color="text.secondary">
                         Pod Security Context
                       </Typography>
-                      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 1.5, mt: 0.5 }}>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            RunAsUser
-                          </Typography>
-                          <Typography variant="body2">{valueOrDash(details?.resources?.podSecurityContext?.runAsUser)}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            RunAsGroup
-                          </Typography>
-                          <Typography variant="body2">{valueOrDash(details?.resources?.podSecurityContext?.runAsGroup)}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            FSGroup
-                          </Typography>
-                          <Typography variant="body2">{valueOrDash(details?.resources?.podSecurityContext?.fsGroup)}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            FSGroup Change Policy
-                          </Typography>
-                          <Typography variant="body2">
-                            {valueOrDash(details?.resources?.podSecurityContext?.fsGroupChangePolicy)}
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Seccomp Profile
-                          </Typography>
-                          <Typography variant="body2">
-                            {valueOrDash(details?.resources?.podSecurityContext?.seccompProfile)}
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Supplemental Groups
-                          </Typography>
-                          <Typography variant="body2">
-                            {(details?.resources?.podSecurityContext?.supplementalGroups || []).length === 0
-                              ? "-"
-                              : (details?.resources?.podSecurityContext?.supplementalGroups || []).join(", ")}
-                          </Typography>
-                        </Box>
-                      </Box>
+                      <KeyValueTable
+                        columns={3}
+                        sx={{ mt: 0.5 }}
+                        rows={[
+                          { label: "RunAsUser", value: details?.resources?.podSecurityContext?.runAsUser },
+                          { label: "RunAsGroup", value: details?.resources?.podSecurityContext?.runAsGroup },
+                          { label: "FSGroup", value: details?.resources?.podSecurityContext?.fsGroup },
+                          {
+                            label: "FSGroup Change Policy",
+                            value: details?.resources?.podSecurityContext?.fsGroupChangePolicy,
+                          },
+                          { label: "Seccomp Profile", value: details?.resources?.podSecurityContext?.seccompProfile },
+                          {
+                            label: "Supplemental Groups",
+                            value:
+                              (details?.resources?.podSecurityContext?.supplementalGroups || []).length === 0
+                                ? "-"
+                                : (details?.resources?.podSecurityContext?.supplementalGroups || []).join(", "),
+                          },
+                        ]}
+                      />
 
                       {(details?.resources?.podSecurityContext?.sysctls || []).length > 0 && (
                         <Box sx={{ mt: 1.5 }}>
@@ -1152,9 +1017,7 @@ export default function PodDrawer(props: {
                           Container Overrides
                         </Typography>
                         {(details?.resources?.containerSecurityContexts || []).length === 0 ? (
-                          <Typography variant="body2" sx={{ mt: 0.5 }}>
-                            No container overrides.
-                          </Typography>
+                          <EmptyState message="No container overrides." sx={{ mt: 0.5 }} />
                         ) : (
                           <Table size="small" sx={{ mt: 0.5 }}>
                             <TableHead>
@@ -1203,7 +1066,7 @@ export default function PodDrawer(props: {
                         <Typography variant="body2">{valueOrDash(details?.resources?.dnsPolicy)}</Typography>
                       </Box>
                       {(details?.resources?.hostAliases || []).length === 0 ? (
-                        <Typography variant="body2">No host aliases.</Typography>
+                        <EmptyState message="No host aliases." />
                       ) : (
                         <Table size="small">
                           <TableHead>
@@ -1231,7 +1094,7 @@ export default function PodDrawer(props: {
                     </AccordionSummary>
                     <AccordionDetails>
                       {(details?.resources?.topologySpreadConstraints || []).length === 0 ? (
-                        <Typography variant="body2">No topology spread constraints.</Typography>
+                        <EmptyState message="No topology spread constraints." />
                       ) : (
                         <Table size="small">
                           <TableHead>
@@ -1282,7 +1145,7 @@ export default function PodDrawer(props: {
                   </Box>
 
                   {filteredEvents.length === 0 ? (
-                    <Typography variant="body2">No events found for this Pod.</Typography>
+                    <EmptyState message="No events found for this Pod." />
                   ) : (
                     filteredEvents.map((e, idx) => (
                       <Box key={idx} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.25 }}>

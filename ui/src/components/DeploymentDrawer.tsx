@@ -25,6 +25,9 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import PodDrawer from "./PodDrawer";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { conditionStatusColor, eventChipColor, phaseChipColor } from "../utils/k8sUi";
+import KeyValueTable from "./shared/KeyValueTable";
+import EmptyState from "./shared/EmptyState";
+import ErrorState from "./shared/ErrorState";
 
 type DeploymentDetails = {
   summary: DeploymentSummary;
@@ -249,9 +252,7 @@ export default function DeploymentDrawer(props: {
             <CircularProgress />
           </Box>
         ) : err ? (
-          <Typography color="error" sx={{ whiteSpace: "pre-wrap" }}>
-            {err}
-          </Typography>
+          <ErrorState message={err} />
         ) : (
           <>
             <Tabs value={tab} onChange={(_, v) => setTab(v)}>
@@ -268,18 +269,11 @@ export default function DeploymentDrawer(props: {
               {tab === 0 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
                   <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
-                    <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 1.5 }}>
-                      {summaryItems.map((item) => (
-                        <Box key={item.label}>
-                          <Typography variant="caption" color="text.secondary">
-                            {item.label}
-                          </Typography>
-                          <Typography variant="body2" sx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>
-                            {item.value}
-                          </Typography>
-                        </Box>
-                      ))}
-                    </Box>
+                    <KeyValueTable
+                      rows={summaryItems}
+                      columns={3}
+                      valueSx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+                    />
                   </Box>
 
                   <Accordion defaultExpanded={hasUnhealthyConditions}>
@@ -291,7 +285,7 @@ export default function DeploymentDrawer(props: {
                     </AccordionSummary>
                     <AccordionDetails>
                       {(details?.conditions || []).length === 0 ? (
-                        <Typography variant="body2">No conditions reported.</Typography>
+                        <EmptyState message="No conditions reported." />
                       ) : (
                         <Table size="small">
                           <TableHead>
@@ -342,46 +336,22 @@ export default function DeploymentDrawer(props: {
                       )}
                     </AccordionSummary>
                     <AccordionDetails>
-                      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 1.5 }}>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Current Revision
-                          </Typography>
-                          <Typography variant="body2">{valueOrDash(rollout?.currentRevision)}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Observed / Spec Generation
-                          </Typography>
-                          <Typography variant="body2">
-                            {valueOrDash(rollout?.observedGeneration)} / {valueOrDash(rollout?.generation)}
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Progress Deadline
-                          </Typography>
-                          <Typography variant="body2">
-                            {rollout?.progressDeadlineExceeded ? "Exceeded" : "OK"}
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Last Rollout Start
-                          </Typography>
-                          <Typography variant="body2">
-                            {rollout?.lastRolloutStart ? fmtTs(rollout.lastRolloutStart) : "-"}
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Last Rollout Complete
-                          </Typography>
-                          <Typography variant="body2">
-                            {rollout?.lastRolloutComplete ? fmtTs(rollout.lastRolloutComplete) : "-"}
-                          </Typography>
-                        </Box>
-                      </Box>
+                      <KeyValueTable
+                        columns={2}
+                        rows={[
+                          { label: "Current Revision", value: rollout?.currentRevision },
+                          {
+                            label: "Observed / Spec Generation",
+                            value: `${valueOrDash(rollout?.observedGeneration)} / ${valueOrDash(rollout?.generation)}`,
+                          },
+                          { label: "Progress Deadline", value: rollout?.progressDeadlineExceeded ? "Exceeded" : "OK" },
+                          { label: "Last Rollout Start", value: rollout?.lastRolloutStart ? fmtTs(rollout.lastRolloutStart) : "-" },
+                          {
+                            label: "Last Rollout Complete",
+                            value: rollout?.lastRolloutComplete ? fmtTs(rollout.lastRolloutComplete) : "-",
+                          },
+                        ]}
+                      />
                     </AccordionDetails>
                   </Accordion>
                 </Box>
@@ -396,7 +366,7 @@ export default function DeploymentDrawer(props: {
                     </AccordionSummary>
                     <AccordionDetails>
                       {(details?.replicaSets || []).length === 0 ? (
-                        <Typography variant="body2">No ReplicaSets found for this Deployment.</Typography>
+                        <EmptyState message="No ReplicaSets found for this Deployment." />
                       ) : (
                         <Table size="small">
                           <TableHead>
@@ -450,7 +420,7 @@ export default function DeploymentDrawer(props: {
                     </AccordionSummary>
                     <AccordionDetails>
                       {!rollout ? (
-                        <Typography variant="body2">No rollout diagnostics available.</Typography>
+                        <EmptyState message="No rollout diagnostics available." />
                       ) : (
                         <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
@@ -470,7 +440,7 @@ export default function DeploymentDrawer(props: {
                             {rollout.inProgress && <Chip size="small" color="info" label="Rollout in progress" />}
                           </Box>
                           {(rollout.warnings || []).length === 0 ? (
-                            <Typography variant="body2">No warnings reported.</Typography>
+                            <EmptyState message="No warnings reported." />
                           ) : (
                             (rollout.warnings || []).map((w, idx) => (
                               <Typography key={`${w}-${idx}`} variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
@@ -489,7 +459,7 @@ export default function DeploymentDrawer(props: {
               {tab === 2 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
                   {(details?.pods || []).length === 0 ? (
-                    <Typography variant="body2">No pods found for this Deployment.</Typography>
+                    <EmptyState message="No pods found for this Deployment." />
                   ) : (
                     <Table size="small">
                       <TableHead>
@@ -538,9 +508,7 @@ export default function DeploymentDrawer(props: {
                         Containers
                       </Typography>
                       {(details?.spec?.podTemplate?.containers || []).length === 0 ? (
-                        <Typography variant="body2" sx={{ mt: 0.5 }}>
-                          No containers defined.
-                        </Typography>
+                        <EmptyState message="No containers defined." sx={{ mt: 0.5 }} />
                       ) : (
                         <Table size="small" sx={{ mt: 0.5 }}>
                           <TableHead>
@@ -575,9 +543,7 @@ export default function DeploymentDrawer(props: {
                           Init Containers
                         </Typography>
                         {(details?.spec?.podTemplate?.initContainers || []).length === 0 ? (
-                          <Typography variant="body2" sx={{ mt: 0.5 }}>
-                            No init containers.
-                          </Typography>
+                          <EmptyState message="No init containers." sx={{ mt: 0.5 }} />
                         ) : (
                           <Table size="small" sx={{ mt: 0.5 }}>
                             <TableHead>
@@ -613,9 +579,7 @@ export default function DeploymentDrawer(props: {
                           Image Pull Secrets
                         </Typography>
                         {(details?.spec?.podTemplate?.imagePullSecrets || []).length === 0 ? (
-                          <Typography variant="body2" sx={{ mt: 0.5 }}>
-                            No image pull secrets.
-                          </Typography>
+                          <EmptyState message="No image pull secrets." sx={{ mt: 0.5 }} />
                         ) : (
                           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
                             {(details?.spec?.podTemplate?.imagePullSecrets || []).map((s) => (
@@ -632,16 +596,10 @@ export default function DeploymentDrawer(props: {
                       <Typography variant="subtitle2">Scheduling & Placement</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
-                      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 1.5 }}>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            Affinity
-                          </Typography>
-                          <Typography variant="body2">
-                            {valueOrDash(details?.spec?.scheduling?.affinitySummary)}
-                          </Typography>
-                        </Box>
-                      </Box>
+                      <KeyValueTable
+                        columns={2}
+                        rows={[{ label: "Affinity", value: details?.spec?.scheduling?.affinitySummary }]}
+                      />
 
                       <Box sx={{ mt: 2 }}>
                         <Typography variant="caption" color="text.secondary">
@@ -649,7 +607,7 @@ export default function DeploymentDrawer(props: {
                         </Typography>
                         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
                           {Object.entries(details?.spec?.scheduling?.nodeSelector || {}).length === 0 ? (
-                            <Typography variant="body2">None</Typography>
+                            <EmptyState message="None" />
                           ) : (
                             Object.entries(details?.spec?.scheduling?.nodeSelector || {}).map(([k, v]) => (
                               <Chip key={k} size="small" label={`${k}=${v}`} />
@@ -663,9 +621,7 @@ export default function DeploymentDrawer(props: {
                           Tolerations
                         </Typography>
                         {(details?.spec?.scheduling?.tolerations || []).length === 0 ? (
-                          <Typography variant="body2" sx={{ mt: 0.5 }}>
-                            None
-                          </Typography>
+                          <EmptyState message="None" sx={{ mt: 0.5 }} />
                         ) : (
                           <Table size="small" sx={{ mt: 0.5 }}>
                             <TableHead>
@@ -697,9 +653,7 @@ export default function DeploymentDrawer(props: {
                           Topology Spread Constraints
                         </Typography>
                         {(details?.spec?.scheduling?.topologySpreadConstraints || []).length === 0 ? (
-                          <Typography variant="body2" sx={{ mt: 0.5 }}>
-                            None
-                          </Typography>
+                          <EmptyState message="None" sx={{ mt: 0.5 }} />
                         ) : (
                           <Table size="small" sx={{ mt: 0.5 }}>
                             <TableHead>
@@ -732,7 +686,7 @@ export default function DeploymentDrawer(props: {
                     </AccordionSummary>
                     <AccordionDetails>
                       {(details?.spec?.volumes || []).length === 0 ? (
-                        <Typography variant="body2">No volumes defined.</Typography>
+                        <EmptyState message="No volumes defined." />
                       ) : (
                         <Table size="small">
                           <TableHead>
@@ -765,9 +719,7 @@ export default function DeploymentDrawer(props: {
                         Labels
                       </Typography>
                       {Object.entries(details?.spec?.metadata?.labels || {}).length === 0 ? (
-                        <Typography variant="body2" sx={{ mt: 0.5 }}>
-                          No labels.
-                        </Typography>
+                        <EmptyState message="No labels." sx={{ mt: 0.5 }} />
                       ) : (
                         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
                           {Object.entries(details?.spec?.metadata?.labels || {}).map(([k, v]) => (
@@ -781,9 +733,7 @@ export default function DeploymentDrawer(props: {
                           Annotations
                         </Typography>
                         {Object.entries(details?.spec?.metadata?.annotations || {}).length === 0 ? (
-                          <Typography variant="body2" sx={{ mt: 0.5 }}>
-                            No annotations.
-                          </Typography>
+                          <EmptyState message="No annotations." sx={{ mt: 0.5 }} />
                         ) : (
                           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
                             {Object.entries(details?.spec?.metadata?.annotations || {}).map(([k, v]) => (
@@ -801,7 +751,7 @@ export default function DeploymentDrawer(props: {
               {tab === 4 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
                   {events.length === 0 ? (
-                    <Typography variant="body2">No events found for this Deployment.</Typography>
+                    <EmptyState message="No events found for this Deployment." />
                   ) : (
                     events.map((e, idx) => (
                       <Box key={idx} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.25 }}>
