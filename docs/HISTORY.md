@@ -71,6 +71,38 @@ This file tracks notable changes and decisions to make future sessions easier.
   - Events type color chips.
   - Logs: line limits, follow auto-scroll, pretty mode line numbering, wrap toggle, sticky controls.
 
+## 2026-02-06 — Deployment detailed view (pod-aligned UX)
+### Backend
+- Expanded Deployment details DTO with:
+  - conditions and rollout summary/diagnostics
+  - ReplicaSets and rollout revision ordering
+  - pod list for the Deployment selector
+  - pod template spec summary (containers, scheduling, volumes, metadata)
+
+### UI
+- Deployment drawer rebuilt to mirror Pod UX:
+  - tabs: Overview, Rollout, Pods, Spec, Events, YAML
+  - overview summary + condition health highlighting
+  - rollout summary + diagnostics section
+  - ReplicaSets list with active/unhealthy highlights
+  - pods list with click-through to Pod drawer
+  - spec sections for template, scheduling, volumes, metadata
+
+## 2026-02-06 — Pod detailed view expansion
+### Backend
+- Expanded Pod details DTO to cover:
+  - conditions, lifecycle, container runtime state
+  - env, mounts, probes, and resource requests/limits
+  - volumes, security context, DNS, host aliases, topology spread
+
+### UI
+- Pod drawer rebuilt to match the standard detailed-view UX:
+  - tabs: Overview, Containers, Resources, Events, YAML, Logs
+  - overview summary + health conditions with highlighting
+  - container accordions with runtime/resources/env/mounts/probes
+  - resources sections for volumes, security context, DNS/aliases, topology spread
+  - logs improvements: filter, pretty, line limits, wrap
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

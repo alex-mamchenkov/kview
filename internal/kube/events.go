@@ -19,6 +19,7 @@ type EventDTO struct {
 	Count     int32  `json:"count"`
 	FirstSeen int64  `json:"firstSeen"`
 	LastSeen  int64  `json:"lastSeen"`
+	FieldPath string `json:"fieldPath,omitempty"`
 }
 
 func ListEventsForPod(ctx context.Context, c *cluster.Clients, namespace, podName string) ([]EventDTO, error) {
@@ -111,6 +112,7 @@ func toDTO(e corev1.Event) EventDTO {
 		Count:     e.Count,
 		FirstSeen: first.Unix(),
 		LastSeen:  last.Unix(),
+		FieldPath: strings.TrimSpace(e.InvolvedObject.FieldPath),
 	}
 }
 
@@ -135,4 +137,3 @@ func eventLastSeen(e corev1.Event) time.Time {
 	}
 	return last
 }
-
