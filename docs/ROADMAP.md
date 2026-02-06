@@ -45,7 +45,7 @@ A stable, scalable UI foundation with Pods as the canonical reference.
 
 Understand **how traffic reaches workloads**.
 
-- [ ] Services
+- [x] Services
   - Overview (type, selector, ports)
   - Endpoints (ready / not ready Pods)
   - Linked Pods navigation
