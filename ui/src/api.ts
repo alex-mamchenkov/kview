@@ -5,6 +5,8 @@ export type ContextInfo = {
   namespace?: string;
 };
 
+export type ApiError = { status?: number; message: string; details?: unknown };
+
 type ApiErrorShape = { status?: number; message: string };
 
 function extractJsonMessage(payload: unknown): string | null {
@@ -73,6 +75,20 @@ function toError(shape: ApiErrorShape): Error {
   const err = new Error(shape.message);
   (err as Error & { status?: number }).status = shape.status;
   return err;
+}
+
+export function toApiError(error: unknown): ApiError {
+  if (error && typeof error === "object") {
+    const record = error as { status?: unknown; message?: unknown };
+    const status = typeof record.status === "number" ? record.status : undefined;
+    const message =
+      typeof record.message === "string" && record.message.trim() ? record.message : String(error);
+    return { status, message, details: error };
+  }
+  if (typeof error === "string" && error.trim()) {
+    return { message: error };
+  }
+  return { message: "Unknown error", details: error };
 }
 
 export async function apiGet<T>(path: string, token: string): Promise<T> {

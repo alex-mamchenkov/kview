@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Paper,
   Typography,
@@ -23,12 +23,14 @@ import {
 import { apiGet } from "../api";
 import CronJobDrawer from "./CronJobDrawer";
 import { fmtAge, fmtTs } from "../utils/format";
+import useListQuery from "../utils/useListQuery";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
   saveListTextFilter,
   saveQuickFilterSelection,
 } from "../state";
+import ListStateOverlay from "./shared/ListStateOverlay";
 
 type CronJob = {
   name: string;
@@ -210,11 +212,6 @@ function CronJobsToolbar(props: {
 }
 
 export default function CronJobsTable({ token, namespace }: { token: string; namespace: string }) {
-  const [rows, setRows] = useState<Row[]>([]);
-  const [err, setErr] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(false);
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-
   const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>([]);
   const selectedName = useMemo(() => {
     if (!selectionModel.length) return null;
@@ -231,44 +228,18 @@ export default function CronJobsTable({ token, namespace }: { token: string; nam
   });
   const [refreshSec, setRefreshSec] = useState<number>(10);
 
-  useEffect(() => {
-    if (!namespace) return;
-
-    (async () => {
-      setLoading(true);
-      setErr("");
-      try {
-        const res = await apiGet<any>(`/api/namespaces/${encodeURIComponent(namespace)}/cronjobs`, token);
-        const items: CronJob[] = res.items || [];
-        const mapped: Row[] = items.map((cj) => ({ ...cj, id: `${cj.namespace}/${cj.name}` }));
-        setRows(mapped);
-        setLastRefresh(new Date());
-        setSelectionModel([]);
-      } catch (e: any) {
-        setRows([]);
-        setSelectionModel([]);
-        setErr(String(e?.message || e));
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const fetchRows = useCallback(async () => {
+    const res = await apiGet<any>(`/api/namespaces/${encodeURIComponent(namespace)}/cronjobs`, token);
+    const items: CronJob[] = res.items || [];
+    return items.map((cj) => ({ ...cj, id: `${cj.namespace}/${cj.name}` }));
   }, [token, namespace]);
 
-  useEffect(() => {
-    if (!namespace || refreshSec <= 0) return;
-    const t = setInterval(async () => {
-      try {
-        const res = await apiGet<any>(`/api/namespaces/${encodeURIComponent(namespace)}/cronjobs`, token);
-        const items: CronJob[] = res.items || [];
-        const mapped: Row[] = items.map((cj) => ({ ...cj, id: `${cj.namespace}/${cj.name}` }));
-        setRows(mapped);
-        setLastRefresh(new Date());
-      } catch {
-        // keep previous data on refresh error
-      }
-    }, refreshSec * 1000);
-    return () => clearInterval(t);
-  }, [token, namespace, refreshSec]);
+  const { items: rows, error, loading, lastRefresh } = useListQuery<Row>({
+    enabled: !!namespace,
+    refreshSec,
+    fetchItems: fetchRows,
+    onInitialResult: () => setSelectionModel([]),
+  });
 
   const filteredRows = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -320,42 +291,41 @@ export default function CronJobsTable({ token, namespace }: { token: string; nam
         CronJobs — {namespace}
       </Typography>
 
-      {err ? (
-        <Typography color="error" sx={{ whiteSpace: "pre-wrap" }}>
-          {err}
-        </Typography>
-      ) : (
-        <div style={{ height: 700, width: "100%" }}>
-          <DataGrid
-            rows={filteredRows}
-            columns={cols}
-            density="compact"
-            loading={loading}
-            disableMultipleRowSelection
-            hideFooterSelectedRowCount
-            rowSelectionModel={selectionModel}
-            onRowSelectionModelChange={(m) => setSelectionModel(m)}
-            onRowDoubleClick={(p) => setDrawerName((p.row as any).name as string)}
-            initialState={{
-              sorting: { sortModel: [{ field: "name", sort: "asc" }] },
-            }}
-            slots={{ toolbar: ToolbarAny }}
-            slotProps={{
-              toolbar: {
-                filter,
-                setFilter: setFilterPersist,
-                selectedQuickFilter,
-                setSelectedQuickFilter: setSelectedQuickFilterPersist,
-                onOpenSelected: openSelected,
-                hasSelection: !!selectedName,
-                refreshSec,
-                setRefreshSec,
-                quickFilters,
-              } as any,
-            }}
-          />
-        </div>
-      )}
+      <div style={{ height: 700, width: "100%" }}>
+        <DataGrid
+          rows={filteredRows}
+          columns={cols}
+          density="compact"
+          loading={loading}
+          disableMultipleRowSelection
+          hideFooterSelectedRowCount
+          rowSelectionModel={selectionModel}
+          onRowSelectionModelChange={(m) => setSelectionModel(m)}
+          onRowDoubleClick={(p) => setDrawerName((p.row as any).name as string)}
+          initialState={{
+            sorting: { sortModel: [{ field: "name", sort: "asc" }] },
+          }}
+          slots={{ toolbar: ToolbarAny, noRowsOverlay: ListStateOverlay }}
+          slotProps={{
+            toolbar: {
+              filter,
+              setFilter: setFilterPersist,
+              selectedQuickFilter,
+              setSelectedQuickFilter: setSelectedQuickFilterPersist,
+              onOpenSelected: openSelected,
+              hasSelection: !!selectedName,
+              refreshSec,
+              setRefreshSec,
+              quickFilters,
+            } as any,
+            noRowsOverlay: {
+              error,
+              emptyMessage: "No cronjobs found.",
+              resourceLabel: "CronJobs",
+            } as any,
+          }}
+        />
+      </div>
       <Box sx={{ mt: 1, display: "flex", justifyContent: "flex-end" }}>
         <Typography variant="caption" color="text.secondary">
           Last refresh: {lastRefresh ? lastRefresh.toLocaleString() : "-"}

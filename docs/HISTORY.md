@@ -210,6 +210,12 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Added Node drawer with tabs: Overview, Pods, Conditions, YAML.
 - Enabled navigation: Node → Pod drawer.
 
+## 2026-02-07 — RBAC-aware list views
+### UI
+- Added RBAC-aware list overlays that distinguish empty results from 401/403 errors.
+- Introduced shared AccessDenied state with compact guidance for missing list permissions.
+- Stabilized list query callbacks to avoid unintended re-fetch loops.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:
