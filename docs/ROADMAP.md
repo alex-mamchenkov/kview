@@ -75,7 +75,7 @@ Understand **how releases are rolled out and what changed**.
   - Relationship to Deployments
   - Pod template summary (read-only)
 
-- [ ] Deployment deep-linking
+- [x] Deployment deep-linking
   - Deployment → ReplicaSets → Pods
   - Clear identification of active vs old ReplicaSets
 

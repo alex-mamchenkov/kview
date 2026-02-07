@@ -163,6 +163,14 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Added ReplicaSet drawer with tabs: Overview, Pods, Spec, Events, YAML.
 - Enabled navigation: ReplicaSet → Pod drawer and ReplicaSet → Deployment drawer.
 
+## 2026-02-07 — Deployment ↔ ReplicaSet deep-linking
+### Backend
+- Derived active ReplicaSet using Deployment revision when available (fallback to highest revision).
+
+### UI
+- Made Deployment Rollout ReplicaSets rows clickable to open ReplicaSet drawer.
+- Preserved active/current labeling based on reliable revision signals only.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

@@ -23,6 +23,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../api";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import PodDrawer from "./PodDrawer";
+import ReplicaSetDrawer from "./ReplicaSetDrawer";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { conditionStatusColor, eventChipColor, phaseChipColor } from "../utils/k8sUi";
 import KeyValueTable from "./shared/KeyValueTable";
@@ -162,6 +163,7 @@ export default function DeploymentDrawer(props: {
   const [events, setEvents] = useState<EventDTO[]>([]);
   const [err, setErr] = useState("");
   const [drawerPod, setDrawerPod] = useState<string | null>(null);
+  const [drawerReplicaSet, setDrawerReplicaSet] = useState<string | null>(null);
 
   const ns = props.namespace;
   const name = props.deploymentName;
@@ -175,6 +177,7 @@ export default function DeploymentDrawer(props: {
     setDetails(null);
     setEvents([]);
     setDrawerPod(null);
+    setDrawerReplicaSet(null);
     setLoading(true);
 
     (async () => {
@@ -392,8 +395,11 @@ export default function DeploymentDrawer(props: {
                             {(details?.replicaSets || []).map((rs, idx) => (
                               <TableRow
                                 key={rs.name || String(idx)}
+                                hover
+                                onClick={() => rs.name && setDrawerReplicaSet(rs.name)}
                                 sx={{
                                   backgroundColor: rs.unhealthyPods ? "rgba(255, 152, 0, 0.12)" : "transparent",
+                                  cursor: rs.name ? "pointer" : "default",
                                 }}
                               >
                                 <TableCell>{rs.revision}</TableCell>
@@ -800,6 +806,13 @@ export default function DeploymentDrawer(props: {
               token={props.token}
               namespace={ns}
               podName={drawerPod}
+            />
+            <ReplicaSetDrawer
+              open={!!drawerReplicaSet}
+              onClose={() => setDrawerReplicaSet(null)}
+              token={props.token}
+              namespace={ns}
+              replicaSetName={drawerReplicaSet}
             />
           </>
         )}

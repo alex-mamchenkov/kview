@@ -240,6 +240,10 @@ func listDeploymentReplicaSets(ctx context.Context, c *cluster.Clients, dep *app
 			highestRevision = rev
 		}
 	}
+	activeRevision := parseRevision(dep.Annotations["deployment.kubernetes.io/revision"])
+	if activeRevision <= 0 {
+		activeRevision = highestRevision
+	}
 
 	for _, rs := range rss.Items {
 		if !isReplicaSetOwnedBy(&rs, dep.UID) {
@@ -259,7 +263,7 @@ func listDeploymentReplicaSets(ctx context.Context, c *cluster.Clients, dep *app
 		status := "Old"
 		if active {
 			status = "Active"
-		} else if rev == highestRevision {
+		} else if activeRevision > 0 && rev == activeRevision {
 			status = "ScaledDown"
 		}
 		unhealthy := rs.Status.Replicas > 0 && rs.Status.ReadyReplicas < rs.Status.Replicas
@@ -271,7 +275,7 @@ func listDeploymentReplicaSets(ctx context.Context, c *cluster.Clients, dep *app
 			Ready:         rs.Status.ReadyReplicas,
 			AgeSec:        age,
 			Status:        status,
-			IsActive:      active && rev == highestRevision,
+			IsActive:      activeRevision > 0 && active && rev == activeRevision,
 			UnhealthyPods: unhealthy,
 		})
 	}
