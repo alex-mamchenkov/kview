@@ -7,6 +7,7 @@ import ReplicaSetsTable from "./components/ReplicaSetsTable";
 import ServicesTable from "./components/ServicesTable";
 import IngressesTable from "./components/IngressesTable";
 import JobsTable from "./components/JobsTable";
+import CronJobsTable from "./components/CronJobsTable";
 import { apiGet, apiPost } from "./api";
 import { loadState, saveState, toggleFavouriteNamespace, type Section } from "./state";
 
@@ -170,6 +171,7 @@ export default function App() {
           <ReplicaSetsTable token={token} namespace={namespace} />
         ) : null}
         {section === "jobs" && namespace ? <JobsTable token={token} namespace={namespace} /> : null}
+        {section === "cronjobs" && namespace ? <CronJobsTable token={token} namespace={namespace} /> : null}
         {section === "services" && namespace ? <ServicesTable token={token} namespace={namespace} /> : null}
         {section === "ingresses" && namespace ? <IngressesTable token={token} namespace={namespace} /> : null}
       </Box>

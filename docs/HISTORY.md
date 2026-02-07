@@ -184,6 +184,20 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Added Job drawer with tabs: Overview, Pods, Events, YAML.
 - Enabled navigation: Job → Pod drawer.
 
+## 2026-02-07 — CronJobs list + details
+### Backend
+- Added CronJobs endpoints:
+  - `/api/namespaces/{ns}/cronjobs`
+  - `/api/namespaces/{ns}/cronjobs/{name}`
+  - `/api/namespaces/{ns}/cronjobs/{name}/events`
+- Added CronJobs list/detail DTOs (schedule, policy, active/recent jobs, template summary).
+- Linked CronJob → Jobs using label selector (best-effort).
+
+### UI
+- Added CronJobs table with schedule, suspend, active, last schedule/success, age.
+- Added CronJob drawer with tabs: Overview, Jobs, Spec, Events, YAML.
+- Enabled navigation: CronJob → Job drawer (and onward to Pods).
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

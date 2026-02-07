@@ -1,4 +1,12 @@
-export type Section = "pods" | "deployments" | "replicasets" | "jobs" | "services" | "ingresses" | "helm";
+export type Section =
+  | "pods"
+  | "deployments"
+  | "replicasets"
+  | "jobs"
+  | "cronjobs"
+  | "services"
+  | "ingresses"
+  | "helm";
 
 export type AppStateV1 = {
   v: 1;

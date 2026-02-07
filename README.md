@@ -38,6 +38,11 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - filtering
   - single selection
   - refresh interval + last refresh timestamp
+- CronJobs view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
 - Services view:
   - sorting
   - filtering
@@ -64,6 +69,11 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
 - Job details drawer:
   - overview summary + conditions
   - pods list with click-through to Pod drawer
+  - events, YAML
+- CronJob details drawer:
+  - overview summary + policy
+  - jobs list with click-through to Job drawer
+  - spec summary (template, scheduling, volumes, metadata)
   - events, YAML
 - Service details drawer:
   - overview summary + ports + traffic notes

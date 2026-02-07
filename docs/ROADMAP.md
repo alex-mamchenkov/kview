@@ -88,13 +88,13 @@ First-class rollout understanding without inspecting YAML manually.
 
 Understand **non-service workloads**.
 
-- [ ] Jobs
+- [x] Jobs
   - Status (active / succeeded / failed)
   - Duration and start time
   - Linked Pods
   - Events and logs (read-only)
 
-- [ ] CronJobs
+- [x] CronJobs
   - Schedule and concurrency policy
   - Last run status
   - Active Jobs
