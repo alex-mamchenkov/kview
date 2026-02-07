@@ -134,6 +134,12 @@ export default function Sidebar(props: Props) {
           >
             <ListItemText primary="Deployments" />
           </ListItemButton>
+          <ListItemButton
+            selected={props.section === "replicasets"}
+            onClick={() => props.onSelectSection("replicasets")}
+          >
+            <ListItemText primary="ReplicaSets" />
+          </ListItemButton>
           <ListItemButton selected={props.section === "jobs"} onClick={() => props.onSelectSection("jobs")} disabled>
             <ListItemText primary="Jobs" secondary="soon" />
           </ListItemButton>

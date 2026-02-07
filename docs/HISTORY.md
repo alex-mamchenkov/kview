@@ -150,6 +150,19 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Added Ingress drawer with tabs: Overview, Rules, TLS, Events, YAML.
 - Enabled navigation: Ingress → Service drawer (and onward to Pods).
 
+## 2026-02-07 — ReplicaSets list + details
+### Backend
+- Added ReplicaSets endpoints:
+  - `/api/namespaces/{ns}/replicasets`
+  - `/api/namespaces/{ns}/replicasets/{name}`
+  - `/api/namespaces/{ns}/replicasets/{name}/events`
+- Added ReplicaSets list/detail DTOs (revision, replica counts, owner, selector, conditions, pod summary).
+
+### UI
+- Added ReplicaSets table with columns for revision, replica counts, owner, age.
+- Added ReplicaSet drawer with tabs: Overview, Pods, Spec, Events, YAML.
+- Enabled navigation: ReplicaSet → Pod drawer and ReplicaSet → Deployment drawer.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

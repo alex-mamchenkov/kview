@@ -3,6 +3,7 @@ import { Box, CssBaseline, AppBar, Toolbar, Typography } from "@mui/material";
 import Sidebar from "./components/Sidebar";
 import PodsTable from "./components/PodsTable";
 import DeploymentsTable from "./components/DeploymentsTable";
+import ReplicaSetsTable from "./components/ReplicaSetsTable";
 import ServicesTable from "./components/ServicesTable";
 import IngressesTable from "./components/IngressesTable";
 import { apiGet, apiPost } from "./api";
@@ -163,6 +164,9 @@ export default function App() {
         {section === "pods" && namespace ? <PodsTable token={token} namespace={namespace} /> : null}
         {section === "deployments" && namespace ? (
           <DeploymentsTable token={token} namespace={namespace} />
+        ) : null}
+        {section === "replicasets" && namespace ? (
+          <ReplicaSetsTable token={token} namespace={namespace} />
         ) : null}
         {section === "services" && namespace ? <ServicesTable token={token} namespace={namespace} /> : null}
         {section === "ingresses" && namespace ? <IngressesTable token={token} namespace={namespace} /> : null}

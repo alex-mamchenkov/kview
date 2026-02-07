@@ -68,12 +68,12 @@ Clear visibility into how external and internal traffic flows through the cluste
 
 Understand **how releases are rolled out and what changed**.
 
-- [ ] ReplicaSets
+- [x] ReplicaSets
   - Revision and age
   - Desired / current / ready replicas
   - Linked Pods health
   - Relationship to Deployments
-  - Image and template diffs (read-only)
+  - Pod template summary (read-only)
 
 - [ ] Deployment deep-linking
   - Deployment → ReplicaSets → Pods
