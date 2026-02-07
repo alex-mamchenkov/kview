@@ -1,0 +1,382 @@
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  Box,
+  Drawer,
+  Typography,
+  Tabs,
+  Tab,
+  IconButton,
+  Divider,
+  CircularProgress,
+  Chip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+} from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import { apiGet } from "../api";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import PodDrawer from "./PodDrawer";
+import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
+import { conditionStatusColor, eventChipColor, jobStatusChipColor, phaseChipColor } from "../utils/k8sUi";
+import KeyValueTable from "./shared/KeyValueTable";
+import EmptyState from "./shared/EmptyState";
+import ErrorState from "./shared/ErrorState";
+
+type JobDetails = {
+  summary: JobSummary;
+  conditions: JobCondition[];
+  pods: JobPod[];
+  linkedPods: JobPodsSummary;
+  yaml: string;
+};
+
+type EventDTO = {
+  type: string;
+  reason: string;
+  message: string;
+  count: number;
+  firstSeen: number;
+  lastSeen: number;
+};
+
+type JobSummary = {
+  name: string;
+  namespace: string;
+  owner?: OwnerRef;
+  status: string;
+  active: number;
+  succeeded: number;
+  failed: number;
+  completions?: number;
+  parallelism?: number;
+  backoffLimit?: number;
+  startTime?: number;
+  completionTime?: number;
+  durationSec?: number;
+  ageSec: number;
+};
+
+type OwnerRef = {
+  kind: string;
+  name: string;
+};
+
+type JobCondition = {
+  type: string;
+  status: string;
+  reason?: string;
+  message?: string;
+  lastTransitionTime?: number;
+};
+
+type JobPod = {
+  name: string;
+  phase: string;
+  ready: string;
+  restarts: number;
+  node?: string;
+  ageSec: number;
+};
+
+type JobPodsSummary = {
+  total: number;
+  ready: number;
+};
+
+function isConditionHealthy(cond: JobCondition) {
+  if (cond.type === "Failed") {
+    return cond.status !== "True";
+  }
+  return cond.status === "True";
+}
+
+function formatOwner(owner?: OwnerRef) {
+  if (!owner?.name) return "-";
+  if (owner.kind) return `${owner.kind}/${owner.name}`;
+  return owner.name;
+}
+
+function formatDuration(seconds?: number) {
+  if (!seconds || seconds <= 0) return "-";
+  return fmtAge(seconds, "detail");
+}
+
+export default function JobDrawer(props: {
+  open: boolean;
+  onClose: () => void;
+  token: string;
+  namespace: string;
+  jobName: string | null;
+}) {
+  const [tab, setTab] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [details, setDetails] = useState<JobDetails | null>(null);
+  const [events, setEvents] = useState<EventDTO[]>([]);
+  const [err, setErr] = useState("");
+  const [drawerPod, setDrawerPod] = useState<string | null>(null);
+
+  const ns = props.namespace;
+  const name = props.jobName;
+
+  useEffect(() => {
+    if (!props.open || !name) return;
+
+    setTab(0);
+    setErr("");
+    setDetails(null);
+    setEvents([]);
+    setDrawerPod(null);
+    setLoading(true);
+
+    (async () => {
+      const det = await apiGet<any>(
+        `/api/namespaces/${encodeURIComponent(ns)}/jobs/${encodeURIComponent(name)}`,
+        props.token
+      );
+      const item: JobDetails | null = det?.item ?? null;
+      setDetails(item);
+
+      const ev = await apiGet<any>(
+        `/api/namespaces/${encodeURIComponent(ns)}/jobs/${encodeURIComponent(name)}/events`,
+        props.token
+      );
+      setEvents(ev?.items || []);
+    })()
+      .catch((e) => setErr(String(e)))
+      .finally(() => setLoading(false));
+  }, [props.open, name, ns, props.token]);
+
+  const summary = details?.summary;
+  const linkedPods = details?.linkedPods;
+  const hasUnhealthyConditions = (details?.conditions || []).some((c) => !isConditionHealthy(c));
+
+  const summaryItems = useMemo(
+    () => [
+      { label: "Name", value: valueOrDash(summary?.name) },
+      { label: "Namespace", value: valueOrDash(summary?.namespace) },
+      { label: "Owner", value: formatOwner(summary?.owner) },
+      {
+        label: "Status",
+        value: (
+          <Chip size="small" label={valueOrDash(summary?.status)} color={jobStatusChipColor(summary?.status)} />
+        ),
+      },
+      { label: "Active", value: valueOrDash(summary?.active) },
+      { label: "Succeeded", value: valueOrDash(summary?.succeeded) },
+      { label: "Failed", value: valueOrDash(summary?.failed) },
+      {
+        label: "Completions / Parallelism",
+        value: `${valueOrDash(summary?.completions)} / ${valueOrDash(summary?.parallelism)}`,
+      },
+      { label: "Backoff Limit", value: valueOrDash(summary?.backoffLimit) },
+      { label: "Start Time", value: summary?.startTime ? fmtTs(summary.startTime) : "-" },
+      { label: "Completion Time", value: summary?.completionTime ? fmtTs(summary.completionTime) : "-" },
+      { label: "Duration", value: formatDuration(summary?.durationSec) },
+      { label: "Age", value: fmtAge(summary?.ageSec) },
+      { label: "Linked Pods", value: linkedPods ? `${linkedPods.ready}/${linkedPods.total}` : "-" },
+    ],
+    [summary, linkedPods]
+  );
+
+  return (
+    <Drawer
+      anchor="right"
+      open={props.open}
+      onClose={props.onClose}
+      PaperProps={{
+        sx: {
+          mt: 8,
+          height: "calc(100% - 64px)",
+          borderTopLeftRadius: 8,
+          borderBottomLeftRadius: 8,
+        },
+      }}
+    >
+      <Box sx={{ width: 820, p: 2, display: "flex", flexDirection: "column", height: "100%" }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Job: {name || "-"} <Typography component="span" variant="body2">({ns})</Typography>
+          </Typography>
+          <IconButton onClick={props.onClose}>
+            <CloseIcon />
+          </IconButton>
+        </Box>
+
+        <Divider sx={{ my: 1 }} />
+
+        {loading ? (
+          <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : err ? (
+          <ErrorState message={err} />
+        ) : (
+          <>
+            <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+              <Tab label="Overview" />
+              <Tab label="Pods" />
+              <Tab label="Events" />
+              <Tab label="YAML" />
+            </Tabs>
+
+            <Box sx={{ mt: 2, flexGrow: 1, minHeight: 0, overflow: "hidden" }}>
+              {/* OVERVIEW */}
+              {tab === 0 && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
+                    <KeyValueTable
+                      rows={summaryItems}
+                      columns={3}
+                      valueSx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+                    />
+                  </Box>
+
+                  <Accordion defaultExpanded={hasUnhealthyConditions}>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography variant="subtitle2">Conditions & Health</Typography>
+                      {hasUnhealthyConditions && (
+                        <Chip size="small" color="error" label="Unhealthy" sx={{ ml: 1 }} />
+                      )}
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      {(details?.conditions || []).length === 0 ? (
+                        <EmptyState message="No conditions reported." />
+                      ) : (
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Condition</TableCell>
+                              <TableCell>Status</TableCell>
+                              <TableCell>Reason</TableCell>
+                              <TableCell>Message</TableCell>
+                              <TableCell>Last Transition</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {(details?.conditions || []).map((c, idx) => {
+                              const unhealthy = !isConditionHealthy(c);
+                              return (
+                                <TableRow
+                                  key={c.type || String(idx)}
+                                  sx={{
+                                    backgroundColor: unhealthy ? "rgba(211, 47, 47, 0.08)" : "transparent",
+                                  }}
+                                >
+                                  <TableCell>{valueOrDash(c.type)}</TableCell>
+                                  <TableCell>
+                                    <Chip size="small" label={valueOrDash(c.status)} color={conditionStatusColor(c.status)} />
+                                  </TableCell>
+                                  <TableCell>{valueOrDash(c.reason)}</TableCell>
+                                  <TableCell sx={{ maxWidth: 320, whiteSpace: "pre-wrap" }}>
+                                    {valueOrDash(c.message)}
+                                  </TableCell>
+                                  <TableCell>{c.lastTransitionTime ? fmtTs(c.lastTransitionTime) : "-"}</TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </AccordionDetails>
+                  </Accordion>
+                </Box>
+              )}
+
+              {/* PODS */}
+              {tab === 1 && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
+                  {(details?.pods || []).length === 0 ? (
+                    <EmptyState message="No pods found for this Job." />
+                  ) : (
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Pod</TableCell>
+                          <TableCell>Phase</TableCell>
+                          <TableCell>Ready</TableCell>
+                          <TableCell>Restarts</TableCell>
+                          <TableCell>Node</TableCell>
+                          <TableCell>Age</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {(details?.pods || []).map((p, idx) => (
+                          <TableRow
+                            key={p.name || String(idx)}
+                            hover
+                            onClick={() => p.name && setDrawerPod(p.name)}
+                            sx={{ cursor: p.name ? "pointer" : "default" }}
+                          >
+                            <TableCell>{valueOrDash(p.name)}</TableCell>
+                            <TableCell>
+                              <Chip size="small" label={valueOrDash(p.phase)} color={phaseChipColor(p.phase)} />
+                            </TableCell>
+                            <TableCell>{valueOrDash(p.ready)}</TableCell>
+                            <TableCell>{valueOrDash(p.restarts)}</TableCell>
+                            <TableCell>{valueOrDash(p.node)}</TableCell>
+                            <TableCell>{fmtAge(p.ageSec)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </Box>
+              )}
+
+              {/* EVENTS */}
+              {tab === 2 && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
+                  {events.length === 0 ? (
+                    <EmptyState message="No events found for this Job." />
+                  ) : (
+                    events.map((e, idx) => (
+                      <Box key={idx} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.25 }}>
+                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                            <Chip size="small" label={e.type || "Unknown"} color={eventChipColor(e.type)} />
+                            <Typography variant="subtitle2">
+                              {valueOrDash(e.reason)} (x{valueOrDash(e.count)})
+                            </Typography>
+                          </Box>
+                          <Typography variant="caption" color="text.secondary">
+                            {fmtTs(e.lastSeen)}
+                          </Typography>
+                        </Box>
+                        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", mt: 0.5 }}>
+                          {valueOrDash(e.message)}
+                        </Typography>
+                      </Box>
+                    ))
+                  )}
+                </Box>
+              )}
+
+              {/* YAML */}
+              {tab === 3 && (
+                <Box sx={{ border: "1px solid #ddd", borderRadius: 2, overflow: "auto", height: "100%" }}>
+                  <SyntaxHighlighter language="yaml" showLineNumbers wrapLongLines>
+                    {details?.yaml || ""}
+                  </SyntaxHighlighter>
+                </Box>
+              )}
+            </Box>
+            <PodDrawer
+              open={!!drawerPod}
+              onClose={() => setDrawerPod(null)}
+              token={props.token}
+              namespace={ns}
+              podName={drawerPod}
+            />
+          </>
+        )}
+      </Box>
+    </Drawer>
+  );
+}

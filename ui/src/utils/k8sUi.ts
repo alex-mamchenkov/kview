@@ -47,3 +47,16 @@ export function statusChipColor(status?: string | null): ChipColor {
       return "default";
   }
 }
+
+export function jobStatusChipColor(status?: string | null): ChipColor {
+  switch (status) {
+    case "Complete":
+      return "success";
+    case "Failed":
+      return "error";
+    case "Running":
+      return "warning";
+    default:
+      return "default";
+  }
+}

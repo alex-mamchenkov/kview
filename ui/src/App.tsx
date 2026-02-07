@@ -6,6 +6,7 @@ import DeploymentsTable from "./components/DeploymentsTable";
 import ReplicaSetsTable from "./components/ReplicaSetsTable";
 import ServicesTable from "./components/ServicesTable";
 import IngressesTable from "./components/IngressesTable";
+import JobsTable from "./components/JobsTable";
 import { apiGet, apiPost } from "./api";
 import { loadState, saveState, toggleFavouriteNamespace, type Section } from "./state";
 
@@ -168,9 +169,9 @@ export default function App() {
         {section === "replicasets" && namespace ? (
           <ReplicaSetsTable token={token} namespace={namespace} />
         ) : null}
+        {section === "jobs" && namespace ? <JobsTable token={token} namespace={namespace} /> : null}
         {section === "services" && namespace ? <ServicesTable token={token} namespace={namespace} /> : null}
         {section === "ingresses" && namespace ? <IngressesTable token={token} namespace={namespace} /> : null}
-        {/* later: jobs */}
       </Box>
     </Box>
   );

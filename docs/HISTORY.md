@@ -171,6 +171,19 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Made Deployment Rollout ReplicaSets rows clickable to open ReplicaSet drawer.
 - Preserved active/current labeling based on reliable revision signals only.
 
+## 2026-02-07 — Jobs list + details
+### Backend
+- Added Jobs endpoints:
+  - `/api/namespaces/{ns}/jobs`
+  - `/api/namespaces/{ns}/jobs/{name}`
+  - `/api/namespaces/{ns}/jobs/{name}/events`
+- Added Jobs list/detail DTOs (status, duration, owner, conditions, pods summary).
+
+### UI
+- Added Jobs table with columns for status, active/succeeded/failed, duration, age.
+- Added Job drawer with tabs: Overview, Pods, Events, YAML.
+- Enabled navigation: Job → Pod drawer.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

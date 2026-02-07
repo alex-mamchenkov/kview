@@ -33,6 +33,11 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - filtering
   - single selection
   - refresh interval + last refresh timestamp
+- Jobs view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
 - Services view:
   - sorting
   - filtering
@@ -55,6 +60,10 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - pods list with click-through to Pod drawer
   - owner Deployment link
   - spec summary (template, scheduling, volumes, metadata)
+  - events, YAML
+- Job details drawer:
+  - overview summary + conditions
+  - pods list with click-through to Pod drawer
   - events, YAML
 - Service details drawer:
   - overview summary + ports + traffic notes
