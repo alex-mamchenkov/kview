@@ -1,5 +1,6 @@
 export type Section =
   | "pods"
+  | "nodes"
   | "deployments"
   | "replicasets"
   | "jobs"

@@ -60,3 +60,16 @@ export function jobStatusChipColor(status?: string | null): ChipColor {
       return "default";
   }
 }
+
+export function nodeStatusChipColor(status?: string | null): ChipColor {
+  switch (status) {
+    case "Ready":
+      return "success";
+    case "NotReady":
+      return "error";
+    case "Unknown":
+      return "warning";
+    default:
+      return "default";
+  }
+}

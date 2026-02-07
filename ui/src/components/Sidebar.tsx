@@ -40,6 +40,7 @@ const drawerWidth = 320;
 
 export default function Sidebar(props: Props) {
   const [nsInput, setNsInput] = useState("");
+  const isClusterScoped = props.section === "nodes";
 
   const favSet = useMemo(() => new Set(props.favourites), [props.favourites]);
 
@@ -78,7 +79,15 @@ export default function Sidebar(props: Props) {
 
         <Typography variant="subtitle2">Namespace</Typography>
 
-        {!props.nsLimited ? (
+        {isClusterScoped ? (
+          <TextField
+            size="small"
+            label="Namespace"
+            value="-"
+            disabled
+            helperText="Cluster-scoped resource"
+          />
+        ) : !props.nsLimited ? (
           <Autocomplete
             size="small"
             options={sortedNamespaces}
@@ -125,6 +134,9 @@ export default function Sidebar(props: Props) {
 
         <Typography variant="subtitle2">Navigation</Typography>
         <List dense disablePadding>
+          <ListItemButton selected={props.section === "nodes"} onClick={() => props.onSelectSection("nodes")}>
+            <ListItemText primary="Nodes" />
+          </ListItemButton>
           <ListItemButton selected={props.section === "pods"} onClick={() => props.onSelectSection("pods")}>
             <ListItemText primary="Pods" />
           </ListItemButton>

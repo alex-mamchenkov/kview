@@ -16,6 +16,11 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - search
   - favourites
   - per-context persistence
+- Nodes view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
 - Pods view:
   - sorting
   - filtering
@@ -53,6 +58,10 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - filtering
   - single selection
   - refresh interval + last refresh timestamp
+- Node details drawer:
+  - overview summary + capacity/taints
+  - pods list with click-through to Pod drawer
+  - conditions, YAML
 - Deployment details drawer:
   - overview summary + conditions
   - rollout summary + diagnostics

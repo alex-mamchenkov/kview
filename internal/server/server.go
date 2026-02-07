@@ -105,6 +105,58 @@ func (s *Server) Router() http.Handler {
 			})
 		})
 
+		api.Get("/nodes", func(w http.ResponseWriter, r *http.Request) {
+			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+			defer cancel()
+
+			clients, active, err := s.mgr.GetClients(ctx)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			items, err := kube.ListNodes(ctx, clients)
+			if err != nil {
+				status := http.StatusInternalServerError
+				if apierrors.IsForbidden(err) {
+					status = http.StatusForbidden
+				}
+				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": items})
+		})
+
+		api.Get("/nodes/{name}", func(w http.ResponseWriter, r *http.Request) {
+			name := chi.URLParam(r, "name")
+			if name == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "missing node name"})
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+			defer cancel()
+
+			clients, active, err := s.mgr.GetClients(ctx)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			det, err := kube.GetNodeDetails(ctx, clients, name)
+			if err != nil {
+				status := http.StatusInternalServerError
+				if apierrors.IsForbidden(err) {
+					status = http.StatusForbidden
+				}
+				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{"active": active, "item": det})
+		})
+
 		api.Get("/namespaces/{ns}/pods", func(w http.ResponseWriter, r *http.Request) {
 			ns := chi.URLParam(r, "ns")
 			if ns == "" {

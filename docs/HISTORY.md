@@ -198,6 +198,18 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Added CronJob drawer with tabs: Overview, Jobs, Spec, Events, YAML.
 - Enabled navigation: CronJob → Job drawer (and onward to Pods).
 
+## 2026-02-07 — Nodes list + details
+### Backend
+- Added Nodes endpoints:
+  - `/api/nodes`
+  - `/api/nodes/{name}`
+- Added Node list/detail DTOs (roles, conditions, capacity vs allocatable, taints, pods summary).
+
+### UI
+- Added Nodes table with status, roles, allocatable capacity, pod count, age.
+- Added Node drawer with tabs: Overview, Pods, Conditions, YAML.
+- Enabled navigation: Node → Pod drawer.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

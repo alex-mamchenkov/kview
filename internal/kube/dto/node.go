@@ -1,0 +1,66 @@
+package dto
+
+type NodeDetailsDTO struct {
+	Summary    NodeSummaryDTO    `json:"summary"`
+	Metadata   NodeMetadataDTO   `json:"metadata"`
+	Conditions []NodeConditionDTO `json:"conditions"`
+	Capacity   NodeCapacityDTO   `json:"capacity"`
+	Taints     []NodeTaintDTO    `json:"taints,omitempty"`
+	Pods       []NodePodDTO      `json:"pods"`
+	LinkedPods NodePodsSummaryDTO `json:"linkedPods"`
+	YAML       string            `json:"yaml"`
+}
+
+type NodeSummaryDTO struct {
+	Name           string   `json:"name"`
+	Status         string   `json:"status"`
+	Roles          []string `json:"roles,omitempty"`
+	KubeletVersion string   `json:"kubeletVersion,omitempty"`
+	OSImage        string   `json:"osImage,omitempty"`
+	KernelVersion  string   `json:"kernelVersion,omitempty"`
+	Architecture   string   `json:"architecture,omitempty"`
+	ProviderID     string   `json:"providerID,omitempty"`
+	CreatedAt      int64    `json:"createdAt"`
+	AgeSec         int64    `json:"ageSec"`
+}
+
+type NodeMetadataDTO struct {
+	Labels      map[string]string `json:"labels,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+type NodeConditionDTO struct {
+	Type               string `json:"type"`
+	Status             string `json:"status"`
+	Reason             string `json:"reason,omitempty"`
+	Message            string `json:"message,omitempty"`
+	LastTransitionTime int64  `json:"lastTransitionTime,omitempty"`
+}
+
+type NodeCapacityDTO struct {
+	CPUCapacity       string `json:"cpuCapacity,omitempty"`
+	CPUAllocatable    string `json:"cpuAllocatable,omitempty"`
+	MemoryCapacity    string `json:"memoryCapacity,omitempty"`
+	MemoryAllocatable string `json:"memoryAllocatable,omitempty"`
+	PodsCapacity      string `json:"podsCapacity,omitempty"`
+	PodsAllocatable   string `json:"podsAllocatable,omitempty"`
+}
+
+type NodeTaintDTO struct {
+	Key    string `json:"key,omitempty"`
+	Value  string `json:"value,omitempty"`
+	Effect string `json:"effect,omitempty"`
+}
+
+type NodePodsSummaryDTO struct {
+	Total int `json:"total"`
+}
+
+type NodePodDTO struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Phase     string `json:"phase"`
+	Ready     string `json:"ready"`
+	Restarts  int32  `json:"restarts"`
+	AgeSec    int64  `json:"ageSec"`
+}
