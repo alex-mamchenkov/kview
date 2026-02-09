@@ -135,7 +135,7 @@ Understand **what configuration affects workloads**, without exposing secrets.
   - Last update time
   - Reverse references (used by which Pods/Deployments)
 
-- [ ] Secrets (metadata only)
+- [x] Secrets (metadata only)
   - Type
   - Keys count
   - Reverse references

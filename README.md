@@ -68,6 +68,11 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - filtering
   - single selection
   - refresh interval + last refresh timestamp
+- Secrets view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
 - Node details drawer:
   - overview summary + capacity/taints
   - pods list with click-through to Pod drawer
@@ -110,6 +115,10 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - overview summary + metadata
   - keys list + size summary
   - events, YAML
+- Secret details drawer:
+  - overview summary + metadata
+  - keys list (no values)
+  - events
 - Pod details drawer:
   - overview summary + health conditions
   - containers: runtime, resources, env, mounts, probes

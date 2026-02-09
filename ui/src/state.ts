@@ -9,6 +9,7 @@ export type Section =
   | "services"
   | "ingresses"
   | "configmaps"
+  | "secrets"
   | "helm";
 
 export type AppStateV1 = {

@@ -245,6 +245,18 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Rendered ConfigMap keys as accordions with safe value previews in the Keys tab.
 - Added truncation and binary-data placeholders with YAML fallback guidance.
 
+## 2026-02-09 — Secrets list + details (metadata-only)
+### Backend
+- Added Secrets endpoints:
+  - `/api/namespaces/{ns}/secrets`
+  - `/api/namespaces/{ns}/secrets/{name}`
+  - `/api/namespaces/{ns}/secrets/{name}/events`
+- Added Secrets list/detail DTOs with type, immutable flag, key counts, and metadata only (no values).
+
+### UI
+- Added Secrets table with columns for type, key count, immutable, age.
+- Added Secret drawer with tabs: Overview, Keys, Events (no YAML).
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

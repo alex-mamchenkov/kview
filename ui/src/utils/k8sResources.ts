@@ -12,6 +12,7 @@ export type ListResourceKey =
   | "jobs"
   | "cronjobs"
   | "configmaps"
+  | "secrets"
   | "nodes"
   | "namespaces";
 
@@ -24,6 +25,7 @@ export const listResourceAccess: Record<ListResourceKey, AccessReviewResource> =
   jobs: { group: "batch", resource: "jobs" },
   cronjobs: { group: "batch", resource: "cronjobs" },
   configmaps: { group: "", resource: "configmaps" },
+  secrets: { group: "", resource: "secrets" },
   nodes: { group: "", resource: "nodes" },
   namespaces: { group: "", resource: "namespaces" },
 };
