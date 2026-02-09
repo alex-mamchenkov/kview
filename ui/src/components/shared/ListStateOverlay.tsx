@@ -10,19 +10,24 @@ type ListStateOverlayProps = {
   error: ApiError | null;
   emptyMessage: string;
   resourceLabel?: string;
+  accessDenied?: boolean;
 };
 
-export default function ListStateOverlay({ error, emptyMessage, resourceLabel }: ListStateOverlayProps) {
-  const isAccessDenied = error?.status === 401 || error?.status === 403;
+export default function ListStateOverlay({
+  error,
+  emptyMessage,
+  resourceLabel,
+  accessDenied,
+}: ListStateOverlayProps) {
+  const isAccessDenied = accessDenied || error?.status === 401 || error?.status === 403;
+  const status = accessDenied ? 403 : error?.status;
   return (
     <GridOverlay sx={{ p: 2, alignItems: "flex-start", justifyContent: "flex-start" }}>
       <Box sx={{ maxWidth: 520 }}>
-        {error ? (
-          isAccessDenied ? (
-            <AccessDeniedState status={error.status} resourceLabel={resourceLabel} />
-          ) : (
-            <ErrorState message={error.message} />
-          )
+        {isAccessDenied ? (
+          <AccessDeniedState status={status} resourceLabel={resourceLabel} />
+        ) : error ? (
+          <ErrorState message={error.message} />
         ) : (
           <EmptyState message={emptyMessage} />
         )}

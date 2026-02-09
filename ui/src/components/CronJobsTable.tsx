@@ -24,6 +24,8 @@ import { apiGet } from "../api";
 import CronJobDrawer from "./CronJobDrawer";
 import { fmtAge, fmtTs } from "../utils/format";
 import useListQuery from "../utils/useListQuery";
+import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
+import { listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -241,6 +243,15 @@ export default function CronJobsTable({ token, namespace }: { token: string; nam
     onInitialResult: () => setSelectionModel([]),
   });
 
+  const accessDenied = useEmptyListAccessCheck({
+    token,
+    itemsLength: rows.length,
+    error,
+    loading,
+    resource: listResourceAccess.cronjobs,
+    namespace,
+  });
+
   const filteredRows = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return rows;
@@ -320,6 +331,7 @@ export default function CronJobsTable({ token, namespace }: { token: string; nam
             } as any,
             noRowsOverlay: {
               error,
+              accessDenied,
               emptyMessage: "No cronjobs found.",
               resourceLabel: "CronJobs",
             } as any,

@@ -5,13 +5,13 @@ import {
   Box,
   Button,
   TextField,
-  Chip,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
   IconButton,
   InputAdornment,
+  Chip,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import {
@@ -21,9 +21,9 @@ import {
   GridToolbarContainer,
 } from "@mui/x-data-grid";
 import { apiGet } from "../api";
-import DeploymentDrawer from "./DeploymentDrawer";
+import NamespaceDrawer from "./NamespaceDrawer";
 import { fmtAge } from "../utils/format";
-import { eventChipColor, statusChipColor } from "../utils/k8sUi";
+import { namespacePhaseChipColor } from "../utils/k8sUi";
 import useListQuery from "../utils/useListQuery";
 import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
 import { listResourceAccess } from "../utils/k8sResources";
@@ -35,49 +35,31 @@ import {
 } from "../state";
 import ListStateOverlay from "./shared/ListStateOverlay";
 
-type Deployment = {
+type Namespace = {
   name: string;
-  namespace: string;
-  ready: string;
-  upToDate: number;
-  available: number;
-  strategy: string;
+  phase: string;
   ageSec: number;
-  status: string;
-  lastEvent?: {
-    type: string;
-    reason: string;
-    lastSeen: number;
-  };
+  hasUnhealthyConditions: boolean;
 };
 
-type Row = Deployment & { id: string };
+type Row = Namespace & { id: string };
 
 const cols: GridColDef[] = [
-  { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
+  { field: "name", headerName: "Name", flex: 1, minWidth: 220 },
   {
-    field: "status",
-    headerName: "Status",
-    width: 150,
+    field: "phase",
+    headerName: "Phase",
+    width: 180,
     renderCell: (p) => {
-      const status = String(p.value || "");
-      return <Chip size="small" label={status || "-"} color={statusChipColor(status)} />;
+      const phase = String(p.value || "");
+      const row = p.row as Row;
+      return (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+          <Chip size="small" label={phase || "-"} color={namespacePhaseChipColor(phase)} />
+          {row.hasUnhealthyConditions && <Chip size="small" color="error" label="Unhealthy" />}
+        </Box>
+      );
     },
-  },
-  { field: "ready", headerName: "Ready", width: 130 },
-  { field: "upToDate", headerName: "Up-to-date", width: 130, type: "number" },
-  { field: "available", headerName: "Available", width: 120, type: "number" },
-  { field: "strategy", headerName: "Strategy", width: 140 },
-  {
-    field: "lastEvent",
-    headerName: "Last Event",
-    width: 200,
-    renderCell: (p) => {
-      const ev = (p.row as any).lastEvent as Deployment["lastEvent"] | undefined;
-      if (!ev?.reason) return "-";
-      return <Chip size="small" label={ev.reason} color={eventChipColor(ev.type)} />;
-    },
-    sortable: false,
   },
   {
     field: "ageSec",
@@ -125,7 +107,7 @@ const refreshOptions = [
   { label: "60s", value: 60 },
 ];
 
-function DeploymentsToolbar(props: {
+function NamespacesToolbar(props: {
   filter: string;
   setFilter: (v: string) => void;
   selectedQuickFilter: string | null;
@@ -158,7 +140,7 @@ function DeploymentsToolbar(props: {
       <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
         <TextField
           size="small"
-          label="Filter (name/strategy)"
+          label="Filter (name/phase)"
           value={props.filter}
           onChange={(e) => onFilterChange(e.target.value)}
           sx={{ minWidth: 340 }}
@@ -210,13 +192,11 @@ function DeploymentsToolbar(props: {
   );
 }
 
-export default function DeploymentsTable({ token, namespace }: { token: string; namespace: string }) {
+export default function NamespacesTable({ token }: { token: string }) {
   const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>([]);
   const selectedName = useMemo(() => {
     if (!selectionModel.length) return null;
-    const id = String(selectionModel[0]); // `${ns}/${name}`
-    const parts = id.split("/");
-    return parts.length >= 2 ? parts.slice(1).join("/") : null;
+    return String(selectionModel[0]);
   }, [selectionModel]);
 
   const [drawerName, setDrawerName] = useState<string | null>(null);
@@ -228,13 +208,12 @@ export default function DeploymentsTable({ token, namespace }: { token: string; 
   const [refreshSec, setRefreshSec] = useState<number>(10);
 
   const fetchRows = useCallback(async () => {
-    const res = await apiGet<any>(`/api/namespaces/${encodeURIComponent(namespace)}/deployments`, token);
-    const items: Deployment[] = res.items || [];
-    return items.map((d) => ({ ...d, id: `${d.namespace}/${d.name}` }));
-  }, [token, namespace]);
+    const res = await apiGet<any>("/api/namespaces", token);
+    const items: Namespace[] = res.items || [];
+    return items.map((n) => ({ ...n, id: n.name }));
+  }, [token]);
 
   const { items: rows, error, loading, lastRefresh } = useListQuery<Row>({
-    enabled: !!namespace,
     refreshSec,
     fetchItems: fetchRows,
     onInitialResult: () => setSelectionModel([]),
@@ -245,15 +224,15 @@ export default function DeploymentsTable({ token, namespace }: { token: string; 
     itemsLength: rows.length,
     error,
     loading,
-    resource: listResourceAccess.deployments,
-    namespace,
+    resource: listResourceAccess.namespaces,
+    namespace: null,
   });
 
   const filteredRows = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) => {
-      return r.name.toLowerCase().includes(q) || (r.strategy || "").toLowerCase().includes(q);
+      return r.name.toLowerCase().includes(q) || (r.phase || "").toLowerCase().includes(q);
     });
   }, [rows, filter]);
 
@@ -291,12 +270,12 @@ export default function DeploymentsTable({ token, namespace }: { token: string; 
     setDrawerName(selectedName);
   }
 
-  const ToolbarAny = DeploymentsToolbar as any;
+  const ToolbarAny = NamespacesToolbar as any;
 
   return (
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6" sx={{ mb: 1 }}>
-        Deployments — {namespace}
+        Namespaces
       </Typography>
 
       <div style={{ height: 700, width: "100%" }}>
@@ -329,8 +308,8 @@ export default function DeploymentsTable({ token, namespace }: { token: string; 
             noRowsOverlay: {
               error,
               accessDenied,
-              emptyMessage: "No deployments found.",
-              resourceLabel: "Deployments",
+              emptyMessage: "No namespaces found.",
+              resourceLabel: "Namespaces",
             } as any,
           }}
         />
@@ -341,12 +320,11 @@ export default function DeploymentsTable({ token, namespace }: { token: string; 
         </Typography>
       </Box>
 
-      <DeploymentDrawer
+      <NamespaceDrawer
         open={!!drawerName}
         onClose={() => setDrawerName(null)}
         token={token}
-        namespace={namespace}
-        deploymentName={drawerName}
+        namespaceName={drawerName}
       />
     </Paper>
   );

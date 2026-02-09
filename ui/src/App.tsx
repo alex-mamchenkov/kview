@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Box, CssBaseline, AppBar, Toolbar, Typography } from "@mui/material";
 import Sidebar from "./components/Sidebar";
 import NodesTable from "./components/NodesTable";
+import NamespacesTable from "./components/NamespacesTable";
 import PodsTable from "./components/PodsTable";
 import DeploymentsTable from "./components/DeploymentsTable";
 import ReplicaSetsTable from "./components/ReplicaSetsTable";
@@ -165,6 +166,7 @@ export default function App() {
 
       <Box component="main" sx={{ flexGrow: 1, p: 2, mt: 8 }}>
         {section === "nodes" ? <NodesTable token={token} /> : null}
+        {section === "namespaces" ? <NamespacesTable token={token} /> : null}
         {section === "pods" && namespace ? <PodsTable token={token} namespace={namespace} /> : null}
         {section === "deployments" && namespace ? (
           <DeploymentsTable token={token} namespace={namespace} />

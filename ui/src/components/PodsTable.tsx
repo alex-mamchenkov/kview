@@ -25,6 +25,8 @@ import PodDrawer from "./PodDrawer";
 import { fmtAge } from "../utils/format";
 import { eventChipColor, phaseChipColor } from "../utils/k8sUi";
 import useListQuery from "../utils/useListQuery";
+import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
+import { listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -240,6 +242,15 @@ export default function PodsTable({ token, namespace }: { token: string; namespa
     onInitialResult: () => setSelectionModel([]),
   });
 
+  const accessDenied = useEmptyListAccessCheck({
+    token,
+    itemsLength: rows.length,
+    error,
+    loading,
+    resource: listResourceAccess.pods,
+    namespace,
+  });
+
   const filteredRows = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return rows;
@@ -323,6 +334,7 @@ export default function PodsTable({ token, namespace }: { token: string; namespa
             } as any,
             noRowsOverlay: {
               error,
+              accessDenied,
               emptyMessage: "No pods found.",
               resourceLabel: "Pods",
             } as any,

@@ -24,6 +24,8 @@ import { apiGet } from "../api";
 import { fmtAge, valueOrDash } from "../utils/format";
 import ServiceDrawer from "./ServiceDrawer";
 import useListQuery from "../utils/useListQuery";
+import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
+import { listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -246,6 +248,15 @@ export default function ServicesTable({ token, namespace }: { token: string; nam
     onInitialResult: () => setSelectionModel([]),
   });
 
+  const accessDenied = useEmptyListAccessCheck({
+    token,
+    itemsLength: rows.length,
+    error,
+    loading,
+    resource: listResourceAccess.services,
+    namespace,
+  });
+
   const filteredRows = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return rows;
@@ -330,6 +341,7 @@ export default function ServicesTable({ token, namespace }: { token: string; nam
             } as any,
             noRowsOverlay: {
               error,
+              accessDenied,
               emptyMessage: "No services found.",
               resourceLabel: "Services",
             } as any,

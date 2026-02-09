@@ -73,3 +73,14 @@ export function nodeStatusChipColor(status?: string | null): ChipColor {
       return "default";
   }
 }
+
+export function namespacePhaseChipColor(phase?: string | null): ChipColor {
+  switch (phase) {
+    case "Active":
+      return "success";
+    case "Terminating":
+      return "warning";
+    default:
+      return "default";
+  }
+}

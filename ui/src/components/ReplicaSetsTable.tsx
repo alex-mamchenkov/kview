@@ -23,6 +23,8 @@ import { apiGet } from "../api";
 import ReplicaSetDrawer from "./ReplicaSetDrawer";
 import { fmtAge } from "../utils/format";
 import useListQuery from "../utils/useListQuery";
+import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
+import { listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -229,6 +231,15 @@ export default function ReplicaSetsTable({ token, namespace }: { token: string; 
     onInitialResult: () => setSelectionModel([]),
   });
 
+  const accessDenied = useEmptyListAccessCheck({
+    token,
+    itemsLength: rows.length,
+    error,
+    loading,
+    resource: listResourceAccess.replicasets,
+    namespace,
+  });
+
   const filteredRows = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return rows;
@@ -308,6 +319,7 @@ export default function ReplicaSetsTable({ token, namespace }: { token: string; 
             } as any,
             noRowsOverlay: {
               error,
+              accessDenied,
               emptyMessage: "No replicasets found.",
               resourceLabel: "ReplicaSets",
             } as any,

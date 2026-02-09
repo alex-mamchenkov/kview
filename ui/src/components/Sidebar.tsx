@@ -40,7 +40,7 @@ const drawerWidth = 320;
 
 export default function Sidebar(props: Props) {
   const [nsInput, setNsInput] = useState("");
-  const isClusterScoped = props.section === "nodes";
+  const isClusterScoped = props.section === "nodes" || props.section === "namespaces";
 
   const favSet = useMemo(() => new Set(props.favourites), [props.favourites]);
 
@@ -136,6 +136,12 @@ export default function Sidebar(props: Props) {
         <List dense disablePadding>
           <ListItemButton selected={props.section === "nodes"} onClick={() => props.onSelectSection("nodes")}>
             <ListItemText primary="Nodes" />
+          </ListItemButton>
+          <ListItemButton
+            selected={props.section === "namespaces"}
+            onClick={() => props.onSelectSection("namespaces")}
+          >
+            <ListItemText primary="Namespaces" />
           </ListItemButton>
           <ListItemButton selected={props.section === "pods"} onClick={() => props.onSelectSection("pods")}>
             <ListItemText primary="Pods" />

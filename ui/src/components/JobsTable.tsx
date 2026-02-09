@@ -25,6 +25,8 @@ import JobDrawer from "./JobDrawer";
 import { fmtAge } from "../utils/format";
 import { jobStatusChipColor } from "../utils/k8sUi";
 import useListQuery from "../utils/useListQuery";
+import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
+import { listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -231,6 +233,15 @@ export default function JobsTable({ token, namespace }: { token: string; namespa
     onInitialResult: () => setSelectionModel([]),
   });
 
+  const accessDenied = useEmptyListAccessCheck({
+    token,
+    itemsLength: rows.length,
+    error,
+    loading,
+    resource: listResourceAccess.jobs,
+    namespace,
+  });
+
   const filteredRows = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return rows;
@@ -310,6 +321,7 @@ export default function JobsTable({ token, namespace }: { token: string; namespa
             } as any,
             noRowsOverlay: {
               error,
+              accessDenied,
               emptyMessage: "No jobs found.",
               resourceLabel: "Jobs",
             } as any,

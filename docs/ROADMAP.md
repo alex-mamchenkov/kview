@@ -115,7 +115,7 @@ Understand **where workloads run and under what constraints**.
   - Taints
   - Pods count per node
 
-- [ ] Namespaces
+- [x] Namespaces
   - Resource counts per namespace
   - High-level health summary
   - Namespace-scoped filtering context

@@ -24,6 +24,8 @@ import { apiGet } from "../api";
 import { fmtAge, valueOrDash } from "../utils/format";
 import IngressDrawer from "./IngressDrawer";
 import useListQuery from "../utils/useListQuery";
+import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
+import { listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -252,6 +254,15 @@ export default function IngressesTable({ token, namespace }: { token: string; na
     onInitialResult: () => setSelectionModel([]),
   });
 
+  const accessDenied = useEmptyListAccessCheck({
+    token,
+    itemsLength: rows.length,
+    error,
+    loading,
+    resource: listResourceAccess.ingresses,
+    namespace,
+  });
+
   const filteredRows = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return rows;
@@ -336,6 +347,7 @@ export default function IngressesTable({ token, namespace }: { token: string; na
             } as any,
             noRowsOverlay: {
               error,
+              accessDenied,
               emptyMessage: "No ingresses found.",
               resourceLabel: "Ingresses",
             } as any,

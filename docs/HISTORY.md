@@ -216,6 +216,18 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Introduced shared AccessDenied state with compact guidance for missing list permissions.
 - Stabilized list query callbacks to avoid unintended re-fetch loops.
 
+## 2026-02-09 — Namespaces list + details
+### Backend
+- Added Namespaces details endpoint:
+  - `/api/namespaces/{name}`
+- Expanded Namespaces list DTO with phase, age, and basic health flag (best-effort).
+- Added Namespace detail DTO with metadata, conditions, and YAML.
+
+### UI
+- Added Namespaces table with phase, age, and unhealthy indicator.
+- Added Namespace drawer with tabs: Overview, Conditions, YAML.
+- Treated Namespaces as cluster-scoped for sidebar namespace selector.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

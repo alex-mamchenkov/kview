@@ -25,6 +25,8 @@ import NodeDrawer from "./NodeDrawer";
 import { fmtAge, valueOrDash } from "../utils/format";
 import { nodeStatusChipColor } from "../utils/k8sUi";
 import useListQuery from "../utils/useListQuery";
+import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
+import { listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -250,6 +252,15 @@ export default function NodesTable({ token }: { token: string }) {
     onInitialResult: () => setSelectionModel([]),
   });
 
+  const accessDenied = useEmptyListAccessCheck({
+    token,
+    itemsLength: rows.length,
+    error,
+    loading,
+    resource: listResourceAccess.nodes,
+    namespace: null,
+  });
+
   const filteredRows = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return rows;
@@ -334,6 +345,7 @@ export default function NodesTable({ token }: { token: string }) {
             } as any,
             noRowsOverlay: {
               error,
+              accessDenied,
               emptyMessage: "No nodes found.",
               resourceLabel: "Nodes",
             } as any,

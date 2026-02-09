@@ -2,14 +2,18 @@ package kube
 
 import (
 	"context"
+	"time"
 
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"kview/internal/cluster"
 )
 
 type NamespaceDTO struct {
-	Name string `json:"name"`
+	Name                   string `json:"name"`
+	Phase                  string `json:"phase"`
+	AgeSec                 int64  `json:"ageSec"`
+	HasUnhealthyConditions bool   `json:"hasUnhealthyConditions"`
 }
 
 func ListNamespaces(ctx context.Context, c *cluster.Clients) ([]NamespaceDTO, error) {
@@ -18,9 +22,19 @@ func ListNamespaces(ctx context.Context, c *cluster.Clients) ([]NamespaceDTO, er
 		return nil, err
 	}
 
+	now := time.Now()
 	out := make([]NamespaceDTO, 0, len(nsList.Items))
 	for _, ns := range nsList.Items {
-		out = append(out, NamespaceDTO{Name: ns.Name})
+		age := int64(0)
+		if !ns.CreationTimestamp.IsZero() {
+			age = int64(now.Sub(ns.CreationTimestamp.Time).Seconds())
+		}
+		out = append(out, NamespaceDTO{
+			Name:                   ns.Name,
+			Phase:                  string(ns.Status.Phase),
+			AgeSec:                 age,
+			HasUnhealthyConditions: hasUnhealthyNamespaceConditions(ns.Status.Conditions),
+		})
 	}
 	return out, nil
 }
@@ -29,7 +43,21 @@ func ListNamespacesFallback(ctx context.Context, c *cluster.Clients) ([]Namespac
 	// Fallback strategy placeholder:
 	// - some restricted users can't list namespaces at all
 	// - later we can keep "recent namespaces" and allow manual input in UI
-	_ = v1.Namespace{}
+	_ = corev1.Namespace{}
 	return []NamespaceDTO{}, nil
+}
+
+func hasUnhealthyNamespaceConditions(conds []corev1.NamespaceCondition) bool {
+	for _, c := range conds {
+		switch c.Status {
+		case corev1.ConditionFalse:
+			continue
+		case corev1.ConditionTrue, corev1.ConditionUnknown:
+			return true
+		default:
+			continue
+		}
+	}
+	return false
 }
 
