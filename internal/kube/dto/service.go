@@ -56,3 +56,13 @@ type ServiceListItemDTO struct {
 	EndpointsNotReady int32   `json:"endpointsNotReady"`
 	AgeSec           int64    `json:"ageSec"`
 }
+
+type ServiceLinkDTO struct {
+	Name              string            `json:"name"`
+	Namespace         string            `json:"namespace"`
+	Type              string            `json:"type"`
+	Selector          map[string]string `json:"selector,omitempty"`
+	PortsSummary      string            `json:"portsSummary,omitempty"`
+	EndpointsReady    int32             `json:"endpointsReady"`
+	EndpointsNotReady int32             `json:"endpointsNotReady"`
+}

@@ -29,12 +29,15 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import { apiGet } from "../api";
+import { apiGet, toApiError, type ApiError } from "../api";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { conditionStatusColor, eventChipColor } from "../utils/k8sUi";
+import IngressDrawer from "./IngressDrawer";
+import ServiceDrawer from "./ServiceDrawer";
 import Section from "./shared/Section";
 import KeyValueTable from "./shared/KeyValueTable";
+import AccessDeniedState from "./shared/AccessDeniedState";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
 
@@ -187,6 +190,25 @@ type PodResources = {
   }[];
 };
 
+type PodNetworkingService = {
+  name: string;
+  namespace: string;
+  type: string;
+  selector?: Record<string, string>;
+  portsSummary?: string;
+  endpointsReady: number;
+  endpointsNotReady: number;
+};
+
+type PodNetworkingIngress = {
+  name: string;
+  namespace: string;
+  ingressClassName?: string;
+  hosts?: string[];
+  tlsCount?: number;
+  addresses?: string[];
+};
+
 function wsURL(path: string, token: string) {
   const u = new URL(window.location.href);
   const proto = u.protocol === "https:" ? "wss:" : "ws:";
@@ -244,6 +266,23 @@ function formatProbeDetails(probe?: Probe) {
   return [base, target].filter(Boolean).join(" ");
 }
 
+function formatIngressHostsSummary(hosts?: string[]) {
+  if (!hosts || hosts.length === 0) return "-";
+  const short = hosts.slice(0, 3).join(", ");
+  if (hosts.length <= 3) return `${hosts.length} (${short})`;
+  return `${hosts.length} (${short}, +${hosts.length - 3} more)`;
+}
+
+function formatIngressAddresses(addrs?: string[]) {
+  if (!addrs || addrs.length === 0) return "-";
+  return addrs.join(", ");
+}
+
+function formatIngressTlsLabel(count?: number) {
+  const num = Number(count || 0);
+  return num > 0 ? `Yes (${num})` : "No";
+}
+
 function formatPrettyWithLineNumbers(lines: string[]): { text: string; hiddenLineNumbers: Set<number> } {
   const out: string[] = [];
   const hidden = new Set<number>();
@@ -282,6 +321,16 @@ export default function PodDrawer(props: {
   const [envQueryByContainer, setEnvQueryByContainer] = useState<Record<string, string>>({});
   const [envShowRawByContainer, setEnvShowRawByContainer] = useState<Record<string, boolean>>({});
   const [eventsContainerFilter, setEventsContainerFilter] = useState<string>("");
+  const [networkingServices, setNetworkingServices] = useState<PodNetworkingService[]>([]);
+  const [networkingServicesLoading, setNetworkingServicesLoading] = useState(false);
+  const [networkingServicesLoaded, setNetworkingServicesLoaded] = useState(false);
+  const [networkingServicesErr, setNetworkingServicesErr] = useState<ApiError | null>(null);
+  const [networkingIngresses, setNetworkingIngresses] = useState<PodNetworkingIngress[]>([]);
+  const [networkingIngressesLoading, setNetworkingIngressesLoading] = useState(false);
+  const [networkingIngressesLoaded, setNetworkingIngressesLoaded] = useState(false);
+  const [networkingIngressesErr, setNetworkingIngressesErr] = useState<ApiError | null>(null);
+  const [drawerService, setDrawerService] = useState<string | null>(null);
+  const [drawerIngress, setDrawerIngress] = useState<{ name: string; namespace: string } | null>(null);
 
   // Logs UI state
   const [container, setContainer] = useState<string>("");
@@ -384,6 +433,16 @@ export default function PodDrawer(props: {
     setEnvQueryByContainer({});
     setEnvShowRawByContainer({});
     setEventsContainerFilter("");
+    setNetworkingServices([]);
+    setNetworkingServicesLoading(false);
+    setNetworkingServicesLoaded(false);
+    setNetworkingServicesErr(null);
+    setNetworkingIngresses([]);
+    setNetworkingIngressesLoading(false);
+    setNetworkingIngressesLoaded(false);
+    setNetworkingIngressesErr(null);
+    setDrawerService(null);
+    setDrawerIngress(null);
     stopLogs();
 
     setLoading(true);
@@ -429,6 +488,107 @@ export default function PodDrawer(props: {
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.open, name, ns, props.token]);
+
+  useEffect(() => {
+    if (!props.open || !name || tab !== 3) return;
+    if (networkingServicesLoading || networkingServicesLoaded) return;
+
+    setNetworkingServicesLoading(true);
+    setNetworkingServicesErr(null);
+
+    apiGet<any>(`/api/namespaces/${encodeURIComponent(ns)}/pods/${encodeURIComponent(name)}/services`, props.token)
+      .then((res) => {
+        const items: PodNetworkingService[] = res?.items || [];
+        setNetworkingServices(items);
+      })
+      .catch((e) => setNetworkingServicesErr(toApiError(e)))
+      .finally(() => {
+        setNetworkingServicesLoading(false);
+        setNetworkingServicesLoaded(true);
+      });
+  }, [props.open, name, ns, props.token, tab, networkingServicesLoading, networkingServicesLoaded]);
+
+  useEffect(() => {
+    if (!props.open || !name || tab !== 3) return;
+    if (!networkingServicesLoaded) return;
+    if (networkingServicesErr) {
+      setNetworkingIngressesErr(networkingServicesErr);
+      setNetworkingIngressesLoaded(true);
+      return;
+    }
+    if (networkingIngressesLoading || networkingIngressesLoaded) return;
+
+    if (networkingServices.length === 0) {
+      setNetworkingIngresses([]);
+      setNetworkingIngressesLoaded(true);
+      return;
+    }
+
+    setNetworkingIngressesLoading(true);
+    setNetworkingIngressesErr(null);
+
+    (async () => {
+      const results = await Promise.allSettled(
+        networkingServices.map((svc) =>
+          apiGet<any>(
+            `/api/namespaces/${encodeURIComponent(svc.namespace)}/services/${encodeURIComponent(svc.name)}/ingresses`,
+            props.token
+          )
+        )
+      );
+
+      const items: PodNetworkingIngress[] = [];
+      let firstError: ApiError | null = null;
+      results.forEach((res) => {
+        if (res.status === "fulfilled") {
+          const ingresses: PodNetworkingIngress[] = res.value?.items || [];
+          ingresses.forEach((ing) => items.push(ing));
+        } else if (!firstError) {
+          firstError = toApiError(res.reason);
+        }
+      });
+
+      if (items.length === 0 && firstError) {
+        setNetworkingIngressesErr(firstError);
+        setNetworkingIngresses([]);
+        return;
+      }
+
+      const dedup = new Map<string, PodNetworkingIngress>();
+      items.forEach((ing) => {
+        if (!ing?.name) return;
+        const key = `${ing.namespace}/${ing.name}`;
+        if (!dedup.has(key)) {
+          dedup.set(key, ing);
+        }
+      });
+      const next = Array.from(dedup.values()).sort((a, b) => {
+        if (a.namespace === b.namespace) return a.name.localeCompare(b.name);
+        return a.namespace.localeCompare(b.namespace);
+      });
+      setNetworkingIngresses(next);
+    })()
+      .catch((e) => {
+        setNetworkingIngressesErr(toApiError(e));
+        setNetworkingIngresses([]);
+      })
+      .finally(() => {
+        setNetworkingIngressesLoading(false);
+        setNetworkingIngressesLoaded(true);
+      });
+  }, [
+    props.open,
+    name,
+    ns,
+    props.token,
+    tab,
+    networkingServicesLoaded,
+    networkingServicesLoading,
+    networkingServices,
+    networkingServicesErr,
+    networkingIngressesLoaded,
+    networkingIngressesLoading,
+  ]);
 
   const { renderedLogs, hiddenLineNumbers } = useMemo(() => {
     const q = logsFilter.trim().toLowerCase();
@@ -485,6 +645,10 @@ export default function PodDrawer(props: {
     ],
     [summary]
   );
+  const servicesAccessDenied =
+    networkingServicesErr?.status === 401 || networkingServicesErr?.status === 403;
+  const ingressesAccessDenied =
+    networkingIngressesErr?.status === 401 || networkingIngressesErr?.status === 403;
 
   return (
     <Drawer
@@ -525,6 +689,7 @@ export default function PodDrawer(props: {
               <Tab label="Overview" />
               <Tab label="Containers" />
               <Tab label="Resources" />
+              <Tab label="Networking" />
               <Tab label="Events" />
               <Tab label="YAML" />
               <Tab label="Logs" />
@@ -1133,8 +1298,127 @@ export default function PodDrawer(props: {
                 </Box>
               )}
 
-              {/* EVENTS */}
+              {/* NETWORKING */}
               {tab === 3 && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, height: "100%", overflow: "auto" }}>
+                  <Accordion defaultExpanded={networkingServices.length > 0}>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography variant="subtitle2">Services</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      {networkingServicesLoading ? (
+                        <Box sx={{ display: "flex", justifyContent: "center", mt: 1 }}>
+                          <CircularProgress size={22} />
+                        </Box>
+                      ) : servicesAccessDenied ? (
+                        <AccessDeniedState status={networkingServicesErr?.status} resourceLabel="Services" />
+                      ) : networkingServicesErr ? (
+                        <ErrorState message={networkingServicesErr.message} />
+                      ) : networkingServices.length === 0 ? (
+                        <EmptyState message="No Services select this Pod." />
+                      ) : (
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Name</TableCell>
+                              <TableCell>Type</TableCell>
+                              <TableCell>Selector</TableCell>
+                              <TableCell>Ports</TableCell>
+                              <TableCell>Endpoints</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {networkingServices.map((svc) => (
+                              <TableRow
+                                key={`${svc.namespace}/${svc.name}`}
+                                hover
+                                onClick={() => svc.name && setDrawerService(svc.name)}
+                                sx={{ cursor: svc.name ? "pointer" : "default" }}
+                              >
+                                <TableCell>{valueOrDash(svc.name)}</TableCell>
+                                <TableCell>{valueOrDash(svc.type)}</TableCell>
+                                <TableCell>
+                                  {Object.entries(svc.selector || {}).length === 0 ? (
+                                    "-"
+                                  ) : (
+                                    <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+                                      {Object.entries(svc.selector || {}).map(([k, v]) => (
+                                        <Tooltip key={`${svc.name}-${k}`} title={`${k}=${v}`} arrow>
+                                          <Chip size="small" label={`${k}=${v}`} />
+                                        </Tooltip>
+                                      ))}
+                                    </Box>
+                                  )}
+                                </TableCell>
+                                <TableCell>{valueOrDash(svc.portsSummary)}</TableCell>
+                                <TableCell>
+                                  {`${svc.endpointsReady ?? 0} ready / ${svc.endpointsNotReady ?? 0} not ready`}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </AccordionDetails>
+                  </Accordion>
+
+                  <Accordion defaultExpanded={networkingIngresses.length > 0}>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography variant="subtitle2">Ingresses</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      {networkingIngressesLoading ? (
+                        <Box sx={{ display: "flex", justifyContent: "center", mt: 1 }}>
+                          <CircularProgress size={22} />
+                        </Box>
+                      ) : ingressesAccessDenied ? (
+                        <AccessDeniedState status={networkingIngressesErr?.status} resourceLabel="Ingresses" />
+                      ) : networkingIngressesErr ? (
+                        <ErrorState message={networkingIngressesErr.message} />
+                      ) : networkingIngresses.length === 0 ? (
+                        <EmptyState message="No Ingresses found for these Services." />
+                      ) : (
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Name</TableCell>
+                              <TableCell>Class</TableCell>
+                              <TableCell>Hosts</TableCell>
+                              <TableCell>TLS</TableCell>
+                              <TableCell>Address</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {networkingIngresses.map((ing) => (
+                              <TableRow
+                                key={`${ing.namespace}/${ing.name}`}
+                                hover
+                                onClick={() =>
+                                  ing.name && ing.namespace ? setDrawerIngress({ name: ing.name, namespace: ing.namespace }) : null
+                                }
+                                sx={{ cursor: ing.name ? "pointer" : "default" }}
+                              >
+                                <TableCell>{valueOrDash(ing.name)}</TableCell>
+                                <TableCell>
+                                  <Chip size="small" label={valueOrDash(ing.ingressClassName)} />
+                                </TableCell>
+                                <TableCell>{formatIngressHostsSummary(ing.hosts)}</TableCell>
+                                <TableCell>
+                                  <Chip size="small" label={formatIngressTlsLabel(ing.tlsCount)} />
+                                </TableCell>
+                                <TableCell>{formatIngressAddresses(ing.addresses)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </AccordionDetails>
+                  </Accordion>
+                </Box>
+              )}
+
+              {/* EVENTS */}
+              {tab === 4 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                     <FormControl size="small" sx={{ minWidth: 220 }}>
@@ -1184,7 +1468,7 @@ export default function PodDrawer(props: {
               )}
 
               {/* YAML */}
-              {tab === 4 && (
+              {tab === 5 && (
                 <Box sx={{ border: "1px solid #ddd", borderRadius: 2, overflow: "auto", height: "100%" }}>
                   <SyntaxHighlighter language="yaml" showLineNumbers wrapLongLines>
                     {details?.yaml || ""}
@@ -1193,7 +1477,7 @@ export default function PodDrawer(props: {
               )}
 
               {/* LOGS */}
-              {tab === 5 && (
+              {tab === 6 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, height: "100%" }}>
                   <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
                     <FormControl size="small" sx={{ minWidth: 220 }}>
@@ -1289,6 +1573,20 @@ export default function PodDrawer(props: {
                 </Box>
               )}
             </Box>
+            <ServiceDrawer
+              open={!!drawerService}
+              onClose={() => setDrawerService(null)}
+              token={props.token}
+              namespace={ns}
+              serviceName={drawerService}
+            />
+            <IngressDrawer
+              open={!!drawerIngress}
+              onClose={() => setDrawerIngress(null)}
+              token={props.token}
+              namespace={drawerIngress?.namespace || ns}
+              ingressName={drawerIngress?.name || null}
+            />
           </>
         )}
       </Box>

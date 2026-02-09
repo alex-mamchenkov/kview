@@ -17,13 +17,15 @@ import {
   TableBody,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import { apiGet } from "../api";
+import { apiGet, toApiError, type ApiError } from "../api";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import IngressDrawer from "./IngressDrawer";
 import PodDrawer from "./PodDrawer";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { eventChipColor } from "../utils/k8sUi";
 import Section from "./shared/Section";
 import KeyValueTable from "./shared/KeyValueTable";
+import AccessDeniedState from "./shared/AccessDeniedState";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
 
@@ -82,9 +84,35 @@ type ServiceEndpointPod = {
   ready: boolean;
 };
 
+type ServiceIngress = {
+  name: string;
+  namespace: string;
+  ingressClassName?: string;
+  hosts?: string[];
+  tlsCount?: number;
+  addresses?: string[];
+};
+
 function formatClusterIPs(ips?: string[]) {
   if (!ips || ips.length === 0) return "-";
   return ips.join(", ");
+}
+
+function formatIngressHostsSummary(hosts?: string[]) {
+  if (!hosts || hosts.length === 0) return "-";
+  const short = hosts.slice(0, 3).join(", ");
+  if (hosts.length <= 3) return `${hosts.length} (${short})`;
+  return `${hosts.length} (${short}, +${hosts.length - 3} more)`;
+}
+
+function formatIngressAddresses(addrs?: string[]) {
+  if (!addrs || addrs.length === 0) return "-";
+  return addrs.join(", ");
+}
+
+function formatIngressTlsLabel(count?: number) {
+  const num = Number(count || 0);
+  return num > 0 ? `Yes (${num})` : "No";
 }
 
 export default function ServiceDrawer(props: {
@@ -101,6 +129,11 @@ export default function ServiceDrawer(props: {
   const [err, setErr] = useState("");
   const [drawerPod, setDrawerPod] = useState<string | null>(null);
   const [drawerPodNs, setDrawerPodNs] = useState<string>("");
+  const [ingresses, setIngresses] = useState<ServiceIngress[]>([]);
+  const [ingressesLoading, setIngressesLoading] = useState(false);
+  const [ingressesLoaded, setIngressesLoaded] = useState(false);
+  const [ingressesErr, setIngressesErr] = useState<ApiError | null>(null);
+  const [drawerIngress, setDrawerIngress] = useState<{ name: string; namespace: string } | null>(null);
 
   const ns = props.namespace;
   const name = props.serviceName;
@@ -114,6 +147,11 @@ export default function ServiceDrawer(props: {
     setEvents([]);
     setDrawerPod(null);
     setDrawerPodNs("");
+    setIngresses([]);
+    setIngressesLoading(false);
+    setIngressesLoaded(false);
+    setIngressesErr(null);
+    setDrawerIngress(null);
     setLoading(true);
 
     (async () => {
@@ -133,6 +171,28 @@ export default function ServiceDrawer(props: {
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false));
   }, [props.open, name, ns, props.token]);
+
+  useEffect(() => {
+    if (!props.open || !name || tab !== 2) return;
+    if (ingressesLoading || ingressesLoaded) return;
+
+    setIngressesLoading(true);
+    setIngressesErr(null);
+
+    apiGet<any>(
+      `/api/namespaces/${encodeURIComponent(ns)}/services/${encodeURIComponent(name)}/ingresses`,
+      props.token
+    )
+      .then((res) => {
+        const items: ServiceIngress[] = res?.items || [];
+        setIngresses(items);
+      })
+      .catch((e) => setIngressesErr(toApiError(e)))
+      .finally(() => {
+        setIngressesLoading(false);
+        setIngressesLoaded(true);
+      });
+  }, [props.open, name, ns, props.token, tab, ingressesLoading, ingressesLoaded]);
 
   const summary = details?.summary;
   const endpoints = details?.endpoints;
@@ -164,6 +224,7 @@ export default function ServiceDrawer(props: {
     ],
     [summary]
   );
+  const ingressesAccessDenied = ingressesErr?.status === 401 || ingressesErr?.status === 403;
 
   return (
     <Drawer
@@ -202,6 +263,7 @@ export default function ServiceDrawer(props: {
             <Tabs value={tab} onChange={(_, v) => setTab(v)}>
               <Tab label="Overview" />
               <Tab label="Endpoints" />
+              <Tab label="Ingresses" />
               <Tab label="Events" />
               <Tab label="YAML" />
             </Tabs>
@@ -341,8 +403,59 @@ export default function ServiceDrawer(props: {
                 </Box>
               )}
 
-              {/* EVENTS */}
+              {/* INGRESSES */}
               {tab === 2 && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
+                  {ingressesLoading ? (
+                    <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
+                      <CircularProgress />
+                    </Box>
+                  ) : ingressesAccessDenied ? (
+                    <AccessDeniedState status={ingressesErr?.status} resourceLabel="Ingresses" />
+                  ) : ingressesErr ? (
+                    <ErrorState message={ingressesErr.message} />
+                  ) : ingresses.length === 0 ? (
+                    <EmptyState message="No ingresses reference this Service." />
+                  ) : (
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Name</TableCell>
+                          <TableCell>Class</TableCell>
+                          <TableCell>Hosts</TableCell>
+                          <TableCell>TLS</TableCell>
+                          <TableCell>Address</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {ingresses.map((ing) => (
+                          <TableRow
+                            key={`${ing.namespace}/${ing.name}`}
+                            hover
+                            onClick={() =>
+                              ing.name && ing.namespace ? setDrawerIngress({ name: ing.name, namespace: ing.namespace }) : null
+                            }
+                            sx={{ cursor: ing.name ? "pointer" : "default" }}
+                          >
+                            <TableCell>{valueOrDash(ing.name)}</TableCell>
+                            <TableCell>
+                              <Chip size="small" label={valueOrDash(ing.ingressClassName)} />
+                            </TableCell>
+                            <TableCell>{formatIngressHostsSummary(ing.hosts)}</TableCell>
+                            <TableCell>
+                              <Chip size="small" label={formatIngressTlsLabel(ing.tlsCount)} />
+                            </TableCell>
+                            <TableCell>{formatIngressAddresses(ing.addresses)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </Box>
+              )}
+
+              {/* EVENTS */}
+              {tab === 3 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
                   {events.length === 0 ? (
                     <EmptyState message="No events found for this Service." />
@@ -370,7 +483,7 @@ export default function ServiceDrawer(props: {
               )}
 
               {/* YAML */}
-              {tab === 3 && (
+              {tab === 4 && (
                 <Box sx={{ border: "1px solid #ddd", borderRadius: 2, overflow: "auto", height: "100%" }}>
                   <SyntaxHighlighter language="yaml" showLineNumbers wrapLongLines>
                     {details?.yaml || ""}
@@ -384,6 +497,13 @@ export default function ServiceDrawer(props: {
               token={props.token}
               namespace={drawerPodNs || ns}
               podName={drawerPod}
+            />
+            <IngressDrawer
+              open={!!drawerIngress}
+              onClose={() => setDrawerIngress(null)}
+              token={props.token}
+              namespace={drawerIngress?.namespace || ns}
+              ingressName={drawerIngress?.name || null}
             />
           </>
         )}
