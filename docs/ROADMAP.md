@@ -131,6 +131,7 @@ Understand **what configuration affects workloads**, without exposing secrets.
 
 - [x] ConfigMaps
   - Keys list and size
+  - Key value previews (safe, truncated)
   - Last update time
   - Reverse references (used by which Pods/Deployments)
 

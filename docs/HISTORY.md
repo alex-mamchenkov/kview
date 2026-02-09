@@ -240,6 +240,11 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Added ConfigMaps table with columns for keys count, immutable, age.
 - Added ConfigMap drawer with tabs: Overview, Keys, Events, YAML.
 
+## 2026-02-09 — ConfigMap key previews (read-only)
+### UI
+- Rendered ConfigMap keys as accordions with safe value previews in the Keys tab.
+- Added truncation and binary-data placeholders with YAML fallback guidance.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

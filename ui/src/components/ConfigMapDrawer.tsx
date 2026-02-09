@@ -9,13 +9,12 @@ import {
   Divider,
   CircularProgress,
   Chip,
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { apiGet } from "../api";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
@@ -81,6 +80,139 @@ function formatBytes(bytes?: number) {
   return `${gb.toFixed(1)} GB`;
 }
 
+const MAX_VALUE_PREVIEW_CHARS = 4096;
+
+type ParsedDataValue = {
+  value: string;
+  truncated: boolean;
+};
+
+function appendWithLimit(current: ParsedDataValue, chunk: string, limit: number) {
+  if (current.truncated) return;
+  const remaining = limit - current.value.length;
+  if (remaining <= 0) {
+    current.truncated = true;
+    return;
+  }
+  if (chunk.length <= remaining) {
+    current.value += chunk;
+  } else {
+    current.value += chunk.slice(0, remaining);
+    current.truncated = true;
+  }
+}
+
+function extractConfigMapDataValues(
+  yaml: string,
+  limit: number
+): { values: Record<string, ParsedDataValue>; error: string } {
+  try {
+    const values: Record<string, ParsedDataValue> = {};
+    const lines = yaml.split(/\r?\n/);
+    let inData = false;
+    let dataIndent = 0;
+    let currentKey: string | null = null;
+    let currentIndent = 0;
+    let collectingMultiline = false;
+    let multilineIndent: number | null = null;
+    let firstMultilineLine = true;
+
+    const finalizeCurrent = () => {
+      if (currentKey) {
+        values[currentKey] = values[currentKey] ?? { value: "", truncated: false };
+      }
+      currentKey = null;
+      collectingMultiline = false;
+      multilineIndent = null;
+      firstMultilineLine = true;
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const rawLine = lines[i];
+      const indentMatch = rawLine.match(/^ */);
+      const indent = indentMatch ? indentMatch[0].length : 0;
+      const trimmed = rawLine.trim();
+
+      if (!inData) {
+        if (trimmed === "data:" || trimmed.startsWith("data:")) {
+          const dataMatch = rawLine.match(/^(\s*)data:\s*$/);
+          if (dataMatch) {
+            inData = true;
+            dataIndent = dataMatch[1]?.length ?? 0;
+          }
+        }
+        continue;
+      }
+
+      if (trimmed === "" && collectingMultiline) {
+        const entry = values[currentKey || ""];
+        if (entry) {
+          if (!firstMultilineLine) appendWithLimit(entry, "\n", limit);
+          firstMultilineLine = false;
+        }
+        continue;
+      }
+
+      if (trimmed !== "" && indent <= dataIndent) {
+        finalizeCurrent();
+        inData = false;
+        continue;
+      }
+
+      if (collectingMultiline) {
+        if (indent <= currentIndent) {
+          finalizeCurrent();
+          i -= 1;
+          continue;
+        }
+        if (multilineIndent === null) {
+          multilineIndent = indent;
+        }
+        const entry = values[currentKey || ""];
+        if (entry) {
+          const content = rawLine.slice(Math.min(multilineIndent, rawLine.length));
+          if (!firstMultilineLine) appendWithLimit(entry, "\n", limit);
+          appendWithLimit(entry, content, limit);
+          firstMultilineLine = false;
+        }
+        continue;
+      }
+
+      if (!trimmed || trimmed.startsWith("#")) continue;
+
+      const match = rawLine.match(/^(\s*)([^:]+):\s*(.*)$/);
+      if (!match) continue;
+      const keyIndent = match[1]?.length ?? 0;
+      if (keyIndent <= dataIndent) {
+        finalizeCurrent();
+        inData = false;
+        continue;
+      }
+
+      const key = match[2]?.trim() ?? "";
+      const rest = match[3] ?? "";
+      currentKey = key;
+      currentIndent = keyIndent;
+      values[currentKey] = values[currentKey] ?? { value: "", truncated: false };
+
+      if (rest === "|" || rest === "|-" || rest === "|+" || rest === ">" || rest === ">-" || rest === ">+") {
+        collectingMultiline = true;
+        multilineIndent = null;
+        firstMultilineLine = true;
+        continue;
+      }
+
+      appendWithLimit(values[currentKey], rest, limit);
+      finalizeCurrent();
+    }
+
+    finalizeCurrent();
+    return { values, error: "" };
+  } catch (err) {
+    return { values: {}, error: `Unable to parse data values: ${String(err)}` };
+  }
+}
+
 export default function ConfigMapDrawer(props: {
   open: boolean;
   onClose: () => void;
@@ -93,6 +225,7 @@ export default function ConfigMapDrawer(props: {
   const [details, setDetails] = useState<ConfigMapDetails | null>(null);
   const [events, setEvents] = useState<EventDTO[]>([]);
   const [err, setErr] = useState("");
+  const [expandedKeys, setExpandedKeys] = useState<Record<string, boolean>>({});
 
   const ns = props.namespace;
   const name = props.configMapName;
@@ -104,6 +237,7 @@ export default function ConfigMapDrawer(props: {
     setErr("");
     setDetails(null);
     setEvents([]);
+    setExpandedKeys({});
     setLoading(true);
 
     (async () => {
@@ -143,6 +277,10 @@ export default function ConfigMapDrawer(props: {
 
   const hasKeys = (details?.keys || []).length > 0;
   const showSize = summary?.totalBytes !== undefined;
+  const dataValues = useMemo(() => {
+    if (tab !== 1 || !details?.yaml) return { values: {}, error: "" };
+    return extractConfigMapDataValues(details.yaml, MAX_VALUE_PREVIEW_CHARS);
+  }, [tab, details?.yaml]);
 
   return (
     <Drawer
@@ -248,24 +386,81 @@ export default function ConfigMapDrawer(props: {
                   {!hasKeys ? (
                     <EmptyState message="No keys found for this ConfigMap." />
                   ) : (
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Key</TableCell>
-                          <TableCell>Type</TableCell>
-                          <TableCell>Size</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {(details?.keys || []).map((k, idx) => (
-                          <TableRow key={`${k.name}-${k.type}-${idx}`}>
-                            <TableCell>{valueOrDash(k.name)}</TableCell>
-                            <TableCell>{valueOrDash(k.type)}</TableCell>
-                            <TableCell>{formatBytes(k.sizeBytes)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                    (details?.keys || []).map((k, idx) => {
+                      const keyId = `${k.type || "data"}:${k.name || idx}`;
+                      const isBinary = k.type === "binaryData";
+                      const dataValue = dataValues.values[k.name];
+                      const showValue = !isBinary && dataValue;
+                      const truncated = showValue ? dataValue.truncated : false;
+
+                      return (
+                        <Accordion
+                          key={keyId}
+                          expanded={!!expandedKeys[keyId]}
+                          onChange={() =>
+                            setExpandedKeys((prev) => ({
+                              ...prev,
+                              [keyId]: !prev[keyId],
+                            }))
+                          }
+                        >
+                          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", flexGrow: 1 }}>
+                              <Typography variant="subtitle2" sx={{ fontFamily: "monospace" }}>
+                                {valueOrDash(k.name)}
+                              </Typography>
+                              {k.type && <Chip size="small" label={k.type} />}
+                              {k.sizeBytes !== undefined && <Chip size="small" label={formatBytes(k.sizeBytes)} />}
+                            </Box>
+                          </AccordionSummary>
+                          <AccordionDetails>
+                            {isBinary ? (
+                              <Box
+                                sx={{
+                                  border: "1px solid #ddd",
+                                  borderRadius: 2,
+                                  p: 1,
+                                  backgroundColor: "#fafafa",
+                                  fontFamily: "monospace",
+                                  whiteSpace: "pre-wrap",
+                                  fontSize: "0.8125rem",
+                                }}
+                              >
+                                Binary data (base64) — see YAML tab.
+                              </Box>
+                            ) : dataValues.error ? (
+                              <ErrorState message={`${dataValues.error}\nSee full content in YAML tab.`} />
+                            ) : dataValue ? (
+                              <>
+                                {truncated && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    Showing first {MAX_VALUE_PREVIEW_CHARS} characters… See full content in YAML tab.
+                                  </Typography>
+                                )}
+                                <Box
+                                  sx={{
+                                    border: "1px solid #ddd",
+                                    borderRadius: 2,
+                                    p: 1,
+                                    mt: truncated ? 0.5 : 0,
+                                    backgroundColor: "#fafafa",
+                                    fontFamily: "monospace",
+                                    whiteSpace: "pre-wrap",
+                                    fontSize: "0.8125rem",
+                                  }}
+                                >
+                                  {dataValue.value}
+                                </Box>
+                              </>
+                            ) : (
+                              <Typography variant="body2" color="text.secondary">
+                                Value not available. See YAML tab.
+                              </Typography>
+                            )}
+                          </AccordionDetails>
+                        </Accordion>
+                      );
+                    })
                   )}
                 </Box>
               )}
