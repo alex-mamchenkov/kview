@@ -286,6 +286,19 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Added Secrets table with columns for type, key count, immutable, age.
 - Added Secret drawer with tabs: Overview, Keys, Events (no YAML).
 
+## 2026-02-09 — PersistentVolumeClaims list + details
+### Backend
+- Added PersistentVolumeClaims endpoints:
+  - `/api/namespaces/{ns}/persistentvolumeclaims`
+  - `/api/namespaces/{ns}/persistentvolumeclaims/{name}`
+  - `/api/namespaces/{ns}/persistentvolumeclaims/{name}/events`
+  - `/api/namespaces/{ns}/persistentvolumeclaims/{name}/yaml`
+- Added PVC list/detail DTOs (phase, storage class, access modes, sizes, bound PV, spec/status summaries).
+
+### UI
+- Added PersistentVolumeClaims table with status, storage class, size, volume, access modes, age.
+- Added PVC drawer with tabs: Overview, Spec, Events, YAML.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

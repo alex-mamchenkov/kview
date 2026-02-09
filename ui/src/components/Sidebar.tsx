@@ -197,6 +197,12 @@ export default function Sidebar(props: Props) {
           <ListItemButton selected={props.section === "secrets"} onClick={() => props.onSelectSection("secrets")}>
             <ListItemText primary="Secrets" />
           </ListItemButton>
+          <ListItemButton
+            selected={props.section === "persistentvolumeclaims"}
+            onClick={() => props.onSelectSection("persistentvolumeclaims")}
+          >
+            <ListItemText primary="PersistentVolumeClaims" />
+          </ListItemButton>
           <ListItemButton selected={props.section === "helm"} onClick={() => props.onSelectSection("helm")} disabled>
             <ListItemText primary="Helm Releases" secondary="soon" />
           </ListItemButton>

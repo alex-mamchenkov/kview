@@ -84,3 +84,16 @@ export function namespacePhaseChipColor(phase?: string | null): ChipColor {
       return "default";
   }
 }
+
+export function pvcPhaseChipColor(phase?: string | null): ChipColor {
+  switch (phase) {
+    case "Bound":
+      return "success";
+    case "Pending":
+      return "warning";
+    case "Lost":
+      return "error";
+    default:
+      return "default";
+  }
+}

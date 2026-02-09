@@ -160,6 +160,21 @@ Faster diagnosis of config-related issues without compromising security.
 
 ---
 
+## Phase 5.5 — Storage (Read-only)
+
+Understand **how storage is provisioned and bound**.
+
+- [x] PersistentVolumeClaims (PVCs)
+  - Status (Pending/Bound/Lost) and access modes
+  - Requested vs capacity size
+  - Bound PV name (read-only)
+  - Events, YAML
+
+Outcome:
+Storage visibility without exposing mutation paths.
+
+---
+
 ## Phase 6 — Derived Insights (Optional / Later)
 
 Provide **helpful conclusions**, not raw data.

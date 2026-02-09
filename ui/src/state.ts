@@ -12,6 +12,7 @@ export type Section =
   | "ingresses"
   | "configmaps"
   | "secrets"
+  | "persistentvolumeclaims"
   | "helm";
 
 export type AppStateV1 = {

@@ -14,6 +14,7 @@ import JobsTable from "./components/JobsTable";
 import CronJobsTable from "./components/CronJobsTable";
 import ConfigMapsTable from "./components/ConfigMapsTable";
 import SecretsTable from "./components/SecretsTable";
+import PersistentVolumeClaimsTable from "./components/PersistentVolumeClaimsTable";
 import { apiGet, apiPost } from "./api";
 import { loadState, saveState, toggleFavouriteNamespace, type Section } from "./state";
 
@@ -190,6 +191,9 @@ export default function App() {
         {section === "ingresses" && namespace ? <IngressesTable token={token} namespace={namespace} /> : null}
         {section === "configmaps" && namespace ? <ConfigMapsTable token={token} namespace={namespace} /> : null}
         {section === "secrets" && namespace ? <SecretsTable token={token} namespace={namespace} /> : null}
+        {section === "persistentvolumeclaims" && namespace ? (
+          <PersistentVolumeClaimsTable token={token} namespace={namespace} />
+        ) : null}
       </Box>
     </Box>
   );
