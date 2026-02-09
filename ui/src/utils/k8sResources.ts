@@ -11,6 +11,7 @@ export type ListResourceKey =
   | "ingresses"
   | "jobs"
   | "cronjobs"
+  | "configmaps"
   | "nodes"
   | "namespaces";
 
@@ -22,6 +23,7 @@ export const listResourceAccess: Record<ListResourceKey, AccessReviewResource> =
   ingresses: { group: "networking.k8s.io", resource: "ingresses" },
   jobs: { group: "batch", resource: "jobs" },
   cronjobs: { group: "batch", resource: "cronjobs" },
+  configmaps: { group: "", resource: "configmaps" },
   nodes: { group: "", resource: "nodes" },
   namespaces: { group: "", resource: "namespaces" },
 };

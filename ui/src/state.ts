@@ -8,6 +8,7 @@ export type Section =
   | "cronjobs"
   | "services"
   | "ingresses"
+  | "configmaps"
   | "helm";
 
 export type AppStateV1 = {

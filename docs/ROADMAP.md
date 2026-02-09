@@ -129,7 +129,7 @@ Operational context beyond individual workloads.
 
 Understand **what configuration affects workloads**, without exposing secrets.
 
-- [ ] ConfigMaps
+- [x] ConfigMaps
   - Keys list and size
   - Last update time
   - Reverse references (used by which Pods/Deployments)

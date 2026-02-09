@@ -228,6 +228,18 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Added Namespace drawer with tabs: Overview, Conditions, YAML.
 - Treated Namespaces as cluster-scoped for sidebar namespace selector.
 
+## 2026-02-09 — ConfigMaps list + details (read-only)
+### Backend
+- Added ConfigMaps endpoints:
+  - `/api/namespaces/{ns}/configmaps`
+  - `/api/namespaces/{ns}/configmaps/{name}`
+  - `/api/namespaces/{ns}/configmaps/{name}/events`
+- Added ConfigMaps list/detail DTOs with key counts, immutable flag, and size summary.
+
+### UI
+- Added ConfigMaps table with columns for keys count, immutable, age.
+- Added ConfigMap drawer with tabs: Overview, Keys, Events, YAML.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

@@ -10,6 +10,7 @@ import ServicesTable from "./components/ServicesTable";
 import IngressesTable from "./components/IngressesTable";
 import JobsTable from "./components/JobsTable";
 import CronJobsTable from "./components/CronJobsTable";
+import ConfigMapsTable from "./components/ConfigMapsTable";
 import { apiGet, apiPost } from "./api";
 import { loadState, saveState, toggleFavouriteNamespace, type Section } from "./state";
 
@@ -178,6 +179,7 @@ export default function App() {
         {section === "cronjobs" && namespace ? <CronJobsTable token={token} namespace={namespace} /> : null}
         {section === "services" && namespace ? <ServicesTable token={token} namespace={namespace} /> : null}
         {section === "ingresses" && namespace ? <IngressesTable token={token} namespace={namespace} /> : null}
+        {section === "configmaps" && namespace ? <ConfigMapsTable token={token} namespace={namespace} /> : null}
       </Box>
     </Box>
   );
