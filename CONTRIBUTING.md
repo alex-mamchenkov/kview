@@ -11,6 +11,7 @@ Contributions are welcome, but the workflow is intentionally lightweight.
 1. Open an issue (optional but recommended for larger changes)
 2. Make small, focused commits
 3. Prefer clarity over cleverness
+4. Verify context switching with multiple kubeconfigs (no `.envrc` dependency)
 
 ---
 

@@ -16,6 +16,8 @@ These rules are meant for future ChatGPT sessions working on this repository.
 1. **Go backend owns cluster access**
    - Use `client-go` for Kubernetes API.
    - Respect kubeconfig exec plugins (OIDC via `kubectl oidc-login`).
+   - Build clients with `clientcmd` loading rules so selected context is honored.
+   - Provide exec env defaults when missing (`KUBECONFIG`, cache, browser).
 2. **UI is embedded**
    - UI build output is copied to `internal/server/ui_dist`.
    - `internal/server/ui_dist/index.html` placeholder must stay in git.

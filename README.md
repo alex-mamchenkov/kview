@@ -256,6 +256,7 @@ Kubeconfig loading semantics:
   - Directories are read non-recursively, sorted lexicographically.
   - Invalid/missing entries are skipped with warnings.
 - Later files override earlier ones; the last non-empty `current-context` wins.
+- Client creation uses the selected context explicitly (not `current-context`).
 
 Run kview:
 
@@ -314,6 +315,10 @@ Common pitfall:
 Solution:
 - ensure plugin path (often $HOME/.krew/bin) is in PATH
 - or run kview from the same environment
+
+Exec env defaults:
+- kview provides `KUBECONFIG`, `BROWSER`, `XDG_CACHE_HOME`, and `KUBECACHEDIR`
+  to exec plugins when missing, so auth behaves consistently outside `.envrc`.
 
 ---
 

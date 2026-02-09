@@ -11,6 +11,9 @@ Refactors and cleanups are allowed between phases if they support scalability an
 Recent UX polish (2026-02-09):
 - Grouped sidebar navigation by resource category.
 - Standardized human-readable resource labels in navigation and list titles.
+Recent stability fixes (2026-02-09):
+- Context switching now drives namespace loading across merged kubeconfigs.
+- Exec auth no longer depends on `.envrc`-provided environment variables.
 
 ---
 

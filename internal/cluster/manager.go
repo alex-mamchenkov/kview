@@ -6,11 +6,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
 
-	"github.com/imdario/mergo"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -33,6 +33,8 @@ type Manager struct {
 	activeContext string
 
 	clients map[string]*Clients
+
+	kubeconfigFiles []string
 }
 
 type Clients struct {
@@ -106,53 +108,47 @@ func expandKubeconfigLocations(locations []string) []string {
 	return files
 }
 
-func loadMergedKubeconfig() (*api.Config, error) {
-	locations := kubeconfigLocations()
-	log.Printf("kubeconfig: discovered locations: %v", locations)
-
-	files := expandKubeconfigLocations(locations)
-	log.Printf("kubeconfig: files to read: %v", files)
-
-	configs := make([]*api.Config, 0, len(files))
-	lastCurrentContext := ""
-	for _, filename := range files {
-		cfg, err := clientcmd.LoadFromFile(filename)
-		if err != nil {
-			log.Printf("kubeconfig: skip file %q: %v", filename, err)
-			continue
-		}
-		configs = append(configs, cfg)
-		if cfg.CurrentContext != "" {
-			lastCurrentContext = cfg.CurrentContext
-		}
+func buildLoadingRules(files []string) *clientcmd.ClientConfigLoadingRules {
+	rules := clientcmd.NewDefaultClientConfigLoadingRules()
+	if len(files) > 0 {
+		rules.Precedence = files
+		rules.ExplicitPath = ""
 	}
+	rules.WarnIfAllMissing = false
+	return rules
+}
 
-	merged := api.NewConfig()
-	for _, cfg := range configs {
-		if err := mergo.Merge(merged, cfg, mergo.WithOverride); err != nil {
-			log.Printf("kubeconfig: merge warning: %v", err)
-		}
-	}
-	if lastCurrentContext != "" {
-		merged.CurrentContext = lastCurrentContext
+func loadMergedKubeconfig(files []string) (*api.Config, []string, error) {
+	loadingRules := buildLoadingRules(files)
+	effectiveFiles := loadingRules.GetLoadingPrecedence()
+
+	merged, err := loadingRules.Load()
+	if err != nil {
+		return nil, nil, err
 	}
 	if err := clientcmd.ResolveLocalPaths(merged); err != nil {
 		log.Printf("kubeconfig: resolve paths warning: %v", err)
 	}
 
-	return merged, nil
+	return merged, effectiveFiles, nil
 }
 
 func NewManager() (*Manager, error) {
-	cfg, err := loadMergedKubeconfig()
+	locations := kubeconfigLocations()
+	log.Printf("kubeconfig: discovered locations: %v", locations)
+	files := expandKubeconfigLocations(locations)
+	log.Printf("kubeconfig: files to read: %v", files)
+
+	cfg, effectiveFiles, err := loadMergedKubeconfig(files)
 	if err != nil {
 		return nil, fmt.Errorf("load kubeconfig: %w", err)
 	}
 
 	m := &Manager{
-		rawConfig:     *cfg,
-		activeContext: cfg.CurrentContext,
-		clients:       map[string]*Clients{},
+		rawConfig:       *cfg,
+		activeContext:   cfg.CurrentContext,
+		clients:         map[string]*Clients{},
+		kubeconfigFiles: effectiveFiles,
 	}
 	return m, nil
 }
@@ -201,12 +197,15 @@ func (m *Manager) GetClients(ctx context.Context) (*Clients, string, error) {
 
 	// Build rest.Config for the active context (supports exec plugins => OIDC-friendly)
 	overrides := &clientcmd.ConfigOverrides{CurrentContext: active}
-	cc := clientcmd.NewNonInteractiveClientConfig(m.rawConfig, active, overrides, nil)
+	loadingRules := buildLoadingRules(m.kubeconfigFiles)
+	cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)
 
 	restCfg, err := cc.ClientConfig()
 	if err != nil {
 		return nil, active, fmt.Errorf("build rest config: %w", err)
 	}
+
+	ensureExecEnv(restCfg, m.kubeconfigFiles)
 
 	clientset, err := kubernetes.NewForConfig(restCfg)
 	if err != nil {
@@ -229,4 +228,85 @@ func (m *Manager) GetClients(ctx context.Context) (*Clients, string, error) {
 	m.mu.Unlock()
 
 	return clients, active, nil
+}
+
+func ensureExecEnv(restCfg *rest.Config, kubeconfigFiles []string) {
+	if restCfg == nil || restCfg.ExecProvider == nil {
+		return
+	}
+
+	known := map[string]struct{}{}
+	for _, env := range restCfg.ExecProvider.Env {
+		if env.Name != "" {
+			known[env.Name] = struct{}{}
+		}
+	}
+	for _, kv := range os.Environ() {
+		if key, _, ok := strings.Cut(kv, "="); ok && key != "" {
+			known[key] = struct{}{}
+		}
+	}
+
+	addEnv := func(name, value string) {
+		if name == "" || value == "" {
+			return
+		}
+		if _, ok := known[name]; ok {
+			return
+		}
+		restCfg.ExecProvider.Env = append(restCfg.ExecProvider.Env, api.ExecEnvVar{
+			Name:  name,
+			Value: value,
+		})
+		known[name] = struct{}{}
+	}
+
+	if len(kubeconfigFiles) > 0 {
+		addEnv("KUBECONFIG", strings.Join(kubeconfigFiles, string(os.PathListSeparator)))
+	}
+
+	addEnv("BROWSER", defaultBrowserCommand())
+
+	cacheHome := defaultCacheHome()
+	addEnv("XDG_CACHE_HOME", cacheHome)
+	addEnv("KUBECACHEDIR", defaultKubeCacheDir(cacheHome))
+}
+
+func defaultBrowserCommand() string {
+	switch runtime.GOOS {
+	case "linux":
+		return "xdg-open"
+	case "darwin":
+		return "open"
+	case "windows":
+		return "rundll32"
+	default:
+		return ""
+	}
+}
+
+func defaultCacheHome() string {
+	if v := os.Getenv("XDG_CACHE_HOME"); v != "" {
+		return v
+	}
+	if dir, err := os.UserCacheDir(); err == nil && dir != "" {
+		return dir
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return filepath.Join(home, ".cache")
+	}
+	return ""
+}
+
+func defaultKubeCacheDir(cacheHome string) string {
+	if v := os.Getenv("KUBECACHEDIR"); v != "" {
+		return v
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return filepath.Join(home, ".kube", "cache")
+	}
+	if cacheHome != "" {
+		return filepath.Join(cacheHome, "kube")
+	}
+	return ""
 }

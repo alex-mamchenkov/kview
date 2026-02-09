@@ -386,6 +386,13 @@ This file tracks notable changes and decisions to make future sessions easier.
   - Missing/invalid entries are skipped with warnings.
   - Later files override earlier ones; last non-empty `current-context` wins.
 
+## 2026-02-09 — Context-aware namespace loading fix
+### Backend
+- Reverted to `clientcmd` loading rules for client creation to ensure
+  selected context is used for all API calls.
+- Added exec plugin env defaults (`KUBECONFIG`, `BROWSER`,
+  `XDG_CACHE_HOME`, `KUBECACHEDIR`) to avoid `.envrc` reliance.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

@@ -13,6 +13,9 @@ This document describes the current UI/UX behavior as implemented. It is a contr
 
 - **Main layout**: full-height app with a fixed top bar, permanent left sidebar, and central content area.
 - **Right-side drawer**: primary detail surface for a selected resource.
+- **Context switching**:
+  - Changing context refreshes the namespaces list and active selection.
+  - All list and detail queries use the explicitly selected context.
 - **Drawer usage**:
   - Open via double-click on a list row or via an explicit “Open” action in the list toolbar.
   - Close via drawer close icon or outside click.
