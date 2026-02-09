@@ -1,0 +1,303 @@
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  Box,
+  Drawer,
+  Typography,
+  Tabs,
+  Tab,
+  IconButton,
+  Divider,
+  CircularProgress,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  Button,
+  Chip,
+} from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
+import { apiGet, toApiError, type ApiError } from "../api";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
+import { eventChipColor } from "../utils/k8sUi";
+import KeyValueTable from "./shared/KeyValueTable";
+import AccessDeniedState from "./shared/AccessDeniedState";
+import EmptyState from "./shared/EmptyState";
+import ErrorState from "./shared/ErrorState";
+import RoleDrawer from "./RoleDrawer";
+import ClusterRoleDrawer from "./ClusterRoleDrawer";
+
+type RoleBindingDetails = {
+  summary: BindingSummary;
+  roleRef: RoleRef;
+  subjects: Subject[];
+  yaml: string;
+};
+
+type BindingSummary = {
+  name: string;
+  namespace: string;
+  createdAt?: number;
+  ageSec?: number;
+};
+
+type RoleRef = {
+  kind: string;
+  name: string;
+  apiGroup: string;
+};
+
+type Subject = {
+  kind: string;
+  name: string;
+  namespace?: string;
+};
+
+type EventDTO = {
+  type: string;
+  reason: string;
+  message: string;
+  count: number;
+  firstSeen: number;
+  lastSeen: number;
+};
+
+export default function RoleBindingDrawer(props: {
+  open: boolean;
+  onClose: () => void;
+  token: string;
+  namespace: string;
+  roleBindingName: string | null;
+}) {
+  const [tab, setTab] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [details, setDetails] = useState<RoleBindingDetails | null>(null);
+  const [events, setEvents] = useState<EventDTO[]>([]);
+  const [err, setErr] = useState<ApiError | null>(null);
+  const [drawerRole, setDrawerRole] = useState<string | null>(null);
+  const [drawerClusterRole, setDrawerClusterRole] = useState<string | null>(null);
+
+  const ns = props.namespace;
+  const name = props.roleBindingName;
+
+  useEffect(() => {
+    if (!props.open || !name) return;
+
+    setTab(0);
+    setErr(null);
+    setDetails(null);
+    setEvents([]);
+    setDrawerRole(null);
+    setDrawerClusterRole(null);
+    setLoading(true);
+
+    (async () => {
+      const det = await apiGet<any>(
+        `/api/namespaces/${encodeURIComponent(ns)}/rolebindings/${encodeURIComponent(name)}`,
+        props.token
+      );
+      const item: RoleBindingDetails | null = det?.item ?? null;
+      setDetails(item);
+
+      const ev = await apiGet<any>(
+        `/api/namespaces/${encodeURIComponent(ns)}/rolebindings/${encodeURIComponent(name)}/events`,
+        props.token
+      );
+      setEvents(ev?.items || []);
+    })()
+      .catch((e) => setErr(toApiError(e)))
+      .finally(() => setLoading(false));
+  }, [props.open, name, ns, props.token]);
+
+  const summary = details?.summary;
+  const roleRef = details?.roleRef;
+  const subjects = details?.subjects || [];
+  const accessDenied = err?.status === 401 || err?.status === 403;
+
+  const summaryItems = useMemo(
+    () => [
+      { label: "Name", value: valueOrDash(summary?.name), monospace: true },
+      { label: "Namespace", value: valueOrDash(summary?.namespace) },
+      { label: "Age", value: fmtAge(summary?.ageSec) },
+      { label: "Created", value: summary?.createdAt ? fmtTs(summary.createdAt) : "-" },
+    ],
+    [summary]
+  );
+
+  function openRoleRef() {
+    if (!roleRef?.kind || !roleRef?.name) return;
+    if (roleRef.kind === "Role") {
+      setDrawerRole(roleRef.name);
+      return;
+    }
+    if (roleRef.kind === "ClusterRole") {
+      setDrawerClusterRole(roleRef.name);
+    }
+  }
+
+  const canOpenRoleRef = roleRef?.kind === "Role" || roleRef?.kind === "ClusterRole";
+
+  return (
+    <Drawer
+      anchor="right"
+      open={props.open}
+      onClose={props.onClose}
+      PaperProps={{
+        sx: {
+          mt: 8,
+          height: "calc(100% - 64px)",
+          borderTopLeftRadius: 8,
+          borderBottomLeftRadius: 8,
+        },
+      }}
+    >
+      <Box sx={{ width: 820, p: 2, display: "flex", flexDirection: "column", height: "100%" }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            RoleBinding: {name || "-"}{" "}
+            <Typography component="span" variant="body2">
+              ({ns})
+            </Typography>
+          </Typography>
+          <IconButton onClick={props.onClose}>
+            <CloseIcon />
+          </IconButton>
+        </Box>
+
+        <Divider sx={{ my: 1 }} />
+
+        {loading ? (
+          <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : accessDenied ? (
+          <AccessDeniedState status={err?.status} resourceLabel="Role Bindings" />
+        ) : err ? (
+          <ErrorState message={err.message} />
+        ) : (
+          <>
+            <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+              <Tab label="Overview" />
+              <Tab label="Subjects" />
+              <Tab label="Role Ref" />
+              <Tab label="Events" />
+              <Tab label="YAML" />
+            </Tabs>
+
+            <Box sx={{ mt: 2, flexGrow: 1, minHeight: 0, overflow: "hidden" }}>
+              {/* OVERVIEW */}
+              {tab === 0 && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
+                    <KeyValueTable rows={summaryItems} columns={3} />
+                  </Box>
+                </Box>
+              )}
+
+              {/* SUBJECTS */}
+              {tab === 1 && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
+                  {subjects.length === 0 ? (
+                    <EmptyState message="No subjects defined for this RoleBinding." />
+                  ) : (
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Kind</TableCell>
+                          <TableCell>Name</TableCell>
+                          <TableCell>Namespace</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {subjects.map((s, idx) => (
+                          <TableRow key={`${s.kind || "subject"}-${s.name || idx}`}>
+                            <TableCell>{valueOrDash(s.kind)}</TableCell>
+                            <TableCell>{valueOrDash(s.name)}</TableCell>
+                            <TableCell>{valueOrDash(s.namespace)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </Box>
+              )}
+
+              {/* ROLE REF */}
+              {tab === 2 && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
+                    <KeyValueTable
+                      rows={[
+                        { label: "Kind", value: valueOrDash(roleRef?.kind) },
+                        { label: "Name", value: valueOrDash(roleRef?.name), monospace: true },
+                        { label: "API Group", value: valueOrDash(roleRef?.apiGroup) },
+                      ]}
+                      columns={3}
+                    />
+                  </Box>
+                  <Box>
+                    <Button variant="outlined" onClick={openRoleRef} disabled={!canOpenRoleRef}>
+                      Open Role Ref
+                    </Button>
+                  </Box>
+                </Box>
+              )}
+
+              {/* EVENTS */}
+              {tab === 3 && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
+                  {events.length === 0 ? (
+                    <EmptyState message="No events found for this RoleBinding." />
+                  ) : (
+                    events.map((e, idx) => (
+                      <Box key={idx} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.25 }}>
+                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                            <Chip size="small" label={e.type || "Unknown"} color={eventChipColor(e.type)} />
+                            <Typography variant="subtitle2">
+                              {valueOrDash(e.reason)} (x{valueOrDash(e.count)})
+                            </Typography>
+                          </Box>
+                          <Typography variant="caption" color="text.secondary">
+                            {fmtTs(e.lastSeen)}
+                          </Typography>
+                        </Box>
+                        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", mt: 0.5 }}>
+                          {valueOrDash(e.message)}
+                        </Typography>
+                      </Box>
+                    ))
+                  )}
+                </Box>
+              )}
+
+              {/* YAML */}
+              {tab === 4 && (
+                <Box sx={{ border: "1px solid #ddd", borderRadius: 2, overflow: "auto", height: "100%" }}>
+                  <SyntaxHighlighter language="yaml" showLineNumbers wrapLongLines>
+                    {details?.yaml || ""}
+                  </SyntaxHighlighter>
+                </Box>
+              )}
+            </Box>
+          </>
+        )}
+      </Box>
+
+      <RoleDrawer
+        open={!!drawerRole}
+        onClose={() => setDrawerRole(null)}
+        token={props.token}
+        namespace={ns}
+        roleName={drawerRole}
+      />
+      <ClusterRoleDrawer
+        open={!!drawerClusterRole}
+        onClose={() => setDrawerClusterRole(null)}
+        token={props.token}
+        clusterRoleName={drawerClusterRole}
+      />
+    </Drawer>
+  );
+}

@@ -183,6 +183,35 @@ Storage visibility without exposing mutation paths.
 
 ---
 
+## Phase 5.75 — Access Control (Read-only)
+
+Understand **who can do what**, without exposing credentials or tokens.
+
+- [x] ServiceAccounts
+  - ImagePullSecrets and secrets counts (metadata only)
+  - Automount token flag
+  - RoleBindings that reference the ServiceAccount (best-effort)
+  - Events, YAML
+- [x] Roles
+  - Rules summary (apiGroups/resources/verbs)
+  - Events, YAML
+- [x] RoleBindings
+  - Subjects list
+  - RoleRef summary with navigation
+  - Events, YAML
+- [x] ClusterRoles
+  - Rules summary (apiGroups/resources/verbs)
+  - Events, YAML
+- [x] ClusterRoleBindings
+  - Subjects list
+  - RoleRef summary with navigation
+  - Events, YAML
+
+Outcome:
+RBAC visibility without exposing secrets or tokens.
+
+---
+
 ## Phase 6 — Derived Insights (Optional / Later)
 
 Provide **helpful conclusions**, not raw data.

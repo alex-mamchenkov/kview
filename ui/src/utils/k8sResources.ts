@@ -17,6 +17,11 @@ export type ListResourceKey =
   | "cronjobs"
   | "configmaps"
   | "secrets"
+  | "serviceaccounts"
+  | "roles"
+  | "rolebindings"
+  | "clusterroles"
+  | "clusterrolebindings"
   | "persistentvolumeclaims"
   | "persistentvolumes"
   | "nodes"
@@ -45,6 +50,11 @@ export const resourceMeta: Record<ListResourceKey, ResourceMeta> = {
   cronjobs: { label: "Cron Jobs", clusterScoped: false },
   configmaps: { label: "Config Maps", clusterScoped: false },
   secrets: { label: "Secrets", clusterScoped: false },
+  serviceaccounts: { label: "Service Accounts", clusterScoped: false },
+  roles: { label: "Roles", clusterScoped: false },
+  rolebindings: { label: "Role Bindings", clusterScoped: false },
+  clusterroles: { label: "Cluster Roles", clusterScoped: true },
+  clusterrolebindings: { label: "Cluster Role Bindings", clusterScoped: true },
   persistentvolumeclaims: { label: "Persistent Volume Claims", clusterScoped: false },
   persistentvolumes: { label: "Persistent Volumes", clusterScoped: true },
   nodes: { label: "Nodes", clusterScoped: true },
@@ -66,6 +76,11 @@ export const sidebarGroups: SidebarGroup[] = [
     id: "configuration",
     label: "Configuration",
     items: ["configmaps", "secrets"],
+  },
+  {
+    id: "rbac",
+    label: "Access Control",
+    items: ["serviceaccounts", "roles", "rolebindings", "clusterroles", "clusterrolebindings"],
   },
   {
     id: "storage",
@@ -106,6 +121,11 @@ export const listResourceAccess: Record<ListResourceKey, AccessReviewResource> =
   cronjobs: { group: "batch", resource: "cronjobs" },
   configmaps: { group: "", resource: "configmaps" },
   secrets: { group: "", resource: "secrets" },
+  serviceaccounts: { group: "", resource: "serviceaccounts" },
+  roles: { group: "rbac.authorization.k8s.io", resource: "roles" },
+  rolebindings: { group: "rbac.authorization.k8s.io", resource: "rolebindings" },
+  clusterroles: { group: "rbac.authorization.k8s.io", resource: "clusterroles" },
+  clusterrolebindings: { group: "rbac.authorization.k8s.io", resource: "clusterrolebindings" },
   persistentvolumeclaims: { group: "", resource: "persistentvolumeclaims" },
   persistentvolumes: { group: "", resource: "persistentvolumes" },
   nodes: { group: "", resource: "nodes" },

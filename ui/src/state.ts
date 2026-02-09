@@ -12,6 +12,11 @@ export type Section =
   | "ingresses"
   | "configmaps"
   | "secrets"
+  | "serviceaccounts"
+  | "roles"
+  | "rolebindings"
+  | "clusterroles"
+  | "clusterrolebindings"
   | "persistentvolumes"
   | "persistentvolumeclaims"
   | "helm";

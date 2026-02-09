@@ -320,6 +320,45 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Standardized human-readable resource labels in sidebar and list titles (no abbreviations).
 - Removed ReplicaSets from primary sidebar navigation (still available via lists/deep-links).
 
+## 2026-02-09 — RBAC resources visibility (read-only)
+### Backend
+- Added ServiceAccounts endpoints:
+  - `/api/namespaces/{ns}/serviceaccounts`
+  - `/api/namespaces/{ns}/serviceaccounts/{name}`
+  - `/api/namespaces/{ns}/serviceaccounts/{name}/events`
+  - `/api/namespaces/{ns}/serviceaccounts/{name}/yaml`
+  - `/api/namespaces/{ns}/serviceaccounts/{name}/rolebindings` (best-effort)
+- Added Roles endpoints:
+  - `/api/namespaces/{ns}/roles`
+  - `/api/namespaces/{ns}/roles/{name}`
+  - `/api/namespaces/{ns}/roles/{name}/events`
+  - `/api/namespaces/{ns}/roles/{name}/yaml`
+- Added RoleBindings endpoints:
+  - `/api/namespaces/{ns}/rolebindings`
+  - `/api/namespaces/{ns}/rolebindings/{name}`
+  - `/api/namespaces/{ns}/rolebindings/{name}/events`
+  - `/api/namespaces/{ns}/rolebindings/{name}/yaml`
+- Added ClusterRoles endpoints:
+  - `/api/clusterroles`
+  - `/api/clusterroles/{name}`
+  - `/api/clusterroles/{name}/events`
+  - `/api/clusterroles/{name}/yaml`
+- Added ClusterRoleBindings endpoints:
+  - `/api/clusterrolebindings`
+  - `/api/clusterrolebindings/{name}`
+  - `/api/clusterrolebindings/{name}/events`
+  - `/api/clusterrolebindings/{name}/yaml`
+- Added RBAC DTOs for list/details views, including rules/subjects/roleRef summaries.
+
+### UI
+- Added RBAC tables: Service Accounts, Roles, Role Bindings, Cluster Roles, Cluster Role Bindings.
+- Added drawers with tabs:
+  - ServiceAccount: Overview, Role Bindings, Events, YAML
+  - Role/ClusterRole: Overview, Rules, Events, YAML
+  - RoleBinding/ClusterRoleBinding: Overview, Subjects, Role Ref, Events, YAML
+- Enabled RoleBinding → Role/ClusterRole cross-navigation.
+- Preserved RBAC-aware list empty states for all new resources.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

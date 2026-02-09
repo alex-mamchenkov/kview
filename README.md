@@ -83,6 +83,31 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - filtering
   - single selection
   - refresh interval + last refresh timestamp
+- Service Accounts view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
+- Roles view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
+- Role Bindings view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
+- Cluster Roles view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
+- Cluster Role Bindings view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
 - PersistentVolumes view:
   - sorting
   - filtering
@@ -149,6 +174,28 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - overview summary + metadata
   - keys list (no values)
   - events
+- ServiceAccount details drawer:
+  - overview summary + metadata
+  - RoleBindings list (best-effort)
+  - events, YAML
+- Role details drawer:
+  - overview summary
+  - rules table
+  - events, YAML
+- RoleBinding details drawer:
+  - overview summary
+  - subjects table
+  - RoleRef details + navigation
+  - events, YAML
+- ClusterRole details drawer:
+  - overview summary
+  - rules table
+  - events, YAML
+- ClusterRoleBinding details drawer:
+  - overview summary
+  - subjects table
+  - RoleRef details + navigation
+  - events, YAML
 - PersistentVolume details drawer:
   - overview summary + status
   - spec summary (access modes, volume mode, reclaim policy, volume source)
