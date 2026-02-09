@@ -17,7 +17,6 @@ import {
   TableRow,
   TableCell,
   TableBody,
-  Button,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -30,6 +29,7 @@ import Section from "./shared/Section";
 import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
+import ResourceLinkChip from "./shared/ResourceLinkChip";
 
 type IngressDetails = {
   summary: IngressSummary;
@@ -344,14 +344,10 @@ export default function IngressDrawer(props: {
                                   <TableCell>{valueOrDash(p.pathType)}</TableCell>
                                   <TableCell>
                                     {p.backendServiceName ? (
-                                      <Button
-                                        variant="text"
-                                        size="small"
+                                      <ResourceLinkChip
+                                        label={p.backendServiceName}
                                         onClick={() => setDrawerService(p.backendServiceName)}
-                                        sx={{ textTransform: "none", p: 0, minWidth: "auto" }}
-                                      >
-                                        {p.backendServiceName}
-                                      </Button>
+                                      />
                                     ) : (
                                       "-"
                                     )}

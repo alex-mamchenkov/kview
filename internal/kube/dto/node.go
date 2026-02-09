@@ -1,5 +1,17 @@
 package dto
 
+type NodeListItemDTO struct {
+	Name              string   `json:"name"`
+	Status            string   `json:"status"`
+	Roles             []string `json:"roles,omitempty"`
+	CPUAllocatable    string   `json:"cpuAllocatable,omitempty"`
+	MemoryAllocatable string   `json:"memoryAllocatable,omitempty"`
+	PodsAllocatable   string   `json:"podsAllocatable,omitempty"`
+	PodsCount         int      `json:"podsCount"`
+	KubeletVersion    string   `json:"kubeletVersion,omitempty"`
+	AgeSec            int64    `json:"ageSec"`
+}
+
 type NodeDetailsDTO struct {
 	Summary    NodeSummaryDTO    `json:"summary"`
 	Metadata   NodeMetadataDTO   `json:"metadata"`

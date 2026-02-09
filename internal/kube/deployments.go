@@ -9,21 +9,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"kview/internal/cluster"
+	"kview/internal/kube/dto"
 )
 
-type DeploymentDTO struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Ready     string `json:"ready"`
-	UpToDate  int32  `json:"upToDate"`
-	Available int32  `json:"available"`
-	Strategy  string `json:"strategy"`
-	AgeSec    int64  `json:"ageSec"`
-	LastEvent *EventBriefDTO `json:"lastEvent,omitempty"`
-	Status    string `json:"status"`
-}
-
-func ListDeployments(ctx context.Context, c *cluster.Clients, namespace string) ([]DeploymentDTO, error) {
+func ListDeployments(ctx context.Context, c *cluster.Clients, namespace string) ([]dto.DeploymentListItemDTO, error) {
 	deps, err := c.Clientset.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -32,9 +21,9 @@ func ListDeployments(ctx context.Context, c *cluster.Clients, namespace string) 
 	latestEvents, _ := LatestEventsByObject(ctx, c, namespace, "Deployment")
 
 	now := time.Now()
-	out := make([]DeploymentDTO, 0, len(deps.Items))
+	out := make([]dto.DeploymentListItemDTO, 0, len(deps.Items))
 	for _, d := range deps.Items {
-		var lastEvent *EventBriefDTO
+		var lastEvent *dto.EventBriefDTO
 		if ev, ok := latestEvents[d.Name]; ok {
 			evCopy := ev
 			lastEvent = &evCopy
@@ -57,7 +46,7 @@ func ListDeployments(ctx context.Context, c *cluster.Clients, namespace string) 
 
 		status := deploymentStatus(d, desired)
 
-		out = append(out, DeploymentDTO{
+		out = append(out, dto.DeploymentListItemDTO{
 			Name:      d.Name,
 			Namespace: d.Namespace,
 			Ready:     fmtReady(int(d.Status.AvailableReplicas), int(desired)),

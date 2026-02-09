@@ -1,5 +1,16 @@
 package dto
 
+type PodListItemDTO struct {
+	Name      string        `json:"name"`
+	Namespace string        `json:"namespace"`
+	Node      string        `json:"node,omitempty"`
+	Phase     string        `json:"phase"`
+	Ready     string        `json:"ready"`
+	Restarts  int32         `json:"restarts"`
+	AgeSec    int64         `json:"ageSec"`
+	LastEvent *EventBriefDTO `json:"lastEvent,omitempty"`
+}
+
 type PodDetailsDTO struct {
 	Summary    PodSummaryDTO     `json:"summary"`
 	Conditions []PodConditionDTO `json:"conditions"`

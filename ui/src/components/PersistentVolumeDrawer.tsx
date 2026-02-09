@@ -14,7 +14,6 @@ import {
   TableRow,
   TableCell,
   TableBody,
-  Button,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -25,6 +24,7 @@ import Section from "./shared/Section";
 import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
+import ResourceLinkChip from "./shared/ResourceLinkChip";
 import PersistentVolumeClaimDrawer from "./PersistentVolumeClaimDrawer";
 import useAccessReview from "../utils/useAccessReview";
 import { listResourceAccess } from "../utils/k8sResources";
@@ -187,15 +187,13 @@ export default function PersistentVolumeDrawer(props: {
       {
         label: "Claim",
         value: claimName ? (
-          <Button
-            variant="text"
-            size="small"
-            disabled={!claimNs || !pvcAccess.allowed}
-            onClick={() => setDrawerPVC({ name: claimName, namespace: claimNs })}
-            sx={{ textTransform: "none", p: 0, minWidth: "auto" }}
-          >
-            {formatClaimRef(claimRef)}
-          </Button>
+          <ResourceLinkChip
+            label={formatClaimRef(claimRef)}
+            onClick={
+              claimNs && pvcAccess.allowed ? () => setDrawerPVC({ name: claimName, namespace: claimNs }) : undefined
+            }
+            sx={!claimNs || !pvcAccess.allowed ? { opacity: 0.6 } : undefined}
+          />
         ) : (
           "-"
         ),

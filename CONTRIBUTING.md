@@ -14,6 +14,14 @@ Contributions are welcome, but the workflow is intentionally lightweight.
 
 ---
 
+## Prerequisites
+
+- Go 1.22+
+- Node.js 20+ (required by Vite toolchain)
+- npm
+
+---
+
 ## Code style
 
 - Go:

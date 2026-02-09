@@ -9,7 +9,6 @@ import {
   Divider,
   CircularProgress,
   Chip,
-  Button,
   Table,
   TableHead,
   TableRow,
@@ -25,6 +24,7 @@ import Section from "./shared/Section";
 import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
+import ResourceLinkChip from "./shared/ResourceLinkChip";
 import PersistentVolumeDrawer from "./PersistentVolumeDrawer";
 import useAccessReview from "../utils/useAccessReview";
 import { listResourceAccess } from "../utils/k8sResources";
@@ -199,15 +199,11 @@ export default function PersistentVolumeClaimDrawer(props: {
       {
         label: "Bound PV",
         value: volumeName ? (
-          <Button
-            variant="text"
-            size="small"
-            disabled={!pvAccess.allowed}
-            onClick={() => setDrawerPV(volumeName)}
-            sx={{ textTransform: "none", p: 0, minWidth: "auto" }}
-          >
-            {volumeName}
-          </Button>
+          <ResourceLinkChip
+            label={volumeName}
+            onClick={pvAccess.allowed ? () => setDrawerPV(volumeName) : undefined}
+            sx={!pvAccess.allowed ? { opacity: 0.6 } : undefined}
+          />
         ) : (
           "-"
         ),

@@ -17,7 +17,6 @@ import {
   TableRow,
   TableCell,
   TableBody,
-  Button,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -30,6 +29,7 @@ import { conditionStatusColor, eventChipColor, phaseChipColor } from "../utils/k
 import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
+import ResourceLinkChip from "./shared/ResourceLinkChip";
 
 type ReplicaSetDetails = {
   summary: ReplicaSetSummary;
@@ -189,18 +189,12 @@ export default function ReplicaSetDrawer(props: {
       { label: "Namespace", value: valueOrDash(summary?.namespace) },
       {
         label: "Owner Deployment",
-        value: owner?.kind === "Deployment" && owner?.name ? (
-          <Button
-            variant="text"
-            size="small"
-            onClick={() => setDrawerDeployment(owner.name)}
-            sx={{ textTransform: "none", p: 0, minWidth: "auto" }}
-          >
-            {owner.name}
-          </Button>
-        ) : (
-          "-"
-        ),
+        value:
+          owner?.kind === "Deployment" && owner?.name ? (
+            <ResourceLinkChip label={owner.name} onClick={() => setDrawerDeployment(owner.name)} />
+          ) : (
+            "-"
+          ),
       },
       { label: "Revision", value: formatRevision(summary?.revision) },
       { label: "Desired replicas", value: valueOrDash(summary?.desired) },

@@ -1,5 +1,12 @@
 package dto
 
+type NamespaceListItemDTO struct {
+	Name                   string `json:"name"`
+	Phase                  string `json:"phase"`
+	AgeSec                 int64  `json:"ageSec"`
+	HasUnhealthyConditions bool   `json:"hasUnhealthyConditions"`
+}
+
 type NamespaceDetailsDTO struct {
 	Summary    NamespaceSummaryDTO    `json:"summary"`
 	Metadata   NamespaceMetadataDTO   `json:"metadata"`

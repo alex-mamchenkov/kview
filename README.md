@@ -230,7 +230,7 @@ Backend:
 - Go 1.22 or newer
 
 Frontend:
-- Node.js 18+ (or 20+ recommended)
+- Node.js 20+ (required by Vite toolchain)
 - npm
 
 Kubernetes access:

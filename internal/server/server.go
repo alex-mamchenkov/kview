@@ -85,16 +85,11 @@ func (s *Server) Router() http.Handler {
 
 			nss, err := kube.ListNamespaces(ctx, clients)
 			if err != nil {
-				// If forbidden, return limited mode
+				status := http.StatusInternalServerError
 				if apierrors.IsForbidden(err) {
-					writeJSON(w, http.StatusOK, map[string]any{
-						"active":  active,
-						"limited": true,
-						"items":   []kube.NamespaceDTO{},
-					})
-					return
+					status = http.StatusForbidden
 				}
-				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
+				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
 				return
 			}
 
@@ -2074,7 +2069,34 @@ func contentTypeByPath(p string) string {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
+	if status >= http.StatusBadRequest {
+		if payload, ok := v.(map[string]any); ok {
+			if msg, ok := payload["error"].(string); ok && strings.TrimSpace(msg) != "" {
+				payload["error"] = sanitizeErrorMessage(status)
+				v = payload
+			}
+		}
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func sanitizeErrorMessage(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "bad request"
+	case http.StatusUnauthorized:
+		return "unauthorized"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "not found"
+	case http.StatusConflict:
+		return "conflict"
+	case http.StatusTooManyRequests:
+		return "too many requests"
+	default:
+		return "request failed"
+	}
 }

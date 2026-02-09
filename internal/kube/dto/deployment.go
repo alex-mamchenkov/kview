@@ -1,5 +1,17 @@
 package dto
 
+type DeploymentListItemDTO struct {
+	Name      string        `json:"name"`
+	Namespace string        `json:"namespace"`
+	Ready     string        `json:"ready"`
+	UpToDate  int32         `json:"upToDate"`
+	Available int32         `json:"available"`
+	Strategy  string        `json:"strategy"`
+	AgeSec    int64         `json:"ageSec"`
+	LastEvent *EventBriefDTO `json:"lastEvent,omitempty"`
+	Status    string        `json:"status"`
+}
+
 type DeploymentDetailsDTO struct {
 	Summary     DeploymentSummaryDTO      `json:"summary"`
 	Conditions  []DeploymentConditionDTO  `json:"conditions"`

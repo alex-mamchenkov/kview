@@ -23,11 +23,13 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../api";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import PodDrawer from "./PodDrawer";
+import CronJobDrawer from "./CronJobDrawer";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { conditionStatusColor, eventChipColor, jobStatusChipColor, phaseChipColor } from "../utils/k8sUi";
 import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
+import ResourceLinkChip from "./shared/ResourceLinkChip";
 
 type JobDetails = {
   summary: JobSummary;
@@ -97,12 +99,6 @@ function isConditionHealthy(cond: JobCondition) {
   return cond.status === "True";
 }
 
-function formatOwner(owner?: OwnerRef) {
-  if (!owner?.name) return "-";
-  if (owner.kind) return `${owner.kind}/${owner.name}`;
-  return owner.name;
-}
-
 function formatDuration(seconds?: number) {
   if (!seconds || seconds <= 0) return "-";
   return fmtAge(seconds, "detail");
@@ -121,6 +117,7 @@ export default function JobDrawer(props: {
   const [events, setEvents] = useState<EventDTO[]>([]);
   const [err, setErr] = useState("");
   const [drawerPod, setDrawerPod] = useState<string | null>(null);
+  const [drawerCronJob, setDrawerCronJob] = useState<string | null>(null);
 
   const ns = props.namespace;
   const name = props.jobName;
@@ -133,6 +130,7 @@ export default function JobDrawer(props: {
     setDetails(null);
     setEvents([]);
     setDrawerPod(null);
+    setDrawerCronJob(null);
     setLoading(true);
 
     (async () => {
@@ -161,7 +159,17 @@ export default function JobDrawer(props: {
     () => [
       { label: "Name", value: valueOrDash(summary?.name) },
       { label: "Namespace", value: valueOrDash(summary?.namespace) },
-      { label: "Owner", value: formatOwner(summary?.owner) },
+      {
+        label: "Owner",
+        value:
+          summary?.owner?.kind === "CronJob" && summary?.owner?.name ? (
+            <ResourceLinkChip label={summary.owner.name} onClick={() => setDrawerCronJob(summary.owner!.name)} />
+          ) : summary?.owner?.name ? (
+            `${summary.owner.kind || "Owner"}/${summary.owner.name}`
+          ) : (
+            "-"
+          ),
+      },
       {
         label: "Status",
         value: (
@@ -373,6 +381,13 @@ export default function JobDrawer(props: {
               token={props.token}
               namespace={ns}
               podName={drawerPod}
+            />
+            <CronJobDrawer
+              open={!!drawerCronJob}
+              onClose={() => setDrawerCronJob(null)}
+              token={props.token}
+              namespace={ns}
+              cronJobName={drawerCronJob}
             />
           </>
         )}

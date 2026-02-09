@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { apiPost, type ApiError } from "../api";
+import { apiPost, toApiError, type ApiError } from "../api";
 import type { AccessReviewResource } from "./k8sResources";
 
 type CanIResponse = {
@@ -102,8 +102,13 @@ export default function useEmptyListAccessCheck({
         setCached(key, res);
         setAccessDenied(!res.allowed);
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return;
+        const apiErr = toApiError(err);
+        if (apiErr.status === 401 || apiErr.status === 403) {
+          setAccessDenied(true);
+          return;
+        }
         setAccessDenied(false);
       })
       .finally(() => {

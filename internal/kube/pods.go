@@ -2,24 +2,16 @@ package kube
 
 import (
 	"context"
-	"time"
 	"fmt"
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"kview/internal/cluster"
+	"kview/internal/kube/dto"
 )
 
-type PodDTO struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Node      string `json:"node,omitempty"`
-	Phase     string `json:"phase"`
-	Ready     string `json:"ready"`
-	Restarts  int32  `json:"restarts"`
-	AgeSec    int64  `json:"ageSec"`
-	LastEvent *EventBriefDTO `json:"lastEvent,omitempty"`
-}
-
-func ListPods(ctx context.Context, c *cluster.Clients, namespace string) ([]PodDTO, error) {
+func ListPods(ctx context.Context, c *cluster.Clients, namespace string) ([]dto.PodListItemDTO, error) {
 	pods, err := c.Clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -28,9 +20,9 @@ func ListPods(ctx context.Context, c *cluster.Clients, namespace string) ([]PodD
 	latestEvents, _ := LatestEventsByObject(ctx, c, namespace, "Pod")
 
 	now := time.Now()
-	out := make([]PodDTO, 0, len(pods.Items))
+	out := make([]dto.PodListItemDTO, 0, len(pods.Items))
 	for _, p := range pods.Items {
-		var lastEvent *EventBriefDTO
+		var lastEvent *dto.EventBriefDTO
 		if ev, ok := latestEvents[p.Name]; ok {
 			evCopy := ev
 			lastEvent = &evCopy
@@ -51,7 +43,7 @@ func ListPods(ctx context.Context, c *cluster.Clients, namespace string) ([]PodD
 			age = int64(now.Sub(p.CreationTimestamp.Time).Seconds())
 		}
 
-		out = append(out, PodDTO{
+		out = append(out, dto.PodListItemDTO{
 			Name:      p.Name,
 			Namespace: p.Namespace,
 			Node:      p.Spec.NodeName,

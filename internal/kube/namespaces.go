@@ -7,29 +7,23 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"kview/internal/cluster"
+	"kview/internal/kube/dto"
 )
 
-type NamespaceDTO struct {
-	Name                   string `json:"name"`
-	Phase                  string `json:"phase"`
-	AgeSec                 int64  `json:"ageSec"`
-	HasUnhealthyConditions bool   `json:"hasUnhealthyConditions"`
-}
-
-func ListNamespaces(ctx context.Context, c *cluster.Clients) ([]NamespaceDTO, error) {
+func ListNamespaces(ctx context.Context, c *cluster.Clients) ([]dto.NamespaceListItemDTO, error) {
 	nsList, err := c.Clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
 
 	now := time.Now()
-	out := make([]NamespaceDTO, 0, len(nsList.Items))
+	out := make([]dto.NamespaceListItemDTO, 0, len(nsList.Items))
 	for _, ns := range nsList.Items {
 		age := int64(0)
 		if !ns.CreationTimestamp.IsZero() {
 			age = int64(now.Sub(ns.CreationTimestamp.Time).Seconds())
 		}
-		out = append(out, NamespaceDTO{
+		out = append(out, dto.NamespaceListItemDTO{
 			Name:                   ns.Name,
 			Phase:                  string(ns.Status.Phase),
 			AgeSec:                 age,
@@ -39,12 +33,12 @@ func ListNamespaces(ctx context.Context, c *cluster.Clients) ([]NamespaceDTO, er
 	return out, nil
 }
 
-func ListNamespacesFallback(ctx context.Context, c *cluster.Clients) ([]NamespaceDTO, error) {
+func ListNamespacesFallback(ctx context.Context, c *cluster.Clients) ([]dto.NamespaceListItemDTO, error) {
 	// Fallback strategy placeholder:
 	// - some restricted users can't list namespaces at all
 	// - later we can keep "recent namespaces" and allow manual input in UI
 	_ = corev1.Namespace{}
-	return []NamespaceDTO{}, nil
+	return []dto.NamespaceListItemDTO{}, nil
 }
 
 func hasUnhealthyNamespaceConditions(conds []corev1.NamespaceCondition) bool {

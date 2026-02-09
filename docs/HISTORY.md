@@ -359,6 +359,25 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Enabled RoleBinding → Role/ClusterRole cross-navigation.
 - Preserved RBAC-aware list empty states for all new resources.
 
+## 2026-02-09 — Refactoring pass (DTOs, access, navigation, UI dedupe)
+### Backend
+- Centralized list DTOs in `internal/kube/dto` for pods, deployments, namespaces, nodes, and events.
+- Normalized access-denied handling across endpoints:
+  - `/api/namespaces` now returns 403 when forbidden (no limited-mode payload).
+  - Error payloads no longer expose raw Kubernetes error strings; responses are sanitized.
+
+### UI
+- Consolidated list filtering/quick filters/refresh toolbars into shared hooks and components.
+- Unified Access Denied rendering and prevented raw error strings from leaking to the UI.
+- Added consistent cross-navigation via shared link chips:
+  - Pod → Node
+  - Pod → controller (ReplicaSet, Deployment, StatefulSet, DaemonSet, Job)
+  - Job → CronJob
+  - ReplicaSet → Deployment
+  - Ingress → Service
+  - PV ↔ PVC
+- Updated Node.js requirement to 20+ in docs.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

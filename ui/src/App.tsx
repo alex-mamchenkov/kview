@@ -21,7 +21,7 @@ import ClusterRolesTable from "./components/ClusterRolesTable";
 import ClusterRoleBindingsTable from "./components/ClusterRoleBindingsTable";
 import PersistentVolumesTable from "./components/PersistentVolumesTable";
 import PersistentVolumeClaimsTable from "./components/PersistentVolumeClaimsTable";
-import { apiGet, apiPost } from "./api";
+import { apiGet, apiPost, toApiError } from "./api";
 import { loadState, saveState, toggleFavouriteNamespace, type Section } from "./state";
 
 function getToken(): string {
@@ -68,11 +68,8 @@ export default function App() {
       setActiveContext(chosenCtx);
 
       // 2) namespaces
-      const nsRes = await apiGet<any>("/api/namespaces", token);
-      const limited = !!nsRes.limited;
+      const { limited, items: nsItems } = await fetchNamespaces(token);
       setNsLimited(limited);
-
-      const nsItems = (nsRes.items || []).map((x: any) => x.name);
       setNamespaces(nsItems);
 
       // 3) pick namespace
@@ -105,16 +102,29 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function fetchNamespaces(currentToken: string): Promise<{ limited: boolean; items: string[] }> {
+    try {
+      const nsRes = await apiGet<any>("/api/namespaces", currentToken);
+      return {
+        limited: !!nsRes.limited,
+        items: (nsRes.items || []).map((x: any) => x.name),
+      };
+    } catch (err) {
+      const apiErr = toApiError(err);
+      if (apiErr.status === 401 || apiErr.status === 403) {
+        return { limited: true, items: [] };
+      }
+      throw err;
+    }
+  }
+
   async function onSelectContext(name: string) {
     await apiPost("/api/context/select", token, { name });
     setActiveContext(name);
 
     // refresh namespaces for new context
-    const nsRes = await apiGet<any>("/api/namespaces", token);
-    const limited = !!nsRes.limited;
+    const { limited, items: nsItems } = await fetchNamespaces(token);
     setNsLimited(limited);
-
-    const nsItems = (nsRes.items || []).map((x: any) => x.name);
     setNamespaces(nsItems);
 
     // pick namespace from state if possible

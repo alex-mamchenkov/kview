@@ -10,21 +10,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"kview/internal/cluster"
+	"kview/internal/kube/dto"
 )
 
-type NodeDTO struct {
-	Name             string   `json:"name"`
-	Status           string   `json:"status"`
-	Roles            []string `json:"roles,omitempty"`
-	CPUAllocatable   string   `json:"cpuAllocatable,omitempty"`
-	MemoryAllocatable string  `json:"memoryAllocatable,omitempty"`
-	PodsAllocatable  string   `json:"podsAllocatable,omitempty"`
-	PodsCount        int      `json:"podsCount"`
-	KubeletVersion   string   `json:"kubeletVersion,omitempty"`
-	AgeSec           int64    `json:"ageSec"`
-}
-
-func ListNodes(ctx context.Context, c *cluster.Clients) ([]NodeDTO, error) {
+func ListNodes(ctx context.Context, c *cluster.Clients) ([]dto.NodeListItemDTO, error) {
 	nodes, err := c.Clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -41,14 +30,14 @@ func ListNodes(ctx context.Context, c *cluster.Clients) ([]NodeDTO, error) {
 	}
 
 	now := time.Now()
-	out := make([]NodeDTO, 0, len(nodes.Items))
+	out := make([]dto.NodeListItemDTO, 0, len(nodes.Items))
 	for _, n := range nodes.Items {
 		age := int64(0)
 		if !n.CreationTimestamp.IsZero() {
 			age = int64(now.Sub(n.CreationTimestamp.Time).Seconds())
 		}
 
-		out = append(out, NodeDTO{
+		out = append(out, dto.NodeListItemDTO{
 			Name:              n.Name,
 			Status:            nodeReadyStatus(n.Status.Conditions),
 			Roles:             deriveNodeRoles(n.Labels),

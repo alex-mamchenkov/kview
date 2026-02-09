@@ -35,11 +35,18 @@ import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { conditionStatusColor, eventChipColor } from "../utils/k8sUi";
 import IngressDrawer from "./IngressDrawer";
 import ServiceDrawer from "./ServiceDrawer";
+import DeploymentDrawer from "./DeploymentDrawer";
+import ReplicaSetDrawer from "./ReplicaSetDrawer";
+import StatefulSetDrawer from "./StatefulSetDrawer";
+import DaemonSetDrawer from "./DaemonSetDrawer";
+import JobDrawer from "./JobDrawer";
+import NodeDrawer from "./NodeDrawer";
 import Section from "./shared/Section";
 import KeyValueTable from "./shared/KeyValueTable";
 import AccessDeniedState from "./shared/AccessDeniedState";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
+import ResourceLinkChip from "./shared/ResourceLinkChip";
 
 type PodDetails = {
   summary: PodSummary;
@@ -245,11 +252,6 @@ function containerStateColor(state?: string): "success" | "warning" | "error" | 
   return "default";
 }
 
-function formatController(summary?: PodSummary) {
-  if (!summary?.controllerKind || !summary?.controllerName) return "-";
-  return `${summary.controllerKind}/${summary.controllerName}`;
-}
-
 function parseContainerFromFieldPath(path?: string) {
   if (!path) return "";
   const match = path.match(/spec\.(?:initContainers|containers|ephemeralContainers)\{(.+)\}/);
@@ -331,6 +333,12 @@ export default function PodDrawer(props: {
   const [networkingIngressesErr, setNetworkingIngressesErr] = useState<ApiError | null>(null);
   const [drawerService, setDrawerService] = useState<string | null>(null);
   const [drawerIngress, setDrawerIngress] = useState<{ name: string; namespace: string } | null>(null);
+  const [drawerReplicaSet, setDrawerReplicaSet] = useState<string | null>(null);
+  const [drawerDeployment, setDrawerDeployment] = useState<string | null>(null);
+  const [drawerStatefulSet, setDrawerStatefulSet] = useState<string | null>(null);
+  const [drawerDaemonSet, setDrawerDaemonSet] = useState<string | null>(null);
+  const [drawerJob, setDrawerJob] = useState<string | null>(null);
+  const [drawerNode, setDrawerNode] = useState<string | null>(null);
 
   // Logs UI state
   const [container, setContainer] = useState<string>("");
@@ -443,6 +451,12 @@ export default function PodDrawer(props: {
     setNetworkingIngressesErr(null);
     setDrawerService(null);
     setDrawerIngress(null);
+    setDrawerReplicaSet(null);
+    setDrawerDeployment(null);
+    setDrawerStatefulSet(null);
+    setDrawerDaemonSet(null);
+    setDrawerJob(null);
+    setDrawerNode(null);
     stopLogs();
 
     setLoading(true);
@@ -623,6 +637,28 @@ export default function PodDrawer(props: {
     if (!eventsContainerFilter) return events;
     return events.filter((e) => parseContainerFromFieldPath(e.fieldPath) === eventsContainerFilter);
   }, [events, eventsContainerFilter]);
+
+  const openController = (kind: string, name: string) => {
+    switch (kind) {
+      case "ReplicaSet":
+        setDrawerReplicaSet(name);
+        return;
+      case "Deployment":
+        setDrawerDeployment(name);
+        return;
+      case "StatefulSet":
+        setDrawerStatefulSet(name);
+        return;
+      case "DaemonSet":
+        setDrawerDaemonSet(name);
+        return;
+      case "Job":
+        setDrawerJob(name);
+        return;
+      default:
+        return;
+    }
+  };
   const summaryItems = useMemo(
     () => [
       { label: "Phase", value: valueOrDash(summary?.phase) },
@@ -634,13 +670,40 @@ export default function PodDrawer(props: {
             ? `${summary.restarts} (max ${summary.maxRestarts ?? 0})`
             : "-",
       },
-      { label: "Node", value: valueOrDash(summary?.node) },
+      {
+        label: "Node",
+        value: summary?.node ? (
+          <ResourceLinkChip label={summary.node} onClick={() => setDrawerNode(summary.node)} />
+        ) : (
+          "-"
+        ),
+      },
       { label: "Pod IP", value: valueOrDash(summary?.podIP) },
       { label: "Host IP", value: valueOrDash(summary?.hostIP) },
       { label: "QoS Class", value: valueOrDash(summary?.qosClass) },
       { label: "Start Time", value: summary?.startTime ? fmtTs(summary.startTime) : "-" },
       { label: "Age", value: fmtAge(summary?.ageSec) },
-      { label: "Controller", value: formatController(summary) },
+      {
+        label: "Controller",
+        value:
+          summary?.controllerKind && summary?.controllerName ? (
+            <ResourceLinkChip
+              label={`${summary.controllerKind}/${summary.controllerName}`}
+              onClick={
+                ["ReplicaSet", "Deployment", "StatefulSet", "DaemonSet", "Job"].includes(summary.controllerKind)
+                  ? () => openController(summary.controllerKind, summary.controllerName)
+                  : undefined
+              }
+              sx={
+                ["ReplicaSet", "Deployment", "StatefulSet", "DaemonSet", "Job"].includes(summary.controllerKind)
+                  ? undefined
+                  : { opacity: 0.6 }
+              }
+            />
+          ) : (
+            "-"
+          ),
+      },
       { label: "Service Account", value: valueOrDash(summary?.serviceAccount) },
     ],
     [summary]
@@ -1586,6 +1649,47 @@ export default function PodDrawer(props: {
               token={props.token}
               namespace={drawerIngress?.namespace || ns}
               ingressName={drawerIngress?.name || null}
+            />
+            <ReplicaSetDrawer
+              open={!!drawerReplicaSet}
+              onClose={() => setDrawerReplicaSet(null)}
+              token={props.token}
+              namespace={ns}
+              replicaSetName={drawerReplicaSet}
+            />
+            <DeploymentDrawer
+              open={!!drawerDeployment}
+              onClose={() => setDrawerDeployment(null)}
+              token={props.token}
+              namespace={ns}
+              deploymentName={drawerDeployment}
+            />
+            <StatefulSetDrawer
+              open={!!drawerStatefulSet}
+              onClose={() => setDrawerStatefulSet(null)}
+              token={props.token}
+              namespace={ns}
+              statefulSetName={drawerStatefulSet}
+            />
+            <DaemonSetDrawer
+              open={!!drawerDaemonSet}
+              onClose={() => setDrawerDaemonSet(null)}
+              token={props.token}
+              namespace={ns}
+              daemonSetName={drawerDaemonSet}
+            />
+            <JobDrawer
+              open={!!drawerJob}
+              onClose={() => setDrawerJob(null)}
+              token={props.token}
+              namespace={ns}
+              jobName={drawerJob}
+            />
+            <NodeDrawer
+              open={!!drawerNode}
+              onClose={() => setDrawerNode(null)}
+              token={props.token}
+              nodeName={drawerNode}
             />
           </>
         )}
