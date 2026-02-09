@@ -25,7 +25,7 @@ import { fmtAge, valueOrDash } from "../utils/format";
 import SecretDrawer from "./SecretDrawer";
 import useListQuery from "../utils/useListQuery";
 import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
-import { listResourceAccess } from "../utils/k8sResources";
+import { getResourceLabel, listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -44,6 +44,8 @@ type Secret = {
 };
 
 type Row = Secret & { id: string };
+
+const resourceLabel = getResourceLabel("secrets");
 
 const cols: GridColDef[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
@@ -284,7 +286,7 @@ export default function SecretsTable({ token, namespace }: { token: string; name
   return (
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6" sx={{ mb: 1 }}>
-        Secrets — {namespace}
+        {resourceLabel} — {namespace}
       </Typography>
 
       <div style={{ height: 700, width: "100%" }}>
@@ -317,8 +319,8 @@ export default function SecretsTable({ token, namespace }: { token: string; name
             noRowsOverlay: {
               error,
               accessDenied,
-              emptyMessage: "No Secrets found.",
-              resourceLabel: "Secrets",
+              emptyMessage: `No ${resourceLabel} found.`,
+              resourceLabel,
             } as any,
           }}
         />

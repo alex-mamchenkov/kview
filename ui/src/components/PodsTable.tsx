@@ -26,7 +26,7 @@ import { fmtAge } from "../utils/format";
 import { eventChipColor, phaseChipColor } from "../utils/k8sUi";
 import useListQuery from "../utils/useListQuery";
 import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
-import { listResourceAccess } from "../utils/k8sResources";
+import { getResourceLabel, listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -51,6 +51,8 @@ type Pod = {
 };
 
 type Row = Pod & { id: string };
+
+const resourceLabel = getResourceLabel("pods");
 
 const cols: GridColDef[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
@@ -302,7 +304,7 @@ export default function PodsTable({ token, namespace }: { token: string; namespa
   return (
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6" sx={{ mb: 1 }}>
-        Pods — {namespace}
+        {resourceLabel} — {namespace}
       </Typography>
 
       <div style={{ height: 700, width: "100%" }}>
@@ -335,8 +337,8 @@ export default function PodsTable({ token, namespace }: { token: string; namespa
             noRowsOverlay: {
               error,
               accessDenied,
-              emptyMessage: "No pods found.",
-              resourceLabel: "Pods",
+              emptyMessage: `No ${resourceLabel} found.`,
+              resourceLabel,
             } as any,
           }}
         />

@@ -25,7 +25,7 @@ import { fmtAge, valueOrDash } from "../utils/format";
 import IngressDrawer from "./IngressDrawer";
 import useListQuery from "../utils/useListQuery";
 import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
-import { listResourceAccess } from "../utils/k8sResources";
+import { getResourceLabel, listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -45,6 +45,8 @@ type Ingress = {
 };
 
 type Row = Ingress & { id: string };
+
+const resourceLabel = getResourceLabel("ingresses");
 
 const cols: GridColDef[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
@@ -315,7 +317,7 @@ export default function IngressesTable({ token, namespace }: { token: string; na
   return (
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6" sx={{ mb: 1 }}>
-        Ingresses — {namespace}
+        {resourceLabel} — {namespace}
       </Typography>
 
       <div style={{ height: 700, width: "100%" }}>
@@ -348,8 +350,8 @@ export default function IngressesTable({ token, namespace }: { token: string; na
             noRowsOverlay: {
               error,
               accessDenied,
-              emptyMessage: "No ingresses found.",
-              resourceLabel: "Ingresses",
+              emptyMessage: `No ${resourceLabel} found.`,
+              resourceLabel,
             } as any,
           }}
         />

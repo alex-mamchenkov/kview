@@ -18,6 +18,7 @@ import {
 import StarIcon from "@mui/icons-material/Star";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 import type { Section } from "../state";
+import { getResourceLabel, isClusterScopedSection, sidebarGroups } from "../utils/k8sResources";
 
 type Props = {
   contexts: any[];
@@ -40,8 +41,7 @@ const drawerWidth = 320;
 
 export default function Sidebar(props: Props) {
   const [nsInput, setNsInput] = useState("");
-  const isClusterScoped =
-    props.section === "nodes" || props.section === "namespaces" || props.section === "persistentvolumes";
+  const isClusterScoped = isClusterScopedSection(props.section);
 
   const favSet = useMemo(() => new Set(props.favourites), [props.favourites]);
 
@@ -134,86 +134,25 @@ export default function Sidebar(props: Props) {
         <Divider />
 
         <Typography variant="subtitle2">Navigation</Typography>
-        <List dense disablePadding>
-          <ListItemButton selected={props.section === "nodes"} onClick={() => props.onSelectSection("nodes")}>
-            <ListItemText primary="Nodes" />
-          </ListItemButton>
-          <ListItemButton
-            selected={props.section === "namespaces"}
-            onClick={() => props.onSelectSection("namespaces")}
-          >
-            <ListItemText primary="Namespaces" />
-          </ListItemButton>
-          <ListItemButton selected={props.section === "pods"} onClick={() => props.onSelectSection("pods")}>
-            <ListItemText primary="Pods" />
-          </ListItemButton>
-          <ListItemButton
-            selected={props.section === "deployments"}
-            onClick={() => props.onSelectSection("deployments")}
-          >
-            <ListItemText primary="Deployments" />
-          </ListItemButton>
-          <ListItemButton
-            selected={props.section === "daemonsets"}
-            onClick={() => props.onSelectSection("daemonsets")}
-          >
-            <ListItemText primary="DaemonSets" />
-          </ListItemButton>
-        <ListItemButton
-          selected={props.section === "statefulsets"}
-          onClick={() => props.onSelectSection("statefulsets")}
-        >
-          <ListItemText primary="StatefulSets" />
-        </ListItemButton>
-          <ListItemButton
-            selected={props.section === "replicasets"}
-            onClick={() => props.onSelectSection("replicasets")}
-          >
-            <ListItemText primary="ReplicaSets" />
-          </ListItemButton>
-          <ListItemButton selected={props.section === "jobs"} onClick={() => props.onSelectSection("jobs")}>
-            <ListItemText primary="Jobs" />
-          </ListItemButton>
-          <ListItemButton selected={props.section === "cronjobs"} onClick={() => props.onSelectSection("cronjobs")}>
-            <ListItemText primary="CronJobs" />
-          </ListItemButton>
-          <ListItemButton
-            selected={props.section === "services"}
-            onClick={() => props.onSelectSection("services")}
-          >
-            <ListItemText primary="Services" />
-          </ListItemButton>
-          <ListItemButton
-            selected={props.section === "ingresses"}
-            onClick={() => props.onSelectSection("ingresses")}
-          >
-            <ListItemText primary="Ingresses" />
-          </ListItemButton>
-          <ListItemButton
-            selected={props.section === "configmaps"}
-            onClick={() => props.onSelectSection("configmaps")}
-          >
-            <ListItemText primary="ConfigMaps" />
-          </ListItemButton>
-          <ListItemButton selected={props.section === "secrets"} onClick={() => props.onSelectSection("secrets")}>
-            <ListItemText primary="Secrets" />
-          </ListItemButton>
-          <ListItemButton
-            selected={props.section === "persistentvolumes"}
-            onClick={() => props.onSelectSection("persistentvolumes")}
-          >
-            <ListItemText primary="PersistentVolumes" />
-          </ListItemButton>
-          <ListItemButton
-            selected={props.section === "persistentvolumeclaims"}
-            onClick={() => props.onSelectSection("persistentvolumeclaims")}
-          >
-            <ListItemText primary="PersistentVolumeClaims" />
-          </ListItemButton>
-          <ListItemButton selected={props.section === "helm"} onClick={() => props.onSelectSection("helm")} disabled>
-            <ListItemText primary="Helm Releases" secondary="soon" />
-          </ListItemButton>
-        </List>
+        {sidebarGroups.map((group, index) => (
+          <Box key={group.id}>
+            <Typography variant="overline" color="text.secondary">
+              {group.label}
+            </Typography>
+            <List dense disablePadding>
+              {group.items.map((item) => (
+                <ListItemButton
+                  key={item}
+                  selected={props.section === item}
+                  onClick={() => props.onSelectSection(item)}
+                >
+                  <ListItemText primary={getResourceLabel(item)} />
+                </ListItemButton>
+              ))}
+            </List>
+            {index < sidebarGroups.length - 1 ? <Divider sx={{ my: 1 }} /> : null}
+          </Box>
+        ))}
       </Box>
     </Drawer>
   );

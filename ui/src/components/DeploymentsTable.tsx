@@ -26,7 +26,7 @@ import { fmtAge } from "../utils/format";
 import { eventChipColor, statusChipColor } from "../utils/k8sUi";
 import useListQuery from "../utils/useListQuery";
 import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
-import { listResourceAccess } from "../utils/k8sResources";
+import { getResourceLabel, listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -52,6 +52,8 @@ type Deployment = {
 };
 
 type Row = Deployment & { id: string };
+
+const resourceLabel = getResourceLabel("deployments");
 
 const cols: GridColDef[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
@@ -296,7 +298,7 @@ export default function DeploymentsTable({ token, namespace }: { token: string; 
   return (
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6" sx={{ mb: 1 }}>
-        Deployments — {namespace}
+        {resourceLabel} — {namespace}
       </Typography>
 
       <div style={{ height: 700, width: "100%" }}>
@@ -329,8 +331,8 @@ export default function DeploymentsTable({ token, namespace }: { token: string; 
             noRowsOverlay: {
               error,
               accessDenied,
-              emptyMessage: "No deployments found.",
-              resourceLabel: "Deployments",
+              emptyMessage: `No ${resourceLabel} found.`,
+              resourceLabel,
             } as any,
           }}
         />

@@ -314,6 +314,12 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Added PV ↔ PVC cross-navigation with RBAC-aware link gating.
 - Normalized access-denied API responses for list views when clusters return "not allowed".
 
+## 2026-02-09 — Sidebar navigation polish
+### UI
+- Grouped sidebar navigation by workload, networking, configuration, storage, and cluster categories.
+- Standardized human-readable resource labels in sidebar and list titles (no abbreviations).
+- Removed ReplicaSets from primary sidebar navigation (still available via lists/deep-links).
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

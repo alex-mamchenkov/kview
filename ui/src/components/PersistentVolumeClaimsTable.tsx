@@ -26,7 +26,7 @@ import { pvcPhaseChipColor } from "../utils/k8sUi";
 import PersistentVolumeClaimDrawer from "./PersistentVolumeClaimDrawer";
 import useListQuery from "../utils/useListQuery";
 import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
-import { listResourceAccess } from "../utils/k8sResources";
+import { getResourceLabel, listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -49,6 +49,8 @@ type PersistentVolumeClaim = {
 };
 
 type Row = PersistentVolumeClaim & { id: string };
+
+const resourceLabel = getResourceLabel("persistentvolumeclaims");
 
 function formatSize(requested?: string, capacity?: string) {
   const req = requested || "";
@@ -328,7 +330,7 @@ export default function PersistentVolumeClaimsTable({ token, namespace }: { toke
   return (
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6" sx={{ mb: 1 }}>
-        PersistentVolumeClaims — {namespace}
+        {resourceLabel} — {namespace}
       </Typography>
 
       <div style={{ height: 700, width: "100%" }}>
@@ -361,8 +363,8 @@ export default function PersistentVolumeClaimsTable({ token, namespace }: { toke
             noRowsOverlay: {
               error,
               accessDenied,
-              emptyMessage: "No PersistentVolumeClaims found.",
-              resourceLabel: "PersistentVolumeClaims",
+              emptyMessage: `No ${resourceLabel} found.`,
+              resourceLabel,
             } as any,
           }}
         />

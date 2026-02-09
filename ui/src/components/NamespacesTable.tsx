@@ -26,7 +26,7 @@ import { fmtAge } from "../utils/format";
 import { namespacePhaseChipColor } from "../utils/k8sUi";
 import useListQuery from "../utils/useListQuery";
 import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
-import { listResourceAccess } from "../utils/k8sResources";
+import { getResourceLabel, listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -43,6 +43,8 @@ type Namespace = {
 };
 
 type Row = Namespace & { id: string };
+
+const resourceLabel = getResourceLabel("namespaces");
 
 const cols: GridColDef[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 220 },
@@ -275,7 +277,7 @@ export default function NamespacesTable({ token }: { token: string }) {
   return (
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6" sx={{ mb: 1 }}>
-        Namespaces
+        {resourceLabel}
       </Typography>
 
       <div style={{ height: 700, width: "100%" }}>
@@ -308,8 +310,8 @@ export default function NamespacesTable({ token }: { token: string }) {
             noRowsOverlay: {
               error,
               accessDenied,
-              emptyMessage: "No namespaces found.",
-              resourceLabel: "Namespaces",
+              emptyMessage: `No ${resourceLabel} found.`,
+              resourceLabel,
             } as any,
           }}
         />

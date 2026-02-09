@@ -8,6 +8,10 @@ Each phase builds on the previous one and should be completed **incrementally**,
 
 Refactors and cleanups are allowed between phases if they support scalability and consistency.
 
+Recent UX polish (2026-02-09):
+- Grouped sidebar navigation by resource category.
+- Standardized human-readable resource labels in navigation and list titles.
+
 ---
 
 ## Guiding principles

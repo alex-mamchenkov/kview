@@ -26,7 +26,7 @@ import { fmtAge } from "../utils/format";
 import { jobStatusChipColor } from "../utils/k8sUi";
 import useListQuery from "../utils/useListQuery";
 import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
-import { listResourceAccess } from "../utils/k8sResources";
+import { getResourceLabel, listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -47,6 +47,8 @@ type Job = {
 };
 
 type Row = Job & { id: string };
+
+const resourceLabel = getResourceLabel("jobs");
 
 const cols: GridColDef[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
@@ -289,7 +291,7 @@ export default function JobsTable({ token, namespace }: { token: string; namespa
   return (
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6" sx={{ mb: 1 }}>
-        Jobs — {namespace}
+        {resourceLabel} — {namespace}
       </Typography>
 
       <div style={{ height: 700, width: "100%" }}>
@@ -322,8 +324,8 @@ export default function JobsTable({ token, namespace }: { token: string; namespa
             noRowsOverlay: {
               error,
               accessDenied,
-              emptyMessage: "No jobs found.",
-              resourceLabel: "Jobs",
+              emptyMessage: `No ${resourceLabel} found.`,
+              resourceLabel,
             } as any,
           }}
         />

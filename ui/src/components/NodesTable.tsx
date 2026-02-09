@@ -26,7 +26,7 @@ import { fmtAge, valueOrDash } from "../utils/format";
 import { nodeStatusChipColor } from "../utils/k8sUi";
 import useListQuery from "../utils/useListQuery";
 import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
-import { listResourceAccess } from "../utils/k8sResources";
+import { getResourceLabel, listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -48,6 +48,8 @@ type Node = {
 };
 
 type Row = Node & { id: string };
+
+const resourceLabel = getResourceLabel("nodes");
 
 const cols: GridColDef[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 220 },
@@ -313,7 +315,7 @@ export default function NodesTable({ token }: { token: string }) {
   return (
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6" sx={{ mb: 1 }}>
-        Nodes
+        {resourceLabel}
       </Typography>
 
       <div style={{ height: 700, width: "100%" }}>
@@ -346,8 +348,8 @@ export default function NodesTable({ token }: { token: string }) {
             noRowsOverlay: {
               error,
               accessDenied,
-              emptyMessage: "No nodes found.",
-              resourceLabel: "Nodes",
+              emptyMessage: `No ${resourceLabel} found.`,
+              resourceLabel,
             } as any,
           }}
         />

@@ -25,7 +25,7 @@ import { fmtAge, valueOrDash } from "../utils/format";
 import ServiceDrawer from "./ServiceDrawer";
 import useListQuery from "../utils/useListQuery";
 import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
-import { listResourceAccess } from "../utils/k8sResources";
+import { getResourceLabel, listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -46,6 +46,8 @@ type Service = {
 };
 
 type Row = Service & { id: string };
+
+const resourceLabel = getResourceLabel("services");
 
 function formatEndpointsSummary(ready?: number, notReady?: number) {
   const r = ready || 0;
@@ -309,7 +311,7 @@ export default function ServicesTable({ token, namespace }: { token: string; nam
   return (
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6" sx={{ mb: 1 }}>
-        Services — {namespace}
+        {resourceLabel} — {namespace}
       </Typography>
 
       <div style={{ height: 700, width: "100%" }}>
@@ -342,8 +344,8 @@ export default function ServicesTable({ token, namespace }: { token: string; nam
             noRowsOverlay: {
               error,
               accessDenied,
-              emptyMessage: "No services found.",
-              resourceLabel: "Services",
+              emptyMessage: `No ${resourceLabel} found.`,
+              resourceLabel,
             } as any,
           }}
         />

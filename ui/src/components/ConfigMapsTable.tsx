@@ -25,7 +25,7 @@ import { fmtAge, valueOrDash } from "../utils/format";
 import ConfigMapDrawer from "./ConfigMapDrawer";
 import useListQuery from "../utils/useListQuery";
 import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
-import { listResourceAccess } from "../utils/k8sResources";
+import { getResourceLabel, listResourceAccess } from "../utils/k8sResources";
 import {
   loadListTextFilter,
   loadQuickFilterSelection,
@@ -43,6 +43,8 @@ type ConfigMap = {
 };
 
 type Row = ConfigMap & { id: string };
+
+const resourceLabel = getResourceLabel("configmaps");
 
 const cols: GridColDef[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
@@ -277,7 +279,7 @@ export default function ConfigMapsTable({ token, namespace }: { token: string; n
   return (
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6" sx={{ mb: 1 }}>
-        ConfigMaps — {namespace}
+        {resourceLabel} — {namespace}
       </Typography>
 
       <div style={{ height: 700, width: "100%" }}>
@@ -310,8 +312,8 @@ export default function ConfigMapsTable({ token, namespace }: { token: string; n
             noRowsOverlay: {
               error,
               accessDenied,
-              emptyMessage: "No ConfigMaps found.",
-              resourceLabel: "ConfigMaps",
+              emptyMessage: `No ${resourceLabel} found.`,
+              resourceLabel,
             } as any,
           }}
         />
