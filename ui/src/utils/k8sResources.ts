@@ -6,6 +6,7 @@ export type AccessReviewResource = {
 export type ListResourceKey =
   | "pods"
   | "deployments"
+  | "statefulsets"
   | "replicasets"
   | "services"
   | "ingresses"
@@ -19,6 +20,7 @@ export type ListResourceKey =
 export const listResourceAccess: Record<ListResourceKey, AccessReviewResource> = {
   pods: { group: "", resource: "pods" },
   deployments: { group: "apps", resource: "deployments" },
+  statefulsets: { group: "apps", resource: "statefulsets" },
   replicasets: { group: "apps", resource: "replicasets" },
   services: { group: "", resource: "services" },
   ingresses: { group: "networking.k8s.io", resource: "ingresses" },

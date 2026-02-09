@@ -228,6 +228,20 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Added Namespace drawer with tabs: Overview, Conditions, YAML.
 - Treated Namespaces as cluster-scoped for sidebar namespace selector.
 
+## 2026-02-09 — StatefulSets list + details
+### Backend
+- Added StatefulSets endpoints:
+  - `/api/namespaces/{ns}/statefulsets`
+  - `/api/namespaces/{ns}/statefulsets/{name}`
+  - `/api/namespaces/{ns}/statefulsets/{name}/events`
+  - `/api/namespaces/{ns}/statefulsets/{name}/yaml`
+- Added StatefulSet list/detail DTOs (replica summary, update strategy, selector, pods, spec summary).
+
+### UI
+- Added StatefulSets table with ready/service/age columns and RBAC-aware empty states.
+- Added StatefulSet drawer with tabs: Overview, Pods, Spec, Events, YAML.
+- Enabled navigation: StatefulSet → Pod drawer.
+
 ## 2026-02-09 — ConfigMaps list + details (read-only)
 ### Backend
 - Added ConfigMaps endpoints:

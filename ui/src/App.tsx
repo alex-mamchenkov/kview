@@ -5,6 +5,7 @@ import NodesTable from "./components/NodesTable";
 import NamespacesTable from "./components/NamespacesTable";
 import PodsTable from "./components/PodsTable";
 import DeploymentsTable from "./components/DeploymentsTable";
+import StatefulSetsTable from "./components/StatefulSetsTable";
 import ReplicaSetsTable from "./components/ReplicaSetsTable";
 import ServicesTable from "./components/ServicesTable";
 import IngressesTable from "./components/IngressesTable";
@@ -172,6 +173,9 @@ export default function App() {
         {section === "pods" && namespace ? <PodsTable token={token} namespace={namespace} /> : null}
         {section === "deployments" && namespace ? (
           <DeploymentsTable token={token} namespace={namespace} />
+        ) : null}
+        {section === "statefulsets" && namespace ? (
+          <StatefulSetsTable token={token} namespace={namespace} />
         ) : null}
         {section === "replicasets" && namespace ? (
           <ReplicaSetsTable token={token} namespace={namespace} />

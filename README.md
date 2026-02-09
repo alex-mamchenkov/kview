@@ -38,6 +38,11 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - single selection
   - refresh interval + last refresh timestamp
   - last event summary
+- StatefulSets view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
 - ReplicaSets view:
   - sorting
   - filtering
@@ -84,6 +89,11 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - overview summary + conditions
   - rollout summary + diagnostics
   - ReplicaSets table with click-through to ReplicaSet drawer
+  - pods list with click-through to Pod drawer
+  - spec summary (template, scheduling, volumes, metadata)
+  - events, YAML
+- StatefulSet details drawer:
+  - overview summary + conditions
   - pods list with click-through to Pod drawer
   - spec summary (template, scheduling, volumes, metadata)
   - events, YAML

@@ -84,6 +84,19 @@ First-class rollout understanding without inspecting YAML manually.
 
 ---
 
+## Workloads coverage (namespaced)
+
+- [x] Pods
+- [x] Deployments
+- [x] ReplicaSets
+- [x] StatefulSets
+- [x] Jobs
+- [x] CronJobs
+
+Note: some phase checkboxes may be stale compared to `docs/HISTORY.md`; reconcile in a follow-up pass.
+
+---
+
 ## Phase 3 — Batch & Background Workloads
 
 Understand **non-service workloads**.
