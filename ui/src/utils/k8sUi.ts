@@ -97,3 +97,18 @@ export function pvcPhaseChipColor(phase?: string | null): ChipColor {
       return "default";
   }
 }
+
+export function pvPhaseChipColor(phase?: string | null): ChipColor {
+  switch (phase) {
+    case "Available":
+      return "success";
+    case "Bound":
+      return "success";
+    case "Released":
+      return "warning";
+    case "Failed":
+      return "error";
+    default:
+      return "default";
+  }
+}

@@ -83,6 +83,11 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - filtering
   - single selection
   - refresh interval + last refresh timestamp
+- PersistentVolumes view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
 - PersistentVolumeClaims view:
   - sorting
   - filtering
@@ -144,6 +149,10 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - overview summary + metadata
   - keys list (no values)
   - events
+- PersistentVolume details drawer:
+  - overview summary + status
+  - spec summary (access modes, volume mode, reclaim policy, volume source)
+  - events, YAML
 - PersistentVolumeClaim details drawer:
   - overview summary + status
   - spec summary (access modes, volume mode, requests)

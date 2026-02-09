@@ -55,7 +55,7 @@ async function parseErrorResponse(res: Response): Promise<ApiErrorShape> {
       try {
         const parsed = JSON.parse(raw);
         const msg = extractJsonMessage(parsed);
-        if (msg) return { status, message: msg };
+        if (msg) return normalizeAccessDenied({ status, message: msg });
       } catch {
         // fall through to raw handling
       }
@@ -63,18 +63,28 @@ async function parseErrorResponse(res: Response): Promise<ApiErrorShape> {
     const looksHtml = /<\s*html/i.test(raw) || /<!doctype/i.test(raw) || /<\s*body/i.test(raw);
     if (looksHtml) {
       const stripped = stripHtml(raw);
-      if (stripped) return { status, message: stripped };
+      if (stripped) return normalizeAccessDenied({ status, message: stripped });
     }
-    return { status, message: raw };
+    return normalizeAccessDenied({ status, message: raw });
   }
   const fallback = res.statusText || String(res.status || "");
-  return { status, message: fallback };
+  return normalizeAccessDenied({ status, message: fallback });
 }
 
 function toError(shape: ApiErrorShape): Error {
   const err = new Error(shape.message);
   (err as Error & { status?: number }).status = shape.status;
   return err;
+}
+
+function normalizeAccessDenied(shape: ApiErrorShape): ApiErrorShape {
+  const status = shape.status;
+  if (status !== 400 || !shape.message) return shape;
+  const msg = shape.message.toLowerCase();
+  if (msg.includes("not allowed") || msg.includes("forbidden")) {
+    return { ...shape, status: 403 };
+  }
+  return shape;
 }
 
 export function toApiError(error: unknown): ApiError {

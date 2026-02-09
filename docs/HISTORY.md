@@ -299,6 +299,21 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Added PersistentVolumeClaims table with status, storage class, size, volume, access modes, age.
 - Added PVC drawer with tabs: Overview, Spec, Events, YAML.
 
+## 2026-02-09 — PersistentVolumes list + details
+### Backend
+- Added PersistentVolumes endpoints:
+  - `/api/persistentvolumes`
+  - `/api/persistentvolumes/{name}`
+  - `/api/persistentvolumes/{name}/events`
+  - `/api/persistentvolumes/{name}/yaml`
+- Added PV list/detail DTOs (phase, capacity, access modes, reclaim policy, storage class, claim ref, volume source summary).
+
+### UI
+- Added PersistentVolumes table with phase, capacity, storage class, reclaim policy, claim, age.
+- Added PV drawer with tabs: Overview, Spec, Events, YAML.
+- Added PV ↔ PVC cross-navigation with RBAC-aware link gating.
+- Normalized access-denied API responses for list views when clusters return "not allowed".
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

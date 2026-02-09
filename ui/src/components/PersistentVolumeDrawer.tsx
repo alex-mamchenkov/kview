@@ -9,65 +9,73 @@ import {
   Divider,
   CircularProgress,
   Chip,
-  Button,
   Table,
   TableHead,
   TableRow,
   TableCell,
   TableBody,
+  Button,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { apiGet } from "../api";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
-import { eventChipColor, pvcPhaseChipColor } from "../utils/k8sUi";
+import { eventChipColor, pvPhaseChipColor } from "../utils/k8sUi";
 import Section from "./shared/Section";
 import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
-import PersistentVolumeDrawer from "./PersistentVolumeDrawer";
+import PersistentVolumeClaimDrawer from "./PersistentVolumeClaimDrawer";
 import useAccessReview from "../utils/useAccessReview";
 import { listResourceAccess } from "../utils/k8sResources";
 
-type PersistentVolumeClaimDetails = {
-  summary: PersistentVolumeClaimSummary;
-  spec: PersistentVolumeClaimSpec;
-  status: PersistentVolumeClaimStatus;
-  metadata: PersistentVolumeClaimMetadata;
+type PersistentVolumeDetails = {
+  summary: PersistentVolumeSummary;
+  spec: PersistentVolumeSpec;
+  status: PersistentVolumeStatus;
+  metadata: PersistentVolumeMetadata;
   yaml: string;
 };
 
-type PersistentVolumeClaimSummary = {
+type PersistentVolumeSummary = {
   name: string;
-  namespace: string;
   phase?: string;
-  storageClassName?: string;
-  volumeName?: string;
-  accessModes?: string[];
-  requestedStorage?: string;
   capacity?: string;
+  accessModes?: string[];
+  storageClassName?: string;
+  reclaimPolicy?: string;
   volumeMode?: string;
+  claimRef?: PersistentVolumeClaimRef;
   ageSec?: number;
   createdAt?: number;
 };
 
-type PersistentVolumeClaimSpec = {
+type PersistentVolumeSpec = {
   accessModes?: string[];
   volumeMode?: string;
-  requests?: { storage?: string };
-  selector?: LabelSelector;
-  dataSource?: DataSourceRef;
-  dataSourceRef?: DataSourceRef;
-  finalizers?: string[];
+  storageClassName?: string;
+  reclaimPolicy?: string;
+  mountOptions?: string[];
+  volumeSource?: PersistentVolumeSource;
 };
 
-type PersistentVolumeClaimStatus = {
+type PersistentVolumeSource = {
+  type?: string;
+  details?: PersistentVolumeSourceDetail[];
+};
+
+type PersistentVolumeSourceDetail = {
+  label: string;
+  value: string;
+};
+
+type PersistentVolumeStatus = {
   phase?: string;
   capacity?: string;
-  conditions?: PersistentVolumeClaimCondition[];
+  conditions?: PersistentVolumeCondition[];
 };
 
-type PersistentVolumeClaimCondition = {
+type PersistentVolumeCondition = {
   type?: string;
   status?: string;
   reason?: string;
@@ -75,26 +83,14 @@ type PersistentVolumeClaimCondition = {
   lastTransitionTime?: number;
 };
 
-type PersistentVolumeClaimMetadata = {
+type PersistentVolumeMetadata = {
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
 };
 
-type LabelSelector = {
-  matchLabels?: Record<string, string>;
-  matchExpressions?: LabelSelectorExpression[];
-};
-
-type LabelSelectorExpression = {
-  key?: string;
-  operator?: string;
-  values?: string[];
-};
-
-type DataSourceRef = {
-  kind?: string;
+type PersistentVolumeClaimRef = {
+  namespace?: string;
   name?: string;
-  apiGroup?: string;
 };
 
 type EventDTO = {
@@ -111,35 +107,31 @@ function formatAccessModes(modes?: string[]) {
   return modes.join(", ");
 }
 
-function formatDataSource(ds?: DataSourceRef) {
-  if (!ds?.kind && !ds?.name) return "-";
-  const base = [ds.kind, ds.name].filter(Boolean).join("/");
-  return ds?.apiGroup ? `${base} (${ds.apiGroup})` : base;
+function formatMountOptions(opts?: string[]) {
+  if (!opts || opts.length === 0) return "-";
+  return opts.join(", ");
 }
 
-function formatExpression(expr: LabelSelectorExpression) {
-  const values = (expr.values || []).join(", ");
-  if (!expr.key && !expr.operator) return "-";
-  if (!values) return `${expr.key} ${expr.operator}`.trim();
-  return `${expr.key} ${expr.operator} (${values})`.trim();
+function formatClaimRef(ref?: PersistentVolumeClaimRef) {
+  if (!ref?.name) return "-";
+  if (ref.namespace) return `${ref.namespace}/${ref.name}`;
+  return ref.name;
 }
 
-export default function PersistentVolumeClaimDrawer(props: {
+export default function PersistentVolumeDrawer(props: {
   open: boolean;
   onClose: () => void;
   token: string;
-  namespace: string;
-  persistentVolumeClaimName: string | null;
+  persistentVolumeName: string | null;
 }) {
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [details, setDetails] = useState<PersistentVolumeClaimDetails | null>(null);
+  const [details, setDetails] = useState<PersistentVolumeDetails | null>(null);
   const [events, setEvents] = useState<EventDTO[]>([]);
   const [err, setErr] = useState("");
-  const [drawerPV, setDrawerPV] = useState<string | null>(null);
+  const [drawerPVC, setDrawerPVC] = useState<{ name: string; namespace: string } | null>(null);
 
-  const ns = props.namespace;
-  const name = props.persistentVolumeClaimName;
+  const name = props.persistentVolumeName;
 
   useEffect(() => {
     if (!props.open || !name) return;
@@ -148,65 +140,61 @@ export default function PersistentVolumeClaimDrawer(props: {
     setErr("");
     setDetails(null);
     setEvents([]);
-    setDrawerPV(null);
+    setDrawerPVC(null);
     setLoading(true);
 
     (async () => {
-      const det = await apiGet<any>(
-        `/api/namespaces/${encodeURIComponent(ns)}/persistentvolumeclaims/${encodeURIComponent(name)}`,
-        props.token
-      );
-      const item: PersistentVolumeClaimDetails | null = det?.item ?? null;
+      const det = await apiGet<any>(`/api/persistentvolumes/${encodeURIComponent(name)}`, props.token);
+      const item: PersistentVolumeDetails | null = det?.item ?? null;
       setDetails(item);
 
-      const ev = await apiGet<any>(
-        `/api/namespaces/${encodeURIComponent(ns)}/persistentvolumeclaims/${encodeURIComponent(name)}/events`,
-        props.token
-      );
+      const ev = await apiGet<any>(`/api/persistentvolumes/${encodeURIComponent(name)}/events`, props.token);
       setEvents(ev?.items || []);
     })()
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false));
-  }, [props.open, name, ns, props.token]);
+  }, [props.open, name, props.token]);
 
   const summary = details?.summary;
   const spec = details?.spec;
   const metadata = details?.metadata;
   const status = details?.status;
-  const volumeName = summary?.volumeName;
-  const pvAccess = useAccessReview({
+  const claimRef = summary?.claimRef;
+  const claimNs = claimRef?.namespace || "";
+  const claimName = claimRef?.name || "";
+
+  const pvcAccess = useAccessReview({
     token: props.token,
-    resource: listResourceAccess.persistentvolumes,
-    namespace: null,
+    resource: listResourceAccess.persistentvolumeclaims,
+    namespace: claimNs || null,
     verb: "get",
-    enabled: !!volumeName,
+    enabled: !!claimName && !!claimNs,
   });
-  const showPvDeniedHint = !!volumeName && pvAccess.allowed === false;
+  const showPvcDeniedHint = !!claimName && !!claimNs && pvcAccess.allowed === false;
 
   const summaryItems = useMemo(
     () => [
       { label: "Name", value: valueOrDash(summary?.name), monospace: true },
-      { label: "Namespace", value: valueOrDash(summary?.namespace) },
       {
-        label: "Status",
-        value: <Chip size="small" label={valueOrDash(summary?.phase)} color={pvcPhaseChipColor(summary?.phase)} />,
+        label: "Phase",
+        value: <Chip size="small" label={valueOrDash(summary?.phase)} color={pvPhaseChipColor(summary?.phase)} />,
       },
-      { label: "Storage Class", value: valueOrDash(summary?.storageClassName) },
-      { label: "Volume Mode", value: valueOrDash(summary?.volumeMode) },
-      { label: "Access Modes", value: formatAccessModes(summary?.accessModes) },
-      { label: "Requested", value: valueOrDash(summary?.requestedStorage) },
       { label: "Capacity", value: valueOrDash(summary?.capacity) },
+      { label: "Access Modes", value: formatAccessModes(summary?.accessModes) },
+      { label: "Storage Class", value: valueOrDash(summary?.storageClassName) },
+      { label: "Reclaim Policy", value: valueOrDash(summary?.reclaimPolicy) },
+      { label: "Volume Mode", value: valueOrDash(summary?.volumeMode) },
       {
-        label: "Bound PV",
-        value: volumeName ? (
+        label: "Claim",
+        value: claimName ? (
           <Button
             variant="text"
             size="small"
-            disabled={!pvAccess.allowed}
-            onClick={() => setDrawerPV(volumeName)}
+            disabled={!claimNs || !pvcAccess.allowed}
+            onClick={() => setDrawerPVC({ name: claimName, namespace: claimNs })}
             sx={{ textTransform: "none", p: 0, minWidth: "auto" }}
           >
-            {volumeName}
+            {formatClaimRef(claimRef)}
           </Button>
         ) : (
           "-"
@@ -216,12 +204,11 @@ export default function PersistentVolumeClaimDrawer(props: {
       { label: "Age", value: fmtAge(summary?.ageSec) },
       { label: "Created", value: summary?.createdAt ? fmtTs(summary.createdAt) : "-" },
     ],
-    [summary, volumeName, pvAccess.allowed]
+    [summary, claimName, claimNs, pvcAccess.allowed, claimRef]
   );
 
-  const selectorLabels = Object.entries(spec?.selector?.matchLabels || {});
-  const selectorExpr = spec?.selector?.matchExpressions || [];
-  const finalizers = spec?.finalizers || [];
+  const source = spec?.volumeSource;
+  const sourceDetails = source?.details || [];
   const conditions = status?.conditions || [];
 
   return (
@@ -241,7 +228,7 @@ export default function PersistentVolumeClaimDrawer(props: {
       <Box sx={{ width: 820, p: 2, display: "flex", flexDirection: "column", height: "100%" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            PVC: {name || "-"} <Typography component="span" variant="body2">({ns})</Typography>
+            PV: {name || "-"}
           </Typography>
           <IconButton onClick={props.onClose}>
             <CloseIcon />
@@ -271,16 +258,16 @@ export default function PersistentVolumeClaimDrawer(props: {
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
                   <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
                     <KeyValueTable rows={summaryItems} columns={3} />
-                    {showPvDeniedHint ? (
+                    {showPvcDeniedHint ? (
                       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-                        Access denied: you don't have permission to view PersistentVolumes.
+                        Access denied: you don't have permission to view PersistentVolumeClaims.
                       </Typography>
                     ) : null}
                   </Box>
 
                   <Section title="Status">
                     {conditions.length === 0 ? (
-                      <EmptyState message="No conditions reported for this PVC." sx={{ mt: 1 }} />
+                      <EmptyState message="No conditions reported for this PV." sx={{ mt: 1 }} />
                     ) : (
                       <Table size="small" sx={{ mt: 1 }}>
                         <TableHead>
@@ -351,46 +338,26 @@ export default function PersistentVolumeClaimDrawer(props: {
                       rows={[
                         { label: "Access Modes", value: formatAccessModes(spec?.accessModes) },
                         { label: "Volume Mode", value: valueOrDash(spec?.volumeMode) },
-                        { label: "Requested Storage", value: valueOrDash(spec?.requests?.storage) },
+                        { label: "Storage Class", value: valueOrDash(spec?.storageClassName) },
+                        { label: "Reclaim Policy", value: valueOrDash(spec?.reclaimPolicy) },
                         { label: "Capacity", value: valueOrDash(status?.capacity) },
-                        { label: "Data Source", value: formatDataSource(spec?.dataSource) },
-                        { label: "Data Source Ref", value: formatDataSource(spec?.dataSourceRef) },
+                        { label: "Mount Options", value: formatMountOptions(spec?.mountOptions) },
                       ]}
                     />
                   </Section>
 
-                  <Section title="Selector">
-                    {selectorLabels.length === 0 && selectorExpr.length === 0 ? (
-                      <EmptyState message="No selector defined." sx={{ mt: 1 }} />
+                  <Section title="Volume Source">
+                    {!source?.type && sourceDetails.length === 0 ? (
+                      <EmptyState message="No volume source details available." sx={{ mt: 1 }} />
                     ) : (
-                      <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 1 }}>
-                        {selectorLabels.length > 0 && (
-                          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                            {selectorLabels.map(([k, v]) => (
-                              <Chip key={`${k}=${v}`} size="small" label={`${k}=${v}`} />
-                            ))}
-                          </Box>
-                        )}
-                        {selectorExpr.length > 0 && (
-                          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                            {selectorExpr.map((expr, idx) => (
-                              <Chip key={`${expr.key ?? "expr"}-${idx}`} size="small" label={formatExpression(expr)} />
-                            ))}
-                          </Box>
-                        )}
-                      </Box>
-                    )}
-                  </Section>
-
-                  <Section title="Finalizers">
-                    {finalizers.length === 0 ? (
-                      <EmptyState message="No finalizers." sx={{ mt: 1 }} />
-                    ) : (
-                      <Box sx={{ mt: 1, display: "flex", gap: 1, flexWrap: "wrap" }}>
-                        {finalizers.map((f) => (
-                          <Chip key={f} size="small" label={f} />
-                        ))}
-                      </Box>
+                      <KeyValueTable
+                        columns={2}
+                        sx={{ mt: 1 }}
+                        rows={[
+                          { label: "Type", value: valueOrDash(source?.type) },
+                          ...sourceDetails.map((d) => ({ label: d.label, value: valueOrDash(d.value) })),
+                        ]}
+                      />
                     )}
                   </Section>
                 </Box>
@@ -400,7 +367,7 @@ export default function PersistentVolumeClaimDrawer(props: {
               {tab === 2 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
                   {events.length === 0 ? (
-                    <EmptyState message="No events found for this PVC." />
+                    <EmptyState message="No events found for this PV." />
                   ) : (
                     events.map((e, idx) => (
                       <Box key={idx} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.25 }}>
@@ -436,11 +403,13 @@ export default function PersistentVolumeClaimDrawer(props: {
           </>
         )}
       </Box>
-      <PersistentVolumeDrawer
-        open={!!drawerPV}
-        onClose={() => setDrawerPV(null)}
+
+      <PersistentVolumeClaimDrawer
+        open={!!drawerPVC}
+        onClose={() => setDrawerPVC(null)}
         token={props.token}
-        persistentVolumeName={drawerPV}
+        namespace={drawerPVC?.namespace || ""}
+        persistentVolumeClaimName={drawerPVC?.name || null}
       />
     </Drawer>
   );

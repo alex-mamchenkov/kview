@@ -164,6 +164,10 @@ Faster diagnosis of config-related issues without compromising security.
 
 Understand **how storage is provisioned and bound**.
 
+- [x] PersistentVolumes (PVs)
+  - Capacity, access modes, reclaim policy, storage class, phase
+  - Bound PVC link (read-only)
+  - Events, YAML
 - [x] PersistentVolumeClaims (PVCs)
   - Status (Pending/Bound/Lost) and access modes
   - Requested vs capacity size

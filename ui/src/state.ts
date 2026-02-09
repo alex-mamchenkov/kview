@@ -12,6 +12,7 @@ export type Section =
   | "ingresses"
   | "configmaps"
   | "secrets"
+  | "persistentvolumes"
   | "persistentvolumeclaims"
   | "helm";
 

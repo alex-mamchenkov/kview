@@ -40,7 +40,8 @@ const drawerWidth = 320;
 
 export default function Sidebar(props: Props) {
   const [nsInput, setNsInput] = useState("");
-  const isClusterScoped = props.section === "nodes" || props.section === "namespaces";
+  const isClusterScoped =
+    props.section === "nodes" || props.section === "namespaces" || props.section === "persistentvolumes";
 
   const favSet = useMemo(() => new Set(props.favourites), [props.favourites]);
 
@@ -196,6 +197,12 @@ export default function Sidebar(props: Props) {
           </ListItemButton>
           <ListItemButton selected={props.section === "secrets"} onClick={() => props.onSelectSection("secrets")}>
             <ListItemText primary="Secrets" />
+          </ListItemButton>
+          <ListItemButton
+            selected={props.section === "persistentvolumes"}
+            onClick={() => props.onSelectSection("persistentvolumes")}
+          >
+            <ListItemText primary="PersistentVolumes" />
           </ListItemButton>
           <ListItemButton
             selected={props.section === "persistentvolumeclaims"}

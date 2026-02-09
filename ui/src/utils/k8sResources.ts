@@ -16,6 +16,7 @@ export type ListResourceKey =
   | "configmaps"
   | "secrets"
   | "persistentvolumeclaims"
+  | "persistentvolumes"
   | "nodes"
   | "namespaces";
 
@@ -32,6 +33,7 @@ export const listResourceAccess: Record<ListResourceKey, AccessReviewResource> =
   configmaps: { group: "", resource: "configmaps" },
   secrets: { group: "", resource: "secrets" },
   persistentvolumeclaims: { group: "", resource: "persistentvolumeclaims" },
+  persistentvolumes: { group: "", resource: "persistentvolumes" },
   nodes: { group: "", resource: "nodes" },
   namespaces: { group: "", resource: "namespaces" },
 };
