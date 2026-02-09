@@ -3,6 +3,7 @@ export type Section =
   | "nodes"
   | "namespaces"
   | "deployments"
+  | "daemonsets"
   | "statefulsets"
   | "replicasets"
   | "jobs"

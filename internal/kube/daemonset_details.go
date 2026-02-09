@@ -15,13 +15,13 @@ import (
 	"kview/internal/kube/dto"
 )
 
-func GetStatefulSetDetails(ctx context.Context, c *cluster.Clients, namespace, name string) (*dto.StatefulSetDetailsDTO, error) {
-	set, err := c.Clientset.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
+func GetDaemonSetDetails(ctx context.Context, c *cluster.Clients, namespace, name string) (*dto.DaemonSetDetailsDTO, error) {
+	set, err := c.Clientset.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	y, err := statefulSetYAML(set)
+	y, err := daemonSetYAML(set)
 	if err != nil {
 		return nil, err
 	}
@@ -35,11 +35,6 @@ func GetStatefulSetDetails(ctx context.Context, c *cluster.Clients, namespace, n
 		}
 	}
 
-	desired := int32(0)
-	if set.Spec.Replicas != nil {
-		desired = *set.Spec.Replicas
-	}
-
 	age := int64(0)
 	if !set.CreationTimestamp.IsZero() {
 		age = int64(now.Sub(set.CreationTimestamp.Time).Seconds())
@@ -50,46 +45,39 @@ func GetStatefulSetDetails(ctx context.Context, c *cluster.Clients, namespace, n
 		strategy = "RollingUpdate"
 	}
 
-	podManagementPolicy := string(set.Spec.PodManagementPolicy)
-	if podManagementPolicy == "" {
-		podManagementPolicy = "OrderedReady"
+	maxUnavailable := ""
+	maxSurge := ""
+	if set.Spec.UpdateStrategy.RollingUpdate != nil {
+		if set.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable != nil {
+			maxUnavailable = intOrString(*set.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable)
+		}
+		if set.Spec.UpdateStrategy.RollingUpdate.MaxSurge != nil {
+			maxSurge = intOrString(*set.Spec.UpdateStrategy.RollingUpdate.MaxSurge)
+		}
 	}
 
-	var updatePartition *int32
-	if set.Spec.UpdateStrategy.RollingUpdate != nil && set.Spec.UpdateStrategy.RollingUpdate.Partition != nil {
-		val := *set.Spec.UpdateStrategy.RollingUpdate.Partition
-		updatePartition = &val
+	summary := dto.DaemonSetSummaryDTO{
+		Name:           set.Name,
+		Namespace:      set.Namespace,
+		UpdateStrategy: strategy,
+		MaxUnavailable: maxUnavailable,
+		MaxSurge:       maxSurge,
+		Selector:       selector,
+		Desired:        set.Status.DesiredNumberScheduled,
+		Current:        set.Status.CurrentNumberScheduled,
+		Ready:          set.Status.NumberReady,
+		Updated:        set.Status.UpdatedNumberScheduled,
+		Available:      set.Status.NumberAvailable,
+		AgeSec:         age,
 	}
 
-	var revisionHistoryLimit *int32
-	if set.Spec.RevisionHistoryLimit != nil {
-		val := *set.Spec.RevisionHistoryLimit
-		revisionHistoryLimit = &val
-	}
-
-	summary := dto.StatefulSetSummaryDTO{
-		Name:                 set.Name,
-		Namespace:            set.Namespace,
-		ServiceName:          set.Spec.ServiceName,
-		PodManagementPolicy:  podManagementPolicy,
-		UpdateStrategy:       strategy,
-		UpdatePartition:      updatePartition,
-		RevisionHistoryLimit: revisionHistoryLimit,
-		Selector:             selector,
-		Desired:              desired,
-		Current:              set.Status.Replicas,
-		Ready:                set.Status.ReadyReplicas,
-		Updated:              set.Status.UpdatedReplicas,
-		AgeSec:               age,
-	}
-
-	conditions := make([]dto.StatefulSetConditionDTO, 0, len(set.Status.Conditions))
+	conditions := make([]dto.DaemonSetConditionDTO, 0, len(set.Status.Conditions))
 	for _, cond := range set.Status.Conditions {
 		lt := int64(0)
 		if !cond.LastTransitionTime.IsZero() {
 			lt = cond.LastTransitionTime.Unix()
 		}
-		conditions = append(conditions, dto.StatefulSetConditionDTO{
+		conditions = append(conditions, dto.DaemonSetConditionDTO{
 			Type:               string(cond.Type),
 			Status:             string(cond.Status),
 			Reason:             cond.Reason,
@@ -98,36 +86,36 @@ func GetStatefulSetDetails(ctx context.Context, c *cluster.Clients, namespace, n
 		})
 	}
 
-	pods, err := listStatefulSetPods(ctx, c, set, selector)
+	pods, err := listDaemonSetPods(ctx, c, set, selector)
 	if err != nil {
 		return nil, err
 	}
 
-	spec := dto.StatefulSetSpecDTO{
+	spec := dto.DaemonSetSpecDTO{
 		PodTemplate: dto.PodTemplateSummaryDTO{
 			Containers:       mapContainerSummaries(set.Spec.Template.Spec.Containers),
 			InitContainers:   mapContainerSummaries(set.Spec.Template.Spec.InitContainers),
 			ImagePullSecrets: mapImagePullSecrets(set.Spec.Template.Spec.ImagePullSecrets),
 		},
-		Scheduling: dto.StatefulSetSchedulingDTO{
+		Scheduling: dto.DaemonSetSchedulingDTO{
 			NodeSelector:              set.Spec.Template.Spec.NodeSelector,
 			AffinitySummary:           summarizeAffinity(set.Spec.Template.Spec.Affinity),
 			Tolerations:               mapTolerations(set.Spec.Template.Spec.Tolerations),
 			TopologySpreadConstraints: mapTopologySpread(set.Spec.Template.Spec.TopologySpreadConstraints),
 		},
 		Volumes: mapVolumes(set.Spec.Template.Spec.Volumes),
-		Metadata: dto.StatefulSetTemplateMetadataDTO{
+		Metadata: dto.DaemonSetTemplateMetadataDTO{
 			Labels:      set.Spec.Template.Labels,
 			Annotations: set.Spec.Template.Annotations,
 		},
 	}
 
-	metadata := dto.StatefulSetMetadataDTO{
+	metadata := dto.DaemonSetMetadataDTO{
 		Labels:      set.Labels,
 		Annotations: set.Annotations,
 	}
 
-	return &dto.StatefulSetDetailsDTO{
+	return &dto.DaemonSetDetailsDTO{
 		Summary:    summary,
 		Conditions: conditions,
 		Pods:       pods,
@@ -137,28 +125,28 @@ func GetStatefulSetDetails(ctx context.Context, c *cluster.Clients, namespace, n
 	}, nil
 }
 
-func GetStatefulSetYAML(ctx context.Context, c *cluster.Clients, namespace, name string) (string, error) {
-	set, err := c.Clientset.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
+func GetDaemonSetYAML(ctx context.Context, c *cluster.Clients, namespace, name string) (string, error) {
+	set, err := c.Clientset.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return "", err
 	}
-	y, err := statefulSetYAML(set)
+	y, err := daemonSetYAML(set)
 	if err != nil {
 		return "", err
 	}
 	return string(y), nil
 }
 
-func listStatefulSetPods(ctx context.Context, c *cluster.Clients, set *appsv1.StatefulSet, selector string) ([]dto.StatefulSetPodDTO, error) {
+func listDaemonSetPods(ctx context.Context, c *cluster.Clients, set *appsv1.DaemonSet, selector string) ([]dto.DaemonSetPodDTO, error) {
 	pods, err := listPodsBySelector(ctx, c, set.Namespace, selector)
 	if err != nil {
 		return nil, err
 	}
 
 	now := time.Now()
-	out := make([]dto.StatefulSetPodDTO, 0, len(pods))
+	out := make([]dto.DaemonSetPodDTO, 0, len(pods))
 	for _, p := range pods {
-		if !isPodOwnedByStatefulSetRef(&p, set) {
+		if !isPodOwnedByDaemonSetRef(&p, set) {
 			continue
 		}
 
@@ -175,7 +163,7 @@ func listStatefulSetPods(ctx context.Context, c *cluster.Clients, set *appsv1.St
 		if !p.CreationTimestamp.IsZero() {
 			age = int64(now.Sub(p.CreationTimestamp.Time).Seconds())
 		}
-		out = append(out, dto.StatefulSetPodDTO{
+		out = append(out, dto.DaemonSetPodDTO{
 			Name:     p.Name,
 			Phase:    string(p.Status.Phase),
 			Ready:    fmtReady(readyCount, totalCount),
@@ -191,9 +179,9 @@ func listStatefulSetPods(ctx context.Context, c *cluster.Clients, set *appsv1.St
 	return out, nil
 }
 
-func isPodOwnedByStatefulSetRef(pod *corev1.Pod, set *appsv1.StatefulSet) bool {
+func isPodOwnedByDaemonSetRef(pod *corev1.Pod, set *appsv1.DaemonSet) bool {
 	for _, ref := range pod.OwnerReferences {
-		if ref.Kind != "StatefulSet" {
+		if ref.Kind != "DaemonSet" {
 			continue
 		}
 		if ref.UID == set.UID || ref.Name == set.Name {
@@ -203,7 +191,7 @@ func isPodOwnedByStatefulSetRef(pod *corev1.Pod, set *appsv1.StatefulSet) bool {
 	return false
 }
 
-func statefulSetYAML(set *appsv1.StatefulSet) ([]byte, error) {
+func daemonSetYAML(set *appsv1.DaemonSet) ([]byte, error) {
 	setCopy := set.DeepCopy()
 	setCopy.ManagedFields = nil
 	b, err := json.Marshal(setCopy)

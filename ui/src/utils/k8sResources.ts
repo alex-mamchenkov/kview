@@ -6,6 +6,7 @@ export type AccessReviewResource = {
 export type ListResourceKey =
   | "pods"
   | "deployments"
+  | "daemonsets"
   | "statefulsets"
   | "replicasets"
   | "services"
@@ -20,6 +21,7 @@ export type ListResourceKey =
 export const listResourceAccess: Record<ListResourceKey, AccessReviewResource> = {
   pods: { group: "", resource: "pods" },
   deployments: { group: "apps", resource: "deployments" },
+  daemonsets: { group: "apps", resource: "daemonsets" },
   statefulsets: { group: "apps", resource: "statefulsets" },
   replicasets: { group: "apps", resource: "replicasets" },
   services: { group: "", resource: "services" },
