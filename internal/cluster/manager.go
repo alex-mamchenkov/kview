@@ -3,10 +3,14 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 
+	"github.com/imdario/mergo"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -24,8 +28,7 @@ type ContextInfo struct {
 type Manager struct {
 	mu sync.RWMutex
 
-	kubeconfigPath string
-	rawConfig      api.Config
+	rawConfig api.Config
 
 	activeContext string
 
@@ -39,29 +42,117 @@ type Clients struct {
 }
 
 func defaultKubeconfigPath() string {
-	if v := os.Getenv("KUBECONFIG"); v != "" {
-		// NOTE: if multiple paths separated by ':', clientcmd can handle it,
-		// but for simplicity we take the first. You can extend later.
-		return v
-	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".kube", "config")
 }
 
-func NewManager() (*Manager, error) {
-	path := defaultKubeconfigPath()
+func kubeconfigLocations() []string {
+	envValue := os.Getenv("KUBECONFIG")
+	if envValue == "" {
+		return []string{defaultKubeconfigPath()}
+	}
 
-	loadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: path}
-	cfg, err := loadingRules.Load()
+	sep := string(os.PathListSeparator)
+	if strings.Contains(envValue, sep) {
+		parts := strings.Split(envValue, sep)
+		locations := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if part == "" {
+				continue
+			}
+			locations = append(locations, part)
+		}
+		return locations
+	}
+
+	return []string{envValue}
+}
+
+func expandKubeconfigLocations(locations []string) []string {
+	files := []string{}
+	for _, location := range locations {
+		info, err := os.Stat(location)
+		if err != nil {
+			if os.IsNotExist(err) {
+				log.Printf("kubeconfig: skip location %q: not found", location)
+				continue
+			}
+			log.Printf("kubeconfig: skip location %q: %v", location, err)
+			continue
+		}
+
+		if info.IsDir() {
+			entries, err := os.ReadDir(location)
+			if err != nil {
+				log.Printf("kubeconfig: skip directory %q: %v", location, err)
+				continue
+			}
+			names := make([]string, 0, len(entries))
+			for _, entry := range entries {
+				if entry.IsDir() {
+					continue
+				}
+				names = append(names, entry.Name())
+			}
+			sort.Strings(names)
+			for _, name := range names {
+				files = append(files, filepath.Join(location, name))
+			}
+			continue
+		}
+
+		files = append(files, location)
+	}
+	return files
+}
+
+func loadMergedKubeconfig() (*api.Config, error) {
+	locations := kubeconfigLocations()
+	log.Printf("kubeconfig: discovered locations: %v", locations)
+
+	files := expandKubeconfigLocations(locations)
+	log.Printf("kubeconfig: files to read: %v", files)
+
+	configs := make([]*api.Config, 0, len(files))
+	lastCurrentContext := ""
+	for _, filename := range files {
+		cfg, err := clientcmd.LoadFromFile(filename)
+		if err != nil {
+			log.Printf("kubeconfig: skip file %q: %v", filename, err)
+			continue
+		}
+		configs = append(configs, cfg)
+		if cfg.CurrentContext != "" {
+			lastCurrentContext = cfg.CurrentContext
+		}
+	}
+
+	merged := api.NewConfig()
+	for _, cfg := range configs {
+		if err := mergo.Merge(merged, cfg, mergo.WithOverride); err != nil {
+			log.Printf("kubeconfig: merge warning: %v", err)
+		}
+	}
+	if lastCurrentContext != "" {
+		merged.CurrentContext = lastCurrentContext
+	}
+	if err := clientcmd.ResolveLocalPaths(merged); err != nil {
+		log.Printf("kubeconfig: resolve paths warning: %v", err)
+	}
+
+	return merged, nil
+}
+
+func NewManager() (*Manager, error) {
+	cfg, err := loadMergedKubeconfig()
 	if err != nil {
 		return nil, fmt.Errorf("load kubeconfig: %w", err)
 	}
 
 	m := &Manager{
-		kubeconfigPath: path,
-		rawConfig:      *cfg,
-		activeContext:  cfg.CurrentContext,
-		clients:        map[string]*Clients{},
+		rawConfig:     *cfg,
+		activeContext: cfg.CurrentContext,
+		clients:       map[string]*Clients{},
 	}
 	return m, nil
 }
@@ -110,8 +201,7 @@ func (m *Manager) GetClients(ctx context.Context) (*Clients, string, error) {
 
 	// Build rest.Config for the active context (supports exec plugins => OIDC-friendly)
 	overrides := &clientcmd.ConfigOverrides{CurrentContext: active}
-	loadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: m.kubeconfigPath}
-	cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)
+	cc := clientcmd.NewNonInteractiveClientConfig(m.rawConfig, active, overrides, nil)
 
 	restCfg, err := cc.ClientConfig()
 	if err != nil {
@@ -140,4 +230,3 @@ func (m *Manager) GetClients(ctx context.Context) (*Clients, string, error) {
 
 	return clients, active, nil
 }
-

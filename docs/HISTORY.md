@@ -378,6 +378,14 @@ This file tracks notable changes and decisions to make future sessions easier.
   - PV ↔ PVC
 - Updated Node.js requirement to 20+ in docs.
 
+## 2026-02-09 — Kubeconfig loading semantics
+### Backend
+- Made kubeconfig discovery explicit and deterministic:
+  - `KUBECONFIG` supports single path or OS-specific path list.
+  - Directory entries expand to sorted file lists (non-recursive).
+  - Missing/invalid entries are skipped with warnings.
+  - Later files override earlier ones; last non-empty `current-context` wins.
+
 ## Next planned items
 - Live refresh toggle (pods polling).
 - Quick actions:

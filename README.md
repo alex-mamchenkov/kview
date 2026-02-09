@@ -247,6 +247,16 @@ If your kubeconfig is split across multiple files:
 
 export KUBECONFIG="$HOME/.kube/cluster1.yaml:$HOME/.kube/cluster2.yaml"
 
+Kubeconfig loading semantics:
+- If `KUBECONFIG` is unset, kview uses `~/.kube/config`.
+- If `KUBECONFIG` is set, it can be a single path or a list:
+  - Unix/macOS separator: `:`
+  - Windows separator: `;`
+- Each entry can be a file or a directory:
+  - Directories are read non-recursively, sorted lexicographically.
+  - Invalid/missing entries are skipped with warnings.
+- Later files override earlier ones; the last non-empty `current-context` wins.
+
 Run kview:
 
 make run
