@@ -242,6 +242,21 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Added StatefulSet drawer with tabs: Overview, Pods, Spec, Events, YAML.
 - Enabled navigation: StatefulSet → Pod drawer.
 
+## 2026-02-09 — DaemonSets list + details
+### Backend
+- Added DaemonSets endpoints:
+  - `/api/namespaces/{ns}/daemonsets`
+  - `/api/namespaces/{ns}/daemonsets/{name}`
+  - `/api/namespaces/{ns}/daemonsets/{name}/events`
+  - `/api/namespaces/{ns}/daemonsets/{name}/yaml`
+- Added DaemonSet list/detail DTOs (replica summary, update strategy, selector, pods, spec summary).
+- Added selector-based pod listing helper for workload pods tabs.
+
+### UI
+- Added DaemonSets table with ready/updated/available columns and RBAC-aware empty states.
+- Added DaemonSet drawer with tabs: Overview, Pods, Spec, Events, YAML.
+- Enabled navigation: DaemonSet → Pod drawer.
+
 ## 2026-02-09 — ConfigMaps list + details (read-only)
 ### Backend
 - Added ConfigMaps endpoints:

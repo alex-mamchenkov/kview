@@ -88,6 +88,7 @@ First-class rollout understanding without inspecting YAML manually.
 
 - [x] Pods
 - [x] Deployments
+- [x] DaemonSets
 - [x] ReplicaSets
 - [x] StatefulSets
 - [x] Jobs

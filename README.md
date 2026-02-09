@@ -38,6 +38,11 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - single selection
   - refresh interval + last refresh timestamp
   - last event summary
+- DaemonSets view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
 - StatefulSets view:
   - sorting
   - filtering
@@ -93,6 +98,11 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - spec summary (template, scheduling, volumes, metadata)
   - events, YAML
 - StatefulSet details drawer:
+  - overview summary + conditions
+  - pods list with click-through to Pod drawer
+  - spec summary (template, scheduling, volumes, metadata)
+  - events, YAML
+- DaemonSet details drawer:
   - overview summary + conditions
   - pods list with click-through to Pod drawer
   - spec summary (template, scheduling, volumes, metadata)
