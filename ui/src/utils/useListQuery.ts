@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiError } from "../api";
 import { toApiError } from "../api";
+import { useConnectionState } from "../connectionState";
 
 type UseListQueryOptions<T> = {
   enabled?: boolean;
@@ -27,6 +28,7 @@ export default function useListQuery<T>({
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const { retryNonce } = useConnectionState();
 
   const onInitialResultRef = useRef(onInitialResult);
 
@@ -54,7 +56,7 @@ export default function useListQuery<T>({
   useEffect(() => {
     if (!enabled) return;
     void loadInitial();
-  }, [enabled, loadInitial]);
+  }, [enabled, loadInitial, retryNonce]);
 
   useEffect(() => {
     if (!enabled || refreshSec <= 0) return;

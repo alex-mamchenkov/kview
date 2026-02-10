@@ -1,3 +1,5 @@
+import { notifyApiFailure, notifyApiSuccess, type ConnectionIssueKind } from "./connectionState";
+
 export type ContextInfo = {
   name: string;
   cluster: string;
@@ -35,6 +37,23 @@ function extractJsonMessage(payload: unknown): string | null {
 function stripHtml(input: string): string {
   const withoutTags = input.replace(/<[^>]*>/g, " ");
   return withoutTags.replace(/\s+/g, " ").trim();
+}
+
+function classifyFailureKind(status?: number, error?: unknown): ConnectionIssueKind {
+  if (status && [502, 503, 504].includes(status)) return "backend";
+  if (status) return "request";
+  const message = typeof error === "string" ? error : (error as Error | undefined)?.message || "";
+  const lower = message.toLowerCase();
+  if (
+    lower.includes("failed to fetch") ||
+    lower.includes("networkerror") ||
+    lower.includes("connection refused") ||
+    lower.includes("load failed") ||
+    lower.includes("timeout")
+  ) {
+    return "backend";
+  }
+  return "backend";
 }
 
 async function parseErrorResponse(res: Response): Promise<ApiErrorShape> {
@@ -102,18 +121,52 @@ export function toApiError(error: unknown): ApiError {
 }
 
 export async function apiGet<T>(path: string, token: string): Promise<T> {
-  const res = await fetch(path + (path.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token));
-  if (!res.ok) throw toError(await parseErrorResponse(res));
-  return await res.json();
+  let res: Response;
+  try {
+    res = await fetch(path + (path.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token));
+  } catch (err) {
+    notifyApiFailure("backend", String((err as Error | undefined)?.message || err || "Network error"));
+    throw err;
+  }
+  if (!res.ok) {
+    const shape = await parseErrorResponse(res);
+    notifyApiFailure(classifyFailureKind(shape.status, shape.message), shape.message || res.statusText);
+    throw toError(shape);
+  }
+  try {
+    const json = await res.json();
+    notifyApiSuccess();
+    return json;
+  } catch (err) {
+    notifyApiFailure("request", "Failed to parse response");
+    throw err;
+  }
 }
 
 export async function apiPost<T>(path: string, token: string, body: any): Promise<T> {
-  const res = await fetch(path + (path.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw toError(await parseErrorResponse(res));
-  return await res.json();
+  let res: Response;
+  try {
+    res = await fetch(path + (path.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    notifyApiFailure("backend", String((err as Error | undefined)?.message || err || "Network error"));
+    throw err;
+  }
+  if (!res.ok) {
+    const shape = await parseErrorResponse(res);
+    notifyApiFailure(classifyFailureKind(shape.status, shape.message), shape.message || res.statusText);
+    throw toError(shape);
+  }
+  try {
+    const json = await res.json();
+    notifyApiSuccess();
+    return json;
+  } catch (err) {
+    notifyApiFailure("request", "Failed to parse response");
+    throw err;
+  }
 }
 

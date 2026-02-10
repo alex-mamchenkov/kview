@@ -18,6 +18,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { apiGet, toApiError, type ApiError } from "../api";
+import { useConnectionState } from "../connectionState";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { eventChipColor } from "../utils/k8sUi";
@@ -67,6 +68,7 @@ export default function ClusterRoleBindingDrawer(props: {
   token: string;
   clusterRoleBindingName: string | null;
 }) {
+  const { retryNonce } = useConnectionState();
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<ClusterRoleBindingDetails | null>(null);
@@ -96,7 +98,7 @@ export default function ClusterRoleBindingDrawer(props: {
     })()
       .catch((e) => setErr(toApiError(e)))
       .finally(() => setLoading(false));
-  }, [props.open, name, props.token]);
+  }, [props.open, name, props.token, retryNonce]);
 
   const summary = details?.summary;
   const roleRef = details?.roleRef;

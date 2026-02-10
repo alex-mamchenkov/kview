@@ -21,6 +21,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../api";
+import { useConnectionState } from "../connectionState";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import PodDrawer from "./PodDrawer";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
@@ -135,6 +136,7 @@ export default function StatefulSetDrawer(props: {
   namespace: string;
   statefulSetName: string | null;
 }) {
+  const { retryNonce } = useConnectionState();
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<StatefulSetDetails | null>(null);
@@ -171,7 +173,7 @@ export default function StatefulSetDrawer(props: {
     })()
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false));
-  }, [props.open, name, ns, props.token]);
+  }, [props.open, name, ns, props.token, retryNonce]);
 
   const summary = details?.summary;
   const metadata = details?.metadata;

@@ -18,6 +18,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { apiGet } from "../api";
+import { useConnectionState } from "../connectionState";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { eventChipColor, pvPhaseChipColor } from "../utils/k8sUi";
 import Section from "./shared/Section";
@@ -124,6 +125,7 @@ export default function PersistentVolumeDrawer(props: {
   token: string;
   persistentVolumeName: string | null;
 }) {
+  const { retryNonce } = useConnectionState();
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<PersistentVolumeDetails | null>(null);
@@ -153,7 +155,7 @@ export default function PersistentVolumeDrawer(props: {
     })()
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false));
-  }, [props.open, name, props.token]);
+  }, [props.open, name, props.token, retryNonce]);
 
   const summary = details?.summary;
   const spec = details?.spec;

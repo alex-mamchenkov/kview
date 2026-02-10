@@ -12,6 +12,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { apiGet } from "../api";
+import { useConnectionState } from "../connectionState";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { eventChipColor } from "../utils/k8sUi";
 import Section from "./shared/Section";
@@ -61,6 +62,7 @@ export default function SecretDrawer(props: {
   namespace: string;
   secretName: string | null;
 }) {
+  const { retryNonce } = useConnectionState();
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<SecretDetails | null>(null);
@@ -95,7 +97,7 @@ export default function SecretDrawer(props: {
     })()
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false));
-  }, [props.open, name, ns, props.token]);
+  }, [props.open, name, ns, props.token, retryNonce]);
 
   const summary = details?.summary;
   const metadata = details?.metadata;

@@ -21,6 +21,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../api";
+import { useConnectionState } from "../connectionState";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import PodDrawer from "./PodDrawer";
 import DeploymentDrawer from "./DeploymentDrawer";
@@ -138,6 +139,7 @@ export default function ReplicaSetDrawer(props: {
   namespace: string;
   replicaSetName: string | null;
 }) {
+  const { retryNonce } = useConnectionState();
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<ReplicaSetDetails | null>(null);
@@ -176,7 +178,7 @@ export default function ReplicaSetDrawer(props: {
     })()
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false));
-  }, [props.open, name, ns, props.token]);
+  }, [props.open, name, ns, props.token, retryNonce]);
 
   const summary = details?.summary;
   const linkedPods = details?.linkedPods;

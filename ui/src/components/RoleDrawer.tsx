@@ -17,6 +17,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { apiGet, toApiError, type ApiError } from "../api";
+import { useConnectionState } from "../connectionState";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { eventChipColor } from "../utils/k8sUi";
@@ -68,6 +69,7 @@ export default function RoleDrawer(props: {
   namespace: string;
   roleName: string | null;
 }) {
+  const { retryNonce } = useConnectionState();
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<RoleDetails | null>(null);
@@ -102,7 +104,7 @@ export default function RoleDrawer(props: {
     })()
       .catch((e) => setErr(toApiError(e)))
       .finally(() => setLoading(false));
-  }, [props.open, name, ns, props.token]);
+  }, [props.open, name, ns, props.token, retryNonce]);
 
   const summary = details?.summary;
   const rules = details?.rules || [];

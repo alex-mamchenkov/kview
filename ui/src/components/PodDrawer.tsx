@@ -30,6 +30,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet, toApiError, type ApiError } from "../api";
+import { useConnectionState } from "../connectionState";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { conditionStatusColor, eventChipColor } from "../utils/k8sUi";
@@ -314,6 +315,7 @@ export default function PodDrawer(props: {
   namespace: string;
   podName: string | null;
 }) {
+  const { retryNonce } = useConnectionState();
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<PodDetails | null>(null);
@@ -501,7 +503,7 @@ export default function PodDrawer(props: {
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.open, name, ns, props.token]);
+  }, [props.open, name, ns, props.token, retryNonce]);
 
   useEffect(() => {
     if (!props.open || !name || tab !== 3) return;

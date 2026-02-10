@@ -18,6 +18,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { apiGet, toApiError, type ApiError } from "../api";
+import { useConnectionState } from "../connectionState";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import IngressDrawer from "./IngressDrawer";
 import PodDrawer from "./PodDrawer";
@@ -122,6 +123,7 @@ export default function ServiceDrawer(props: {
   namespace: string;
   serviceName: string | null;
 }) {
+  const { retryNonce } = useConnectionState();
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<ServiceDetails | null>(null);
@@ -170,7 +172,7 @@ export default function ServiceDrawer(props: {
     })()
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false));
-  }, [props.open, name, ns, props.token]);
+  }, [props.open, name, ns, props.token, retryNonce]);
 
   useEffect(() => {
     if (!props.open || !name || tab !== 2) return;

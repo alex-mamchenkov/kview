@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Box, CssBaseline, AppBar, Toolbar, Typography } from "@mui/material";
+import { Box, CssBaseline, AppBar, Toolbar, Typography, Snackbar, Alert } from "@mui/material";
 import Sidebar from "./components/Sidebar";
 import NodesTable from "./components/NodesTable";
 import NamespacesTable from "./components/NamespacesTable";
@@ -23,6 +23,8 @@ import PersistentVolumesTable from "./components/PersistentVolumesTable";
 import PersistentVolumeClaimsTable from "./components/PersistentVolumeClaimsTable";
 import { apiGet, apiPost, toApiError } from "./api";
 import { loadState, saveState, toggleFavouriteNamespace, type Section } from "./state";
+import { useConnectionState } from "./connectionState";
+import ConnectionBanner from "./components/shared/ConnectionBanner";
 
 function getToken(): string {
   const u = new URL(window.location.href);
@@ -31,6 +33,9 @@ function getToken(): string {
 
 export default function App() {
   const token = useMemo(() => getToken(), []);
+  const { lastRecoveryShownAt } = useConnectionState();
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [lastRecoverySeenAt, setLastRecoverySeenAt] = useState<number | null>(null);
   const [contexts, setContexts] = useState<any[]>([]);
   const [activeContext, setActiveContext] = useState<string>("");
 
@@ -49,6 +54,13 @@ export default function App() {
   useEffect(() => {
     saveState(appState);
   }, [appState]);
+
+  useEffect(() => {
+    if (!lastRecoveryShownAt) return;
+    if (lastRecoveryShownAt === lastRecoverySeenAt) return;
+    setLastRecoverySeenAt(lastRecoveryShownAt);
+    setRecoveryOpen(true);
+  }, [lastRecoverySeenAt, lastRecoveryShownAt]);
 
   // initial bootstrap
   useEffect(() => {
@@ -186,6 +198,7 @@ export default function App() {
       />
 
       <Box component="main" sx={{ flexGrow: 1, p: 2, mt: 8 }}>
+        <ConnectionBanner />
         {section === "nodes" ? <NodesTable token={token} /> : null}
         {section === "namespaces" ? <NamespacesTable token={token} /> : null}
         {section === "pods" && namespace ? <PodsTable token={token} namespace={namespace} /> : null}
@@ -219,6 +232,16 @@ export default function App() {
           <PersistentVolumeClaimsTable token={token} namespace={namespace} />
         ) : null}
       </Box>
+      <Snackbar
+        open={recoveryOpen}
+        autoHideDuration={3000}
+        onClose={() => setRecoveryOpen(false)}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert severity="success" variant="filled" onClose={() => setRecoveryOpen(false)}>
+          Connection restored
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
