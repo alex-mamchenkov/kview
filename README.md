@@ -118,6 +118,11 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - filtering
   - single selection
   - refresh interval + last refresh timestamp
+- Custom Resource Definitions view:
+  - sorting
+  - filtering
+  - single selection
+  - refresh interval + last refresh timestamp
 - Helm Releases view:
   - list per namespace (from Secrets with type helm.sh/release.v1)
   - status, revision, chart, updated time
@@ -208,6 +213,10 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
 - PersistentVolumeClaim details drawer:
   - overview summary + status
   - spec summary (access modes, volume mode, requests)
+  - events, YAML
+- Custom Resource Definition details drawer:
+  - overview summary (group, scope, kind, names, conversion, conditions)
+  - versions table (served, storage, deprecated)
   - events, YAML
 - Helm Release details drawer:
   - overview: name, namespace, status, revision, chart, app version, storage backend

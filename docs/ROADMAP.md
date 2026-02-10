@@ -234,6 +234,25 @@ Fast read-only equivalent of `helm list` / `helm history` inside kview.
 
 ---
 
+## Phase 5.9 — Operators & API Extensions (Read-only)
+
+Understand **what custom APIs are defined in the cluster**.
+
+- [x] CustomResourceDefinitions (CRDs)
+  - Group, scope, kind, versions summary
+  - Conditions (Established, NamesAccepted)
+  - Versions table (served, storage, deprecated)
+  - Events, YAML
+
+- [ ] Custom Resources (instances)
+  - List instances for a selected CRD
+  - View instance details and YAML
+
+Outcome:
+Operator API surface visibility without kubectl or API docs.
+
+---
+
 ## Phase 6 — Derived Insights (Optional / Later)
 
 Provide **helpful conclusions**, not raw data.

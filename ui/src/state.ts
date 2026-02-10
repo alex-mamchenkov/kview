@@ -19,6 +19,7 @@ export type Section =
   | "clusterrolebindings"
   | "persistentvolumes"
   | "persistentvolumeclaims"
+  | "customresourcedefinitions"
   | "helm";
 
 export type AppStateV1 = {

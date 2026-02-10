@@ -440,6 +440,116 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, map[string]any{"active": active, "yaml": y})
 		})
 
+		api.Get("/customresourcedefinitions", func(w http.ResponseWriter, r *http.Request) {
+			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+			defer cancel()
+
+			clients, active, err := s.mgr.GetClients(ctx)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			items, err := kube.ListCustomResourceDefinitions(ctx, clients)
+			if err != nil {
+				status := http.StatusInternalServerError
+				if apierrors.IsForbidden(err) {
+					status = http.StatusForbidden
+				}
+				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": items})
+		})
+
+		api.Get("/customresourcedefinitions/{name}", func(w http.ResponseWriter, r *http.Request) {
+			name := chi.URLParam(r, "name")
+			if name == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "missing customresourcedefinition name"})
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+			defer cancel()
+
+			clients, active, err := s.mgr.GetClients(ctx)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			det, err := kube.GetCustomResourceDefinitionDetails(ctx, clients, name)
+			if err != nil {
+				status := http.StatusInternalServerError
+				if apierrors.IsForbidden(err) {
+					status = http.StatusForbidden
+				}
+				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{"active": active, "item": det})
+		})
+
+		api.Get("/customresourcedefinitions/{name}/events", func(w http.ResponseWriter, r *http.Request) {
+			name := chi.URLParam(r, "name")
+			if name == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "missing customresourcedefinition name"})
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+			defer cancel()
+
+			clients, active, err := s.mgr.GetClients(ctx)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			evs, err := kube.ListEventsForObject(ctx, clients, "", "CustomResourceDefinition", name)
+			if err != nil {
+				status := http.StatusInternalServerError
+				if apierrors.IsForbidden(err) {
+					status = http.StatusForbidden
+				}
+				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		})
+
+		api.Get("/customresourcedefinitions/{name}/yaml", func(w http.ResponseWriter, r *http.Request) {
+			name := chi.URLParam(r, "name")
+			if name == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "missing customresourcedefinition name"})
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+			defer cancel()
+
+			clients, active, err := s.mgr.GetClients(ctx)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			y, err := kube.GetCustomResourceDefinitionYAML(ctx, clients, name)
+			if err != nil {
+				status := http.StatusInternalServerError
+				if apierrors.IsForbidden(err) {
+					status = http.StatusForbidden
+				}
+				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{"active": active, "yaml": y})
+		})
+
 		api.Get("/persistentvolumes", func(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 			defer cancel()

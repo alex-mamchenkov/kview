@@ -2,6 +2,22 @@
 
 This file tracks notable changes and decisions to make future sessions easier.
 
+## 2026-02-10 — CustomResourceDefinitions (read-only)
+### Backend
+- Added CRD endpoints via dynamic client (no new dependencies):
+  - `/api/customresourcedefinitions`
+  - `/api/customresourcedefinitions/{name}`
+  - `/api/customresourcedefinitions/{name}/events`
+  - `/api/customresourcedefinitions/{name}/yaml`
+- Added CRD list/detail DTOs (group, scope, kind, versions summary, conditions).
+- YAML strips managedFields per project convention.
+
+### UI
+- Added Custom Resource Definitions table with columns: Name, Group, Scope, Kind, Versions, Established, Age.
+- Added CRD drawer with tabs: Overview, Versions, Events, YAML.
+- RBAC-aware empty state for cluster-scoped list.
+- Sidebar entry under "Cluster" group.
+
 ## 2026-02-10 — Helm Releases (read-only)
 ### Backend
 - Added Helm Releases endpoints:

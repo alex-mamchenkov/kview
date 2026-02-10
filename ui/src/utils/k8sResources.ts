@@ -26,6 +26,7 @@ export type ListResourceKey =
   | "persistentvolumes"
   | "nodes"
   | "namespaces"
+  | "customresourcedefinitions"
   | "helm";
 
 export type ResourceMeta = {
@@ -60,6 +61,7 @@ export const resourceMeta: Record<ListResourceKey, ResourceMeta> = {
   persistentvolumes: { label: "Persistent Volumes", clusterScoped: true },
   nodes: { label: "Nodes", clusterScoped: true },
   namespaces: { label: "Namespaces", clusterScoped: true },
+  customresourcedefinitions: { label: "Custom Resource Definitions", clusterScoped: true },
   helm: { label: "Helm Releases", clusterScoped: false },
 };
 
@@ -97,7 +99,7 @@ export const sidebarGroups: SidebarGroup[] = [
   {
     id: "cluster",
     label: "Cluster",
-    items: ["nodes", "namespaces"],
+    items: ["nodes", "namespaces", "customresourcedefinitions"],
   },
 ];
 
@@ -137,5 +139,6 @@ export const listResourceAccess: Record<ListResourceKey, AccessReviewResource> =
   persistentvolumes: { group: "", resource: "persistentvolumes" },
   nodes: { group: "", resource: "nodes" },
   namespaces: { group: "", resource: "namespaces" },
+  customresourcedefinitions: { group: "apiextensions.k8s.io", resource: "customresourcedefinitions" },
   helm: { group: "", resource: "secrets" },
 };

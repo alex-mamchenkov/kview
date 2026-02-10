@@ -22,6 +22,7 @@ import ClusterRoleBindingsTable from "./components/ClusterRoleBindingsTable";
 import PersistentVolumesTable from "./components/PersistentVolumesTable";
 import PersistentVolumeClaimsTable from "./components/PersistentVolumeClaimsTable";
 import HelmReleasesTable from "./components/HelmReleasesTable";
+import CustomResourceDefinitionsTable from "./components/CustomResourceDefinitionsTable";
 import { apiGet, apiPost, toApiError } from "./api";
 import { loadState, saveState, toggleFavouriteNamespace, type Section } from "./state";
 import { useConnectionState } from "./connectionState";
@@ -232,6 +233,7 @@ export default function App() {
         {section === "persistentvolumeclaims" && namespace ? (
           <PersistentVolumeClaimsTable token={token} namespace={namespace} />
         ) : null}
+        {section === "customresourcedefinitions" ? <CustomResourceDefinitionsTable token={token} /> : null}
         {section === "helm" && namespace ? (
           <HelmReleasesTable token={token} namespace={namespace} />
         ) : null}
