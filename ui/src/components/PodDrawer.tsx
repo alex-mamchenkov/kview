@@ -48,6 +48,7 @@ import AccessDeniedState from "./shared/AccessDeniedState";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
 import ResourceLinkChip from "./shared/ResourceLinkChip";
+import WarningsSection, { type Warning } from "./shared/WarningsSection";
 
 type PodDetails = {
   summary: PodSummary;
@@ -640,6 +641,54 @@ export default function PodDrawer(props: {
     return events.filter((e) => parseContainerFromFieldPath(e.fieldPath) === eventsContainerFilter);
   }, [events, eventsContainerFilter]);
 
+  // Thresholds for "pod restarting frequently" warning
+  const RESTART_THRESHOLD = 5;
+  const YOUNG_POD_AGE_SEC = 30 * 60; // 30 minutes
+
+  const podWarnings = useMemo((): Warning[] => {
+    const warnings: Warning[] = [];
+    if (!details) return warnings;
+
+    const containers = details.containers || [];
+    const summary = details.summary;
+    const podAgeSec = summary?.ageSec ?? 0;
+
+    // Sum total restarts across all containers
+    const totalRestarts = containers.reduce((sum, c) => sum + (c.restartCount ?? 0), 0);
+
+    // Find containers with high restarts and their termination reasons
+    const highRestartContainers = containers.filter((c) => (c.restartCount ?? 0) >= RESTART_THRESHOLD);
+
+    // Warn if total restarts >= 5 AND pod age <= 30 minutes (young pod with many restarts)
+    if (totalRestarts >= RESTART_THRESHOLD && podAgeSec <= YOUNG_POD_AGE_SEC) {
+      const terminationReasons = highRestartContainers
+        .filter((c) => c.lastTerminationReason)
+        .map((c) => `${c.name}: ${c.lastTerminationReason}`)
+        .slice(0, 3); // Limit to 3 reasons
+
+      warnings.push({
+        message: `Pod is restarting frequently (${totalRestarts} restarts in ${Math.floor(podAgeSec / 60)}m).`,
+        detail: terminationReasons.length > 0 ? `Last termination: ${terminationReasons.join(", ")}` : undefined,
+      });
+    }
+    // Also warn if any single container has high restarts regardless of pod age (chronic issue)
+    else if (highRestartContainers.length > 0) {
+      const containerInfo = highRestartContainers
+        .map((c) => {
+          const reason = c.lastTerminationReason ? ` (${c.lastTerminationReason})` : "";
+          return `${c.name}: ${c.restartCount ?? 0} restarts${reason}`;
+        })
+        .slice(0, 3); // Limit to 3 containers
+
+      warnings.push({
+        message: `Container(s) restarting frequently.`,
+        detail: containerInfo.join(", "),
+      });
+    }
+
+    return warnings;
+  }, [details]);
+
   const openController = (kind: string, name: string) => {
     switch (kind) {
       case "ReplicaSet":
@@ -764,6 +813,8 @@ export default function PodDrawer(props: {
               {/* OVERVIEW */}
               {tab === 0 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  <WarningsSection warnings={podWarnings} />
+
                   <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
                     <KeyValueTable rows={summaryItems} columns={3} />
                   </Box>

@@ -223,7 +223,7 @@ Provide **helpful conclusions**, not raw data.
   - Pod → Service → Ingress
   - Deployment → ReplicaSets → Pods
 
-- [ ] Soft warnings (client-side only)
+- [x] Soft warnings (client-side only)
   - Ingress pointing to Service with no endpoints
   - Deployment unavailable for extended time
   - Pods restarting frequently

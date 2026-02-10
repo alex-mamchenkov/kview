@@ -2,6 +2,14 @@
 
 This file tracks notable changes and decisions to make future sessions easier.
 
+## 2026-02-10 — Soft warnings (Phase 6 - Derived Insights)
+### UI
+- Added shared WarningsSection component for consistent advisory warning display.
+- Ingress drawer: shows warnings when routing to Services with no ready endpoints or missing backends.
+- Deployment drawer: warns when deployment has been unavailable for >10 minutes.
+- Pod drawer: warns when pod is restarting frequently (>=5 restarts in 30 min or chronic container restarts).
+- Warnings are client-side derived, non-blocking, and only appear when conditions are detected.
+
 ## 2026-02-05 — Initial MVP
 ### Backend
 - Implemented Go server (chi) with token-based auth for `/api/*`.

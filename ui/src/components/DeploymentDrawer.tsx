@@ -30,6 +30,7 @@ import { conditionStatusColor, eventChipColor, phaseChipColor } from "../utils/k
 import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
+import WarningsSection, { type Warning } from "./shared/WarningsSection";
 
 type DeploymentDetails = {
   summary: DeploymentSummary;
@@ -212,6 +213,48 @@ export default function DeploymentDrawer(props: {
       rollout.unavailableReplicas > 0 ||
       (rollout.warnings || []).length > 0);
 
+  // Threshold for "unavailable for extended time" warning (10 minutes = 600 seconds)
+  const UNAVAILABLE_THRESHOLD_SEC = 600;
+
+  const deploymentWarnings = useMemo((): Warning[] => {
+    const warnings: Warning[] = [];
+    if (!summary || !details) return warnings;
+
+    // Check if deployment is unavailable for extended time
+    const desired = summary.desired ?? 0;
+    const available = summary.available ?? 0;
+    const conditions = details.conditions || [];
+
+    if (desired > 0 && available === 0) {
+      // Find the "Available" condition
+      const availableCond = conditions.find((c) => c.type === "Available");
+      if (availableCond && availableCond.status === "False" && availableCond.lastTransitionTime) {
+        const nowSec = Math.floor(Date.now() / 1000);
+        const transitionAgeSec = nowSec - availableCond.lastTransitionTime;
+        if (transitionAgeSec > UNAVAILABLE_THRESHOLD_SEC) {
+          const mins = Math.floor(transitionAgeSec / 60);
+          warnings.push({
+            message: `Deployment has been unavailable for ${mins > 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`}.`,
+            detail: availableCond.reason
+              ? `Reason: ${availableCond.reason}${availableCond.message ? ` - ${availableCond.message}` : ""}`
+              : undefined,
+          });
+        }
+      } else if (!availableCond) {
+        // Fallback: if no Available condition but desired > 0, ready == 0, and age > threshold
+        const ageSec = summary.ageSec ?? 0;
+        if (ageSec > UNAVAILABLE_THRESHOLD_SEC) {
+          const mins = Math.floor(ageSec / 60);
+          warnings.push({
+            message: `Deployment has had no available replicas for ${mins > 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`} (best-effort detection).`,
+          });
+        }
+      }
+    }
+
+    return warnings;
+  }, [summary, details]);
+
   const summaryItems = useMemo(
     () => [
       { label: "Desired replicas", value: valueOrDash(summary?.desired) },
@@ -273,6 +316,8 @@ export default function DeploymentDrawer(props: {
               {/* OVERVIEW */}
               {tab === 0 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  <WarningsSection warnings={deploymentWarnings} />
+
                   <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
                     <KeyValueTable
                       rows={summaryItems}

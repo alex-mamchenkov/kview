@@ -9,9 +9,6 @@ import {
   Divider,
   CircularProgress,
   Chip,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Table,
   TableHead,
   TableRow,
@@ -19,7 +16,6 @@ import {
   TableBody,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../api";
 import { useConnectionState } from "../connectionState";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -31,6 +27,7 @@ import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
 import ResourceLinkChip from "./shared/ResourceLinkChip";
+import WarningsSection, { type Warning } from "./shared/WarningsSection";
 
 type IngressDetails = {
   summary: IngressSummary;
@@ -153,10 +150,29 @@ export default function IngressDrawer(props: {
   }, [props.open, name, ns, props.token, retryNonce]);
 
   const summary = details?.summary;
-  const warnings = details?.warnings;
-  const missingBackends = warnings?.missingBackendServices || [];
-  const noReadyBackends = warnings?.noReadyEndpoints || [];
-  const hasWarnings = missingBackends.length > 0 || noReadyBackends.length > 0;
+  const backendWarnings = details?.warnings;
+  const missingBackends = backendWarnings?.missingBackendServices || [];
+  const noReadyBackends = backendWarnings?.noReadyEndpoints || [];
+
+  const ingressWarnings = useMemo((): Warning[] => {
+    const warnings: Warning[] = [];
+
+    // Warn for each backend service with no ready endpoints
+    noReadyBackends.forEach((svc) => {
+      warnings.push({
+        message: `Ingress routes to Service "${svc}" but it has no ready endpoints.`,
+      });
+    });
+
+    // Missing backend services are also a concern
+    missingBackends.forEach((svc) => {
+      warnings.push({
+        message: `Ingress references Service "${svc}" which does not exist.`,
+      });
+    });
+
+    return warnings;
+  }, [missingBackends, noReadyBackends]);
 
   const summaryItems = useMemo(
     () => [
@@ -217,53 +233,11 @@ export default function IngressDrawer(props: {
               {/* OVERVIEW */}
               {tab === 0 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  <WarningsSection warnings={ingressWarnings} />
+
                   <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
                     <KeyValueTable rows={summaryItems} columns={3} />
                   </Box>
-
-                  <Accordion
-                    defaultExpanded={hasWarnings}
-                    sx={{
-                      border: hasWarnings ? "1px solid rgba(255, 152, 0, 0.6)" : "1px solid transparent",
-                    }}
-                  >
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="subtitle2">Warnings</Typography>
-                      {hasWarnings && <Chip size="small" color="warning" label="Attention" sx={{ ml: 1 }} />}
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      {!hasWarnings ? (
-                        <EmptyState message="No warnings detected." />
-                      ) : (
-                        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                          {missingBackends.length > 0 && (
-                            <Box>
-                              <Typography variant="caption" color="text.secondary">
-                                Missing backend services
-                              </Typography>
-                              <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
-                                {missingBackends.map((svc) => (
-                                  <Chip key={`missing-${svc}`} size="small" color="warning" label={svc} />
-                                ))}
-                              </Box>
-                            </Box>
-                          )}
-                          {noReadyBackends.length > 0 && (
-                            <Box>
-                              <Typography variant="caption" color="text.secondary">
-                                Backend services with 0 ready endpoints
-                              </Typography>
-                              <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
-                                {noReadyBackends.map((svc) => (
-                                  <Chip key={`noready-${svc}`} size="small" color="warning" label={svc} />
-                                ))}
-                              </Box>
-                            </Box>
-                          )}
-                        </Box>
-                      )}
-                    </AccordionDetails>
-                  </Accordion>
 
                   <Section title="Default Backend">
                     {!details?.defaultBackend?.serviceName ? (
