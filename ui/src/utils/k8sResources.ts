@@ -25,7 +25,8 @@ export type ListResourceKey =
   | "persistentvolumeclaims"
   | "persistentvolumes"
   | "nodes"
-  | "namespaces";
+  | "namespaces"
+  | "helm";
 
 export type ResourceMeta = {
   label: string;
@@ -59,6 +60,7 @@ export const resourceMeta: Record<ListResourceKey, ResourceMeta> = {
   persistentvolumes: { label: "Persistent Volumes", clusterScoped: true },
   nodes: { label: "Nodes", clusterScoped: true },
   namespaces: { label: "Namespaces", clusterScoped: true },
+  helm: { label: "Helm Releases", clusterScoped: false },
 };
 
 export const sidebarGroups: SidebarGroup[] = [
@@ -86,6 +88,11 @@ export const sidebarGroups: SidebarGroup[] = [
     id: "storage",
     label: "Storage",
     items: ["persistentvolumeclaims", "persistentvolumes"],
+  },
+  {
+    id: "helm",
+    label: "Helm",
+    items: ["helm"],
   },
   {
     id: "cluster",
@@ -130,4 +137,5 @@ export const listResourceAccess: Record<ListResourceKey, AccessReviewResource> =
   persistentvolumes: { group: "", resource: "persistentvolumes" },
   nodes: { group: "", resource: "nodes" },
   namespaces: { group: "", resource: "namespaces" },
+  helm: { group: "", resource: "secrets" },
 };

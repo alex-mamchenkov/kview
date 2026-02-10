@@ -118,6 +118,11 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - filtering
   - single selection
   - refresh interval + last refresh timestamp
+- Helm Releases view:
+  - list per namespace (from Secrets with type helm.sh/release.v1)
+  - status, revision, chart, updated time
+  - filter by name or chart
+  - refresh interval + last refresh timestamp
 - Node details drawer:
   - overview summary + capacity/taints
   - pods list with click-through to Pod drawer
@@ -204,6 +209,11 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - overview summary + status
   - spec summary (access modes, volume mode, requests)
   - events, YAML
+- Helm Release details drawer:
+  - overview: name, namespace, status, revision, chart, app version, storage backend
+  - history: all revisions with status, chart, updated, description
+  - notes (when available)
+  - decode errors shown inline (non-fatal)
 - Pod details drawer:
   - overview summary + health conditions
   - containers: runtime, resources, env, mounts, probes

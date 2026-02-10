@@ -215,6 +215,25 @@ RBAC visibility without exposing secrets or tokens.
 
 ---
 
+## Phase 5.8 — Helm Releases (Read-only)
+
+Understand **what is deployed via Helm and in what state**.
+
+- [x] Helm Releases
+  - List releases per namespace (from Secrets type `helm.sh/release.v1`)
+  - Status, revision, chart name + version, updated time
+  - Drawer with Overview + History (all revisions) + Notes
+  - Pending/failed status visibility
+  - No Helm SDK dependency (base64+gzip+JSON decode)
+  - Decode errors non-fatal (shown inline)
+
+- [ ] ConfigMap storage driver (best-effort, if Helm configured with configmap backend)
+
+Outcome:
+Fast read-only equivalent of `helm list` / `helm history` inside kview.
+
+---
+
 ## Phase 6 — Derived Insights (Optional / Later)
 
 Provide **helpful conclusions**, not raw data.
@@ -243,7 +262,7 @@ kview starts assisting reasoning, not just displaying objects.
 - Applying YAML or scaling resources
 - Metrics dashboards or time-series graphs
 - GitOps or CI/CD workflows
-- Helm install/upgrade operations
+- Helm install/upgrade/rollback operations
 
 These are intentionally out of scope to keep kview focused.
 

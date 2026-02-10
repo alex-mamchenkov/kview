@@ -2,6 +2,24 @@
 
 This file tracks notable changes and decisions to make future sessions easier.
 
+## 2026-02-10 — Helm Releases (read-only)
+### Backend
+- Added Helm Releases endpoints:
+  - `/api/namespaces/{ns}/helmreleases`
+  - `/api/namespaces/{ns}/helmreleases/{name}`
+- Discovers releases from Secrets (type `helm.sh/release.v1`, label `owner=helm`).
+- Decodes base64+gzip+JSON payload without Helm SDK dependencies.
+- List view decodes only the latest revision per release for performance.
+- Details view returns all revisions as history.
+- Decode errors are non-fatal: releases still appear with "unknown" status.
+
+### UI
+- Added Helm Releases table with columns for status, revision, chart, and updated.
+- Added Helm Release drawer with tabs: Overview, History, and optional Notes.
+- Status chips color-coded: deployed (green), failed (red), pending-* (warning).
+- RBAC-aware empty state checks secrets list permission.
+- Added "Helm" sidebar group.
+
 ## 2026-02-10 — Soft warnings (Phase 6 - Derived Insights)
 ### UI
 - Added shared WarningsSection component for consistent advisory warning display.
@@ -406,7 +424,5 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Quick actions:
   - delete pod
   - rollout restart / scale deployments
-- Additional resources views:
-  - Deployments, Jobs, Services, Ingress
-- Helm releases view (via Helm SDK or shell integration).
+- Helm releases: ConfigMap storage driver support (best-effort).
 - Exec terminal into container (xterm.js + SPDY/exec).
