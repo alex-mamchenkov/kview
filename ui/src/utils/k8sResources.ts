@@ -27,7 +27,8 @@ export type ListResourceKey =
   | "nodes"
   | "namespaces"
   | "customresourcedefinitions"
-  | "helm";
+  | "helm"
+  | "helmcharts";
 
 export type ResourceMeta = {
   label: string;
@@ -63,6 +64,7 @@ export const resourceMeta: Record<ListResourceKey, ResourceMeta> = {
   namespaces: { label: "Namespaces", clusterScoped: true },
   customresourcedefinitions: { label: "Custom Resource Definitions", clusterScoped: true },
   helm: { label: "Helm Releases", clusterScoped: false },
+  helmcharts: { label: "Helm Charts", clusterScoped: true },
 };
 
 export const sidebarGroups: SidebarGroup[] = [
@@ -94,7 +96,7 @@ export const sidebarGroups: SidebarGroup[] = [
   {
     id: "helm",
     label: "Helm",
-    items: ["helm"],
+    items: ["helm", "helmcharts"],
   },
   {
     id: "cluster",
@@ -141,4 +143,5 @@ export const listResourceAccess: Record<ListResourceKey, AccessReviewResource> =
   namespaces: { group: "", resource: "namespaces" },
   customresourcedefinitions: { group: "apiextensions.k8s.io", resource: "customresourcedefinitions" },
   helm: { group: "", resource: "secrets" },
+  helmcharts: { group: "", resource: "secrets" },
 };

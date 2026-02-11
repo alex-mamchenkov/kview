@@ -2,6 +2,26 @@
 
 This file tracks notable changes and decisions to make future sessions easier.
 
+## 2026-02-11 — Helm SDK Full Integration
+
+### Backend
+- Replaced manual Secret parsing (base64+gzip+JSON) with Helm v3 SDK (`storage`+`driver` packages).
+- Release list and details now use `helm.sh/helm/v3/pkg/storage` for reliable decoding.
+- Release details expose full data: values (YAML), rendered manifest, hooks, notes, and release YAML.
+- Added Helm Charts endpoint (`/api/helmcharts`) for cluster-wide logical chart aggregation.
+- History uses SDK's `store.History()` for complete revision timeline.
+- Added `HelmHookDTO` and `HelmChartDTO` to DTOs.
+
+### UI
+- Helm Release drawer expanded to 7 tabs: Overview, Values, Manifest, Hooks, History, Notes, YAML.
+- Large text areas (Values, Manifest, YAML) use monospace font with copy-to-clipboard button.
+- Hooks tab shows name, kind, events, weight, and delete policies.
+- Empty optional tabs (Values, Manifest, Hooks, Notes, YAML) are hidden when data is absent.
+- Added Helm Charts table (cluster-scoped) with columns: Chart, Version, App Version, Releases, Namespaces.
+- Added Helm Chart drawer with overview and namespace chip listing.
+- Sidebar "Helm" group now contains Helm Releases and Helm Charts.
+- Release list table now includes App Version column.
+
 ## 2026-02-10 — CustomResourceDefinitions (read-only)
 ### Backend
 - Added CRD endpoints via dynamic client (no new dependencies):
@@ -440,5 +460,6 @@ This file tracks notable changes and decisions to make future sessions easier.
 - Quick actions:
   - delete pod
   - rollout restart / scale deployments
-- Helm releases: ConfigMap storage driver support (best-effort).
+- Helm: ConfigMap storage driver support (best-effort).
+- Custom Resource instances (list + details for selected CRDs).
 - Exec terminal into container (xterm.js + SPDY/exec).

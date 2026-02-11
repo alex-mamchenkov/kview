@@ -215,22 +215,24 @@ RBAC visibility without exposing secrets or tokens.
 
 ---
 
-## Phase 5.8 — Helm Releases (Read-only)
+## Phase 5.8 — Helm (Read-only) (DONE)
 
 Understand **what is deployed via Helm and in what state**.
 
-- [x] Helm Releases
-  - List releases per namespace (from Secrets type `helm.sh/release.v1`)
-  - Status, revision, chart name + version, updated time
-  - Drawer with Overview + History (all revisions) + Notes
-  - Pending/failed status visibility
-  - No Helm SDK dependency (base64+gzip+JSON decode)
-  - Decode errors non-fatal (shown inline)
-
+- [x] Helm Releases (full SDK integration)
+  - List releases per namespace using Helm v3 SDK (storage + driver packages)
+  - Status, revision, chart name + version, app version, updated time
+  - Drawer with Overview, Values, Manifest, Hooks, History, Notes, YAML
+  - Full values and manifest exposed (no redaction)
+  - Pending/failed status visibility with color-coded chips
+- [x] Helm Charts (logical aggregation)
+  - Cluster-wide view of unique chart name + version combinations
+  - Release count and namespace listing per chart
+  - Derived from release data across all namespaces
 - [ ] ConfigMap storage driver (best-effort, if Helm configured with configmap backend)
 
 Outcome:
-Fast read-only equivalent of `helm list` / `helm history` inside kview.
+Full read-only equivalent of `helm list` / `helm get all` / `helm history` inside kview.
 
 ---
 

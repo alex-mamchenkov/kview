@@ -20,7 +20,8 @@ export type Section =
   | "persistentvolumes"
   | "persistentvolumeclaims"
   | "customresourcedefinitions"
-  | "helm";
+  | "helm"
+  | "helmcharts";
 
 export type AppStateV1 = {
   v: 1;

@@ -1,194 +1,105 @@
 package kube
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
-	"encoding/base64"
-	"encoding/json"
-	"fmt"
-	"io"
-	"regexp"
-	"strconv"
-	"time"
+	"sort"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"helm.sh/helm/v3/pkg/release"
+	"helm.sh/helm/v3/pkg/storage"
+	"helm.sh/helm/v3/pkg/storage/driver"
 
 	"kview/internal/cluster"
 	"kview/internal/kube/dto"
 )
 
-var helmSecretNameRe = regexp.MustCompile(`^sh\.helm\.release\.v1\.(.+)\.v(\d+)$`)
-
-type helmReleaseMeta struct {
-	Name     string `json:"name"`
-	Info     *helmReleaseInfo   `json:"info"`
-	Chart    *helmReleaseChart  `json:"chart"`
-	Version  int                `json:"version"`
-	Namespace string            `json:"namespace"`
+func helmSecretStorage(c *cluster.Clients, namespace string) *storage.Storage {
+	d := driver.NewSecrets(c.Clientset.CoreV1().Secrets(namespace))
+	store := storage.Init(d)
+	store.Log = func(_ string, _ ...interface{}) {}
+	return store
 }
 
-type helmReleaseInfo struct {
-	Status       string `json:"status"`
-	FirstDeployed string `json:"first_deployed"`
-	LastDeployed  string `json:"last_deployed"`
-	Description  string `json:"description"`
-	Notes        string `json:"notes"`
-}
-
-type helmReleaseChart struct {
-	Metadata *helmChartMetadata `json:"metadata"`
-}
-
-type helmChartMetadata struct {
-	Name       string `json:"name"`
-	Version    string `json:"version"`
-	AppVersion string `json:"appVersion"`
-}
-
-func decodeHelmRelease(data []byte) (*helmReleaseMeta, error) {
-	decoded, err := base64.StdEncoding.DecodeString(string(data))
-	if err != nil {
-		return nil, fmt.Errorf("base64 decode: %w", err)
-	}
-
-	gz, err := gzip.NewReader(bytes.NewReader(decoded))
-	if err != nil {
-		return nil, fmt.Errorf("gzip open: %w", err)
-	}
-	defer gz.Close()
-
-	raw, err := io.ReadAll(gz)
-	if err != nil {
-		return nil, fmt.Errorf("gzip read: %w", err)
-	}
-
-	var rel helmReleaseMeta
-	if err := json.Unmarshal(raw, &rel); err != nil {
-		return nil, fmt.Errorf("json unmarshal: %w", err)
-	}
-
-	return &rel, nil
-}
-
-func parseHelmTimestamp(ts string) int64 {
-	if ts == "" {
-		return 0
-	}
-	formats := []string{
-		"2006-01-02T15:04:05.999999999Z07:00",
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05.999999999 -0700 MST",
-		"2006-01-02 15:04:05.999999999 +0000 UTC",
-	}
-	for _, f := range formats {
-		if t, err := time.Parse(f, ts); err == nil {
-			return t.Unix()
-		}
-	}
-	return 0
-}
-
-func chartString(meta *helmChartMetadata) string {
-	if meta == nil {
+func chartString(rel *release.Release) string {
+	if rel.Chart == nil || rel.Chart.Metadata == nil {
 		return ""
 	}
-	if meta.Version != "" {
-		return meta.Name + "-" + meta.Version
+	m := rel.Chart.Metadata
+	if m.Version != "" {
+		return m.Name + "-" + m.Version
 	}
-	return meta.Name
+	return m.Name
 }
 
-type secretEntry struct {
-	secretName string
-	relName    string
-	revision   int
-	data       []byte
-	backend    string
+func releaseStatus(rel *release.Release) string {
+	if rel.Info == nil {
+		return "unknown"
+	}
+	return rel.Info.Status.String()
 }
 
-func listHelmSecretEntries(ctx context.Context, c *cluster.Clients, namespace string) ([]secretEntry, error) {
-	secrets, err := c.Clientset.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: "owner=helm",
+func releaseUpdated(rel *release.Release) int64 {
+	if rel.Info == nil || rel.Info.LastDeployed.IsZero() {
+		return 0
+	}
+	return rel.Info.LastDeployed.Unix()
+}
+
+// latestRevisions groups releases by name and returns only the latest revision per release.
+func latestRevisions(releases []*release.Release) []*release.Release {
+	latest := make(map[string]*release.Release)
+	for _, r := range releases {
+		if cur, ok := latest[r.Name]; !ok || r.Version > cur.Version {
+			latest[r.Name] = r
+		}
+	}
+	out := make([]*release.Release, 0, len(latest))
+	for _, r := range latest {
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Name < out[j].Name
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	var entries []secretEntry
-	for _, s := range secrets.Items {
-		if s.Type != "helm.sh/release.v1" {
-			continue
-		}
-		m := helmSecretNameRe.FindStringSubmatch(s.Name)
-		if m == nil {
-			continue
-		}
-		relName := m[1]
-		rev, _ := strconv.Atoi(m[2])
-		releaseData := s.Data["release"]
-		if len(releaseData) == 0 {
-			continue
-		}
-		entries = append(entries, secretEntry{
-			secretName: s.Name,
-			relName:    relName,
-			revision:   rev,
-			data:       releaseData,
-			backend:    "Secret",
-		})
-	}
-
-	return entries, nil
+	return out
 }
 
-func ListHelmReleases(ctx context.Context, c *cluster.Clients, namespace string) ([]dto.HelmReleaseDTO, error) {
-	entries, err := listHelmSecretEntries(ctx, c, namespace)
+func releaseToListDTO(rel *release.Release, namespace string) dto.HelmReleaseDTO {
+	d := dto.HelmReleaseDTO{
+		Name:           rel.Name,
+		Namespace:      namespace,
+		Status:         releaseStatus(rel),
+		Revision:       rel.Version,
+		Chart:          chartString(rel),
+		Updated:        releaseUpdated(rel),
+		StorageBackend: "Secret",
+	}
+	if rel.Chart != nil && rel.Chart.Metadata != nil {
+		d.ChartName = rel.Chart.Metadata.Name
+		d.ChartVersion = rel.Chart.Metadata.Version
+		d.AppVersion = rel.Chart.Metadata.AppVersion
+	}
+	if rel.Info != nil {
+		d.Description = rel.Info.Description
+	}
+	return d
+}
+
+func ListHelmReleases(_ context.Context, c *cluster.Clients, namespace string) ([]dto.HelmReleaseDTO, error) {
+	store := helmSecretStorage(c, namespace)
+
+	releases, err := store.ListReleases()
 	if err != nil {
 		return nil, err
 	}
 
-	latest := make(map[string]secretEntry)
-	for _, e := range entries {
-		if cur, ok := latest[e.relName]; !ok || e.revision > cur.revision {
-			latest[e.relName] = e
-		}
-	}
+	latest := latestRevisions(releases)
 
 	out := make([]dto.HelmReleaseDTO, 0, len(latest))
-	for _, e := range latest {
-		rel, decErr := decodeHelmRelease(e.data)
-		if decErr != nil {
-			out = append(out, dto.HelmReleaseDTO{
-				Name:      e.relName,
-				Namespace: namespace,
-				Status:    "unknown",
-				Revision:  e.revision,
-				Chart:     "unknown",
-			})
-			continue
+	for _, rel := range latest {
+		ns := namespace
+		if rel.Namespace != "" {
+			ns = rel.Namespace
 		}
-
-		status := ""
-		updated := int64(0)
-		if rel.Info != nil {
-			status = rel.Info.Status
-			updated = parseHelmTimestamp(rel.Info.LastDeployed)
-		}
-
-		chart := ""
-		if rel.Chart != nil {
-			chart = chartString(rel.Chart.Metadata)
-		}
-
-		out = append(out, dto.HelmReleaseDTO{
-			Name:      e.relName,
-			Namespace: namespace,
-			Status:    status,
-			Revision:  e.revision,
-			Chart:     chart,
-			Updated:   updated,
-		})
+		out = append(out, releaseToListDTO(rel, ns))
 	}
 
 	return out, nil

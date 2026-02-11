@@ -2,96 +2,195 @@ package kube
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
+
+	"helm.sh/helm/v3/pkg/release"
+	syaml "sigs.k8s.io/yaml"
 
 	"kview/internal/cluster"
 	"kview/internal/kube/dto"
 )
 
-func GetHelmReleaseDetails(ctx context.Context, c *cluster.Clients, namespace, releaseName string) (*dto.HelmReleaseDetailsDTO, error) {
-	entries, err := listHelmSecretEntries(ctx, c, namespace)
+func GetHelmReleaseDetails(_ context.Context, c *cluster.Clients, namespace, releaseName string) (*dto.HelmReleaseDetailsDTO, error) {
+	store := helmSecretStorage(c, namespace)
+
+	history, err := store.History(releaseName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("helm release %q not found: %w", releaseName, err)
 	}
 
-	var matched []secretEntry
-	for _, e := range entries {
-		if e.relName == releaseName {
-			matched = append(matched, e)
-		}
-	}
-
-	if len(matched) == 0 {
+	if len(history) == 0 {
 		return nil, fmt.Errorf("helm release %q not found", releaseName)
 	}
 
-	sort.Slice(matched, func(i, j int) bool {
-		return matched[i].revision > matched[j].revision
+	// Sort history by revision descending (newest first).
+	sort.Slice(history, func(i, j int) bool {
+		return history[i].Version > history[j].Version
 	})
 
-	history := make([]dto.HelmReleaseRevision, 0, len(matched))
-	for _, e := range matched {
-		rel, decErr := decodeHelmRelease(e.data)
-		if decErr != nil {
-			history = append(history, dto.HelmReleaseRevision{
-				Revision:    e.revision,
-				Status:      "unknown",
-				DecodeError: decErr.Error(),
-			})
-			continue
-		}
+	latest := history[0]
 
+	// Build history DTOs.
+	historyDTOs := make([]dto.HelmReleaseRevision, 0, len(history))
+	for _, rel := range history {
 		rev := dto.HelmReleaseRevision{
-			Revision: e.revision,
-		}
-		if rel.Info != nil {
-			rev.Status = rel.Info.Status
-			rev.Updated = parseHelmTimestamp(rel.Info.LastDeployed)
-			rev.Description = rel.Info.Description
+			Revision: rel.Version,
+			Status:   releaseStatus(rel),
+			Updated:  releaseUpdated(rel),
 		}
 		if rel.Chart != nil && rel.Chart.Metadata != nil {
-			rev.Chart = chartString(rel.Chart.Metadata)
+			rev.Chart = chartString(rel)
 			rev.ChartVersion = rel.Chart.Metadata.Version
 			rev.AppVersion = rel.Chart.Metadata.AppVersion
 		}
-		history = append(history, rev)
+		if rel.Info != nil {
+			rev.Description = rel.Info.Description
+		}
+		historyDTOs = append(historyDTOs, rev)
 	}
 
-	latest := matched[0]
-	latestRel, latestErr := decodeHelmRelease(latest.data)
-
+	// Build summary.
 	summary := dto.HelmReleaseSummaryDTO{
-		Name:           releaseName,
+		Name:           latest.Name,
 		Namespace:      namespace,
-		Revision:       latest.revision,
-		StorageBackend: latest.backend,
+		Revision:       latest.Version,
+		StorageBackend: "Secret",
+		Status:         releaseStatus(latest),
+		Updated:        releaseUpdated(latest),
+	}
+	if latest.Namespace != "" {
+		summary.Namespace = latest.Namespace
+	}
+	if latest.Chart != nil && latest.Chart.Metadata != nil {
+		summary.Chart = chartString(latest)
+		summary.ChartName = latest.Chart.Metadata.Name
+		summary.ChartVersion = latest.Chart.Metadata.Version
+		summary.AppVersion = latest.Chart.Metadata.AppVersion
+	}
+	if latest.Info != nil {
+		summary.Description = latest.Info.Description
+		if !latest.Info.FirstDeployed.IsZero() {
+			summary.FirstDeployed = latest.Info.FirstDeployed.Unix()
+		}
+		if !latest.Info.LastDeployed.IsZero() {
+			summary.LastDeployed = latest.Info.LastDeployed.Unix()
+		}
 	}
 
-	if latestErr != nil {
-		summary.Status = "unknown"
-		summary.DecodeError = latestErr.Error()
-	} else {
-		if latestRel.Info != nil {
-			summary.Status = latestRel.Info.Status
-			summary.Updated = parseHelmTimestamp(latestRel.Info.LastDeployed)
-			summary.Description = latestRel.Info.Description
-		}
-		if latestRel.Chart != nil && latestRel.Chart.Metadata != nil {
-			summary.Chart = chartString(latestRel.Chart.Metadata)
-			summary.ChartVersion = latestRel.Chart.Metadata.Version
-			summary.AppVersion = latestRel.Chart.Metadata.AppVersion
-		}
-	}
-
+	// Notes.
 	notes := ""
-	if latestErr == nil && latestRel.Info != nil {
-		notes = latestRel.Info.Notes
+	if latest.Info != nil {
+		notes = latest.Info.Notes
 	}
+
+	// Values: marshal user-supplied config as YAML.
+	values := ""
+	if latest.Config != nil && len(latest.Config) > 0 {
+		valBytes, err := syaml.Marshal(latest.Config)
+		if err == nil {
+			values = string(valBytes)
+		}
+	}
+
+	// Manifest.
+	manifest := latest.Manifest
+
+	// Hooks.
+	hooks := buildHookDTOs(latest.Hooks)
+
+	// YAML: serialize a cleaned-up release representation.
+	yamlStr := buildReleaseYAML(latest)
 
 	return &dto.HelmReleaseDetailsDTO{
-		Summary: summary,
-		History: history,
-		Notes:   notes,
+		Summary:  summary,
+		History:  historyDTOs,
+		Notes:    notes,
+		Values:   values,
+		Manifest: manifest,
+		Hooks:    hooks,
+		Yaml:     yamlStr,
 	}, nil
+}
+
+func buildHookDTOs(hooks []*release.Hook) []dto.HelmHookDTO {
+	if len(hooks) == 0 {
+		return nil
+	}
+	out := make([]dto.HelmHookDTO, 0, len(hooks))
+	for _, h := range hooks {
+		events := make([]string, 0, len(h.Events))
+		for _, e := range h.Events {
+			events = append(events, string(e))
+		}
+		policies := make([]string, 0, len(h.DeletePolicies))
+		for _, p := range h.DeletePolicies {
+			policies = append(policies, string(p))
+		}
+		out = append(out, dto.HelmHookDTO{
+			Name:           h.Name,
+			Kind:           h.Kind,
+			Events:         events,
+			Weight:         h.Weight,
+			DeletePolicies: policies,
+		})
+	}
+	return out
+}
+
+// releaseYAMLView is a cleaned-up representation of a release for YAML display.
+// Excludes chart templates to avoid massive payloads.
+type releaseYAMLView struct {
+	Name      string                 `json:"name"`
+	Namespace string                 `json:"namespace"`
+	Revision  int                    `json:"revision"`
+	Status    string                 `json:"status"`
+	Chart     string                 `json:"chart"`
+	Config    map[string]interface{} `json:"config,omitempty"`
+	Manifest  string                 `json:"manifest,omitempty"`
+	Info      *releaseInfoView       `json:"info,omitempty"`
+}
+
+type releaseInfoView struct {
+	FirstDeployed string `json:"firstDeployed,omitempty"`
+	LastDeployed  string `json:"lastDeployed,omitempty"`
+	Description   string `json:"description,omitempty"`
+	Notes         string `json:"notes,omitempty"`
+	Status        string `json:"status"`
+}
+
+func buildReleaseYAML(rel *release.Release) string {
+	view := releaseYAMLView{
+		Name:      rel.Name,
+		Namespace: rel.Namespace,
+		Revision:  rel.Version,
+		Status:    releaseStatus(rel),
+		Chart:     chartString(rel),
+		Config:    rel.Config,
+		Manifest:  rel.Manifest,
+	}
+	if rel.Info != nil {
+		view.Info = &releaseInfoView{
+			Description: rel.Info.Description,
+			Notes:       rel.Info.Notes,
+			Status:      rel.Info.Status.String(),
+		}
+		if !rel.Info.FirstDeployed.IsZero() {
+			view.Info.FirstDeployed = rel.Info.FirstDeployed.Format("2006-01-02T15:04:05Z07:00")
+		}
+		if !rel.Info.LastDeployed.IsZero() {
+			view.Info.LastDeployed = rel.Info.LastDeployed.Format("2006-01-02T15:04:05Z07:00")
+		}
+	}
+
+	jsonBytes, err := json.Marshal(view)
+	if err != nil {
+		return ""
+	}
+	yamlBytes, err := syaml.JSONToYAML(jsonBytes)
+	if err != nil {
+		return ""
+	}
+	return string(yamlBytes)
 }

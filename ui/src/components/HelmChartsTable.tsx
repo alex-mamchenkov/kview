@@ -2,8 +2,8 @@ import React, { useCallback, useMemo, useState } from "react";
 import { Paper, Typography, Box, Chip } from "@mui/material";
 import { DataGrid, GridColDef, GridRowSelectionModel } from "@mui/x-data-grid";
 import { apiGet } from "../api";
-import { fmtTs, valueOrDash } from "../utils/format";
-import HelmReleaseDrawer from "./HelmReleaseDrawer";
+import { valueOrDash } from "../utils/format";
+import HelmChartDrawer from "./HelmChartDrawer";
 import useListQuery from "../utils/useListQuery";
 import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
 import { getResourceLabel, listResourceAccess } from "../utils/k8sResources";
@@ -11,107 +11,78 @@ import ListStateOverlay from "./shared/ListStateOverlay";
 import useListFilters from "../utils/useListFilters";
 import ResourceTableToolbar from "./shared/ResourceTableToolbar";
 
-type HelmRelease = {
-  name: string;
-  namespace: string;
-  status: string;
-  revision: number;
-  chart: string;
+type HelmChart = {
   chartName: string;
   chartVersion: string;
   appVersion: string;
-  description: string;
-  updated: number;
-  storageBackend: string;
+  releases: number;
+  namespaces: string[];
 };
 
-type Row = HelmRelease & { id: string };
+type Row = HelmChart & { id: string };
 
-type ChipColor = "success" | "warning" | "error" | "default";
-
-function helmStatusChipColor(status?: string | null): ChipColor {
-  switch (status) {
-    case "deployed":
-      return "success";
-    case "superseded":
-      return "default";
-    case "failed":
-      return "error";
-    case "pending-install":
-    case "pending-upgrade":
-    case "pending-rollback":
-    case "uninstalling":
-      return "warning";
-    case "unknown":
-      return "warning";
-    default:
-      return "default";
-  }
-}
-
-const resourceLabel = getResourceLabel("helm");
+const resourceLabel = getResourceLabel("helmcharts");
 
 const cols: GridColDef[] = [
-  { field: "name", headerName: "Name", flex: 1, minWidth: 200 },
+  { field: "chartName", headerName: "Chart", flex: 1, minWidth: 200 },
   {
-    field: "status",
-    headerName: "Status",
-    width: 140,
-    renderCell: (p) => (
-      <Chip
-        size="small"
-        label={valueOrDash(p.value as string | undefined)}
-        color={helmStatusChipColor(p.value as string | undefined)}
-      />
-    ),
-  },
-  {
-    field: "revision",
-    headerName: "Revision",
-    width: 90,
-    type: "number",
-    renderCell: (p) => valueOrDash(p.value as number | undefined),
-  },
-  {
-    field: "chart",
-    headerName: "Chart",
-    width: 220,
+    field: "chartVersion",
+    headerName: "Version",
+    width: 150,
     renderCell: (p) => valueOrDash(p.value as string | undefined),
   },
   {
     field: "appVersion",
     headerName: "App Version",
-    width: 130,
+    width: 150,
     renderCell: (p) => valueOrDash(p.value as string | undefined),
   },
   {
-    field: "updated",
-    headerName: "Updated",
-    width: 180,
-    renderCell: (p) => fmtTs(p.value as number | undefined),
+    field: "releases",
+    headerName: "Releases",
+    width: 100,
+    type: "number",
+  },
+  {
+    field: "namespaces",
+    headerName: "Namespaces",
+    flex: 1,
+    minWidth: 200,
+    renderCell: (p) => {
+      const ns = p.value as string[] | undefined;
+      if (!ns || ns.length === 0) return "-";
+      return (
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+          {ns.map((n) => (
+            <Chip key={n} size="small" label={n} variant="outlined" />
+          ))}
+        </Box>
+      );
+    },
   },
 ];
 
-export default function HelmReleasesTable({ token, namespace }: { token: string; namespace: string }) {
+export default function HelmChartsTable({ token }: { token: string }) {
   const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>([]);
-  const selectedName = useMemo(() => {
+  const selectedId = useMemo(() => {
     if (!selectionModel.length) return null;
-    const id = String(selectionModel[0]);
-    const parts = id.split("/");
-    return parts.length >= 2 ? parts.slice(1).join("/") : null;
+    return String(selectionModel[0]);
   }, [selectionModel]);
 
-  const [drawerName, setDrawerName] = useState<string | null>(null);
-  const [refreshSec, setRefreshSec] = useState<number>(10);
+  const [drawerChart, setDrawerChart] = useState<HelmChart | null>(null);
+  const [refreshSec, setRefreshSec] = useState<number>(30);
 
   const fetchRows = useCallback(async () => {
-    const res = await apiGet<any>(`/api/namespaces/${encodeURIComponent(namespace)}/helmreleases`, token);
-    const items: HelmRelease[] = res.items || [];
-    return items.map((r) => ({ ...r, id: `${r.namespace}/${r.name}` }));
-  }, [token, namespace]);
+    const res = await apiGet<any>("/api/helmcharts", token);
+    const items: HelmChart[] = res.items || [];
+    return items.map((c) => ({
+      ...c,
+      id: `${c.chartName}/${c.chartVersion}`,
+    }));
+  }, [token]);
 
   const { items: rows, error, loading, lastRefresh } = useListQuery<Row>({
-    enabled: !!namespace,
+    enabled: true,
     refreshSec,
     fetchItems: fetchRows,
     onInitialResult: () => setSelectionModel([]),
@@ -122,14 +93,13 @@ export default function HelmReleasesTable({ token, namespace }: { token: string;
     itemsLength: rows.length,
     error,
     loading,
-    resource: listResourceAccess.helm,
-    namespace,
+    resource: listResourceAccess.helmcharts,
   });
 
   const filterPredicate = useCallback(
     (row: Row, q: string) =>
-      row.name.toLowerCase().includes(q) ||
-      row.chart.toLowerCase().includes(q) ||
+      row.chartName.toLowerCase().includes(q) ||
+      (row.chartVersion || "").toLowerCase().includes(q) ||
       (row.appVersion || "").toLowerCase().includes(q),
     [],
   );
@@ -142,8 +112,9 @@ export default function HelmReleasesTable({ token, namespace }: { token: string;
     });
 
   function openSelected() {
-    if (!selectedName) return;
-    setDrawerName(selectedName);
+    if (!selectedId) return;
+    const row = rows.find((r) => r.id === selectedId);
+    if (row) setDrawerChart(row);
   }
 
   const ToolbarAny = ResourceTableToolbar as any;
@@ -151,7 +122,7 @@ export default function HelmReleasesTable({ token, namespace }: { token: string;
   return (
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6" sx={{ mb: 1 }}>
-        {resourceLabel} — {namespace}
+        {resourceLabel}
       </Typography>
 
       <div style={{ height: 700, width: "100%" }}>
@@ -164,20 +135,24 @@ export default function HelmReleasesTable({ token, namespace }: { token: string;
           hideFooterSelectedRowCount
           rowSelectionModel={selectionModel}
           onRowSelectionModelChange={(m) => setSelectionModel(m)}
-          onRowDoubleClick={(p) => setDrawerName((p.row as any).name as string)}
-          initialState={{
-            sorting: { sortModel: [{ field: "name", sort: "asc" }] },
+          onRowDoubleClick={(p) => {
+            const row = p.row as Row;
+            setDrawerChart(row);
           }}
+          initialState={{
+            sorting: { sortModel: [{ field: "chartName", sort: "asc" }] },
+          }}
+          getRowHeight={() => "auto"}
           slots={{ toolbar: ToolbarAny, noRowsOverlay: ListStateOverlay }}
           slotProps={{
             toolbar: {
-              filterLabel: "Filter (name / chart / version)",
+              filterLabel: "Filter (chart / version)",
               filter,
               onFilterChange: setFilter,
               selectedQuickFilter,
               onQuickFilterToggle: toggleQuickFilter,
               onOpenSelected: openSelected,
-              hasSelection: !!selectedName,
+              hasSelection: !!selectedId,
               refreshSec,
               onRefreshChange: setRefreshSec,
               quickFilters,
@@ -197,12 +172,10 @@ export default function HelmReleasesTable({ token, namespace }: { token: string;
         </Typography>
       </Box>
 
-      <HelmReleaseDrawer
-        open={!!drawerName}
-        onClose={() => setDrawerName(null)}
-        token={token}
-        namespace={namespace}
-        releaseName={drawerName}
+      <HelmChartDrawer
+        open={!!drawerChart}
+        onClose={() => setDrawerChart(null)}
+        chart={drawerChart}
       />
     </Paper>
   );

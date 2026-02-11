@@ -2085,6 +2085,29 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, map[string]any{"active": active, "item": det})
 		})
 
+		api.Get("/helmcharts", func(w http.ResponseWriter, r *http.Request) {
+			ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+			defer cancel()
+
+			clients, active, err := s.mgr.GetClients(ctx)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			items, err := kube.ListHelmCharts(ctx, clients)
+			if err != nil {
+				status := http.StatusInternalServerError
+				if apierrors.IsForbidden(err) {
+					status = http.StatusForbidden
+				}
+				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": items})
+		})
+
 		api.Get("/namespaces/{ns}/ingresses", func(w http.ResponseWriter, r *http.Request) {
 			ns := chi.URLParam(r, "ns")
 			if ns == "" {

@@ -124,9 +124,14 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - single selection
   - refresh interval + last refresh timestamp
 - Helm Releases view:
-  - list per namespace (from Secrets with type helm.sh/release.v1)
-  - status, revision, chart, updated time
-  - filter by name or chart
+  - list per namespace using Helm v3 SDK
+  - status, revision, chart, app version, updated time
+  - filter by name, chart, or version
+  - refresh interval + last refresh timestamp
+- Helm Charts view:
+  - cluster-wide logical chart aggregation
+  - chart name, version, app version, release count, namespaces
+  - filter by chart or version
   - refresh interval + last refresh timestamp
 - Node details drawer:
   - overview summary + capacity/taints
@@ -219,10 +224,16 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
   - versions table (served, storage, deprecated)
   - events, YAML
 - Helm Release details drawer:
-  - overview: name, namespace, status, revision, chart, app version, storage backend
+  - overview: name, namespace, status, revision, chart, app version, storage backend, first/last deployed
+  - values: full user-supplied values (YAML, copy-friendly)
+  - manifest: full rendered manifest (monospace, copy-friendly)
+  - hooks: name, kind, events, weight, delete policies
   - history: all revisions with status, chart, updated, description
   - notes (when available)
-  - decode errors shown inline (non-fatal)
+  - YAML: full release serialized as YAML
+- Helm Chart details drawer:
+  - overview: chart name, version, app version, release count
+  - namespaces listing
 - Pod details drawer:
   - overview summary + health conditions
   - containers: runtime, resources, env, mounts, probes
@@ -246,7 +257,7 @@ The application runs a local HTTP server and serves a web UI from a single Go bi
 ## Requirements
 
 Backend:
-- Go 1.22 or newer
+- Go 1.25 or newer
 
 Frontend:
 - Node.js 20+ (required by Vite toolchain)

@@ -22,6 +22,7 @@ import ClusterRoleBindingsTable from "./components/ClusterRoleBindingsTable";
 import PersistentVolumesTable from "./components/PersistentVolumesTable";
 import PersistentVolumeClaimsTable from "./components/PersistentVolumeClaimsTable";
 import HelmReleasesTable from "./components/HelmReleasesTable";
+import HelmChartsTable from "./components/HelmChartsTable";
 import CustomResourceDefinitionsTable from "./components/CustomResourceDefinitionsTable";
 import { apiGet, apiPost, toApiError } from "./api";
 import { loadState, saveState, toggleFavouriteNamespace, type Section } from "./state";
@@ -237,6 +238,7 @@ export default function App() {
         {section === "helm" && namespace ? (
           <HelmReleasesTable token={token} namespace={namespace} />
         ) : null}
+        {section === "helmcharts" ? <HelmChartsTable token={token} /> : null}
       </Box>
       <Snackbar
         open={recoveryOpen}
