@@ -40,6 +40,7 @@ import CronJobDrawer from "./CronJobDrawer";
 import PersistentVolumeClaimDrawer from "./PersistentVolumeClaimDrawer";
 import ServiceAccountDrawer from "./ServiceAccountDrawer";
 import CustomResourceDefinitionDrawer from "./CustomResourceDefinitionDrawer";
+import NamespaceDrawer from "./NamespaceDrawer";
 
 type HelmHook = {
   name: string;
@@ -100,6 +101,7 @@ export default function HelmReleaseDrawer(props: {
 
   // Sub-drawer state for cross-links
   const [linkedResource, setLinkedResource] = useState<ManifestResource | null>(null);
+  const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
 
   const ns = props.namespace;
   const name = props.releaseName;
@@ -112,6 +114,7 @@ export default function HelmReleaseDrawer(props: {
     setDetails(null);
     setLoading(true);
     setLinkedResource(null);
+    setDrawerNamespace(null);
 
     (async () => {
       const det = await apiGet<any>(
@@ -160,7 +163,14 @@ export default function HelmReleaseDrawer(props: {
   const summaryItems = useMemo(
     () => [
       { label: "Name", value: valueOrDash(summary?.name), monospace: true },
-      { label: "Namespace", value: valueOrDash(summary?.namespace) },
+      {
+        label: "Namespace",
+        value: summary?.namespace ? (
+          <ResourceLinkChip label={summary.namespace} onClick={() => setDrawerNamespace(summary.namespace)} />
+        ) : (
+          "-"
+        ),
+      },
       {
         label: "Status",
         value: (
@@ -208,9 +218,7 @@ export default function HelmReleaseDrawer(props: {
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
             Helm Release: {name || "-"}{" "}
-            <Typography component="span" variant="body2">
-              ({ns})
-            </Typography>
+            <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} />
           </Typography>
           <IconButton onClick={props.onClose}>
             <CloseIcon />
@@ -289,12 +297,12 @@ export default function HelmReleaseDrawer(props: {
 
               {/* VALUES */}
               {activeTabId === "values" && (
-                <CodeBlock code={values} />
+                <CodeBlock code={values} language="yaml" />
               )}
 
               {/* MANIFEST */}
               {activeTabId === "manifest" && (
-                <CodeBlock code={manifest} />
+                <CodeBlock code={manifest} language="yaml" />
               )}
 
               {/* HOOKS */}
@@ -475,6 +483,12 @@ export default function HelmReleaseDrawer(props: {
               onClose={() => setLinkedResource(null)}
               token={props.token}
               crdName={linkedResource?.kind === "CustomResourceDefinition" ? linkedResource.name : null}
+            />
+            <NamespaceDrawer
+              open={!!drawerNamespace}
+              onClose={() => setDrawerNamespace(null)}
+              token={props.token}
+              namespaceName={drawerNamespace}
             />
           </>
         )}

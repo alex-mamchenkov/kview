@@ -5,6 +5,7 @@ export function phaseChipColor(phase?: string | null): ChipColor {
     case "Running":
       return "success";
     case "Pending":
+    case "Unknown":
       return "warning";
     case "Failed":
       return "error";

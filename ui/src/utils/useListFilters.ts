@@ -30,69 +30,69 @@ export default function useListFilters<T>({
   quickFilterPatterns = defaultQuickFilterPatterns,
   minQuickFilterCount = 3,
 }: UseListFiltersOptions<T>): UseListFiltersResult<T> {
-  const [filter, setFilterValue] = useState<string>(() => loadListTextFilter());
-  const [selectedQuickFilter, setSelectedQuickFilterValue] = useState<string | null>(() => {
-    const stored = loadQuickFilterSelection();
-    return stored.length > 0 ? stored[0] : null;
-  });
+  const [filter, setFilterRaw] = useState<string>(() => loadListTextFilter());
 
   const quickFilters = useMemo(
     () => buildQuickFilters(rows, getQuickFilterKey, quickFilterPatterns, minQuickFilterCount),
     [rows, getQuickFilterKey, quickFilterPatterns, minQuickFilterCount],
   );
 
+  // Derive: quick filter is highlighted iff filter exactly equals its value
+  const selectedQuickFilter = useMemo(() => {
+    const match = quickFilters.find((q) => q.value === filter);
+    return match ? match.value : null;
+  }, [quickFilters, filter]);
+
+  // On data refresh, validate persisted quick filter still exists in available set
   useEffect(() => {
     if (!lastRefresh) return;
     const stored = loadQuickFilterSelection();
-    const available = new Set(quickFilters.map((q) => q.id));
-    const next = stored.find((id) => available.has(id)) || null;
-
-    if (next !== selectedQuickFilter) {
-      setSelectedQuickFilterValue(next);
-    }
-    if (next && filter !== next) {
-      setFilterValue(next);
-    }
-    if (!next && stored.length > 0) {
+    if (stored.length === 0) return;
+    const available = new Set(quickFilters.map((q) => q.value));
+    if (available.has(stored[0])) {
+      // Stored quick filter still available — ensure filter text matches
+      if (filter !== stored[0]) {
+        setFilterRaw(stored[0]);
+        saveListTextFilter(stored[0]);
+      }
+    } else {
+      // Stored quick filter no longer available — clear it
       saveQuickFilterSelection([]);
     }
-  }, [quickFilters, selectedQuickFilter, filter, lastRefresh]);
+    // Only re-run when quickFilters set or lastRefresh changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickFilters, lastRefresh]);
 
-  const setFilter = useCallback(
-    (value: string) => {
-      setFilterValue(value);
-      saveListTextFilter(value);
-      if (selectedQuickFilter && value !== selectedQuickFilter) {
-        setSelectedQuickFilterValue(null);
-        saveQuickFilterSelection([]);
-      }
-    },
-    [selectedQuickFilter],
-  );
+  const setFilter = useCallback((value: string) => {
+    setFilterRaw(value);
+    saveListTextFilter(value);
+  }, []);
 
   const setSelectedQuickFilter = useCallback(
     (value: string | null) => {
-      setSelectedQuickFilterValue(value);
+      const newFilter = value ?? "";
+      setFilterRaw(newFilter);
+      saveListTextFilter(newFilter);
       saveQuickFilterSelection(value ? [value] : []);
-      if (value && filter !== value) {
-        setFilterValue(value);
-        saveListTextFilter(value);
-      }
     },
-    [filter],
+    [],
   );
 
   const toggleQuickFilter = useCallback(
     (value: string) => {
-      if (selectedQuickFilter === value) {
-        setSelectedQuickFilter(null);
-        setFilter("");
-        return;
+      if (filter === value) {
+        // Toggle off
+        setFilterRaw("");
+        saveListTextFilter("");
+        saveQuickFilterSelection([]);
+      } else {
+        // Toggle on
+        setFilterRaw(value);
+        saveListTextFilter(value);
+        saveQuickFilterSelection([value]);
       }
-      setSelectedQuickFilter(value);
-      setFilter(value);
     },
-    [selectedQuickFilter, setSelectedQuickFilter, setFilter],
+    [filter],
   );
 
   const filteredRows = useMemo(() => {

@@ -34,6 +34,8 @@ import MetadataSection from "./shared/MetadataSection";
 import ConditionsTable from "./shared/ConditionsTable";
 import EventsList from "./shared/EventsList";
 import CodeBlock from "./shared/CodeBlock";
+import ResourceLinkChip from "./shared/ResourceLinkChip";
+import NamespaceDrawer from "./NamespaceDrawer";
 
 type DeploymentDetails = {
   summary: DeploymentSummary;
@@ -170,6 +172,7 @@ export default function DeploymentDrawer(props: {
   const [err, setErr] = useState("");
   const [drawerPod, setDrawerPod] = useState<string | null>(null);
   const [drawerReplicaSet, setDrawerReplicaSet] = useState<string | null>(null);
+  const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
 
   const ns = props.namespace;
   const name = props.deploymentName;
@@ -184,6 +187,7 @@ export default function DeploymentDrawer(props: {
     setEvents([]);
     setDrawerPod(null);
     setDrawerReplicaSet(null);
+    setDrawerNamespace(null);
     setLoading(true);
 
     (async () => {
@@ -265,9 +269,30 @@ export default function DeploymentDrawer(props: {
       { label: "Ready replicas", value: valueOrDash(summary?.ready) },
       { label: "Available replicas", value: valueOrDash(summary?.available) },
       { label: "Strategy", value: valueOrDash(summary?.strategy) },
-      { label: "Namespace", value: valueOrDash(summary?.namespace) },
+      {
+        label: "Namespace",
+        value: summary?.namespace ? (
+          <ResourceLinkChip label={summary.namespace} onClick={() => setDrawerNamespace(summary.namespace)} />
+        ) : (
+          "-"
+        ),
+      },
       { label: "Age", value: fmtAge(summary?.ageSec) },
-      { label: "Selector", value: valueOrDash(summary?.selector) },
+      {
+        label: "Selector",
+        value: (() => {
+          if (!summary?.selector) return "-";
+          const parts = summary.selector.split(",").map((s) => s.trim()).filter(Boolean);
+          if (parts.length === 0) return "-";
+          return (
+            <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+              {parts.map((part) => (
+                <Chip key={part} size="small" label={part} />
+              ))}
+            </Box>
+          );
+        })(),
+      },
     ],
     [summary]
   );
@@ -289,7 +314,8 @@ export default function DeploymentDrawer(props: {
       <Box sx={{ width: 820, p: 2, display: "flex", flexDirection: "column", height: "100%" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            Deployment: {name || "-"} <Typography component="span" variant="body2">({ns})</Typography>
+            Deployment: {name || "-"}{" "}
+            <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} />
           </Typography>
           <IconButton onClick={props.onClose}>
             <CloseIcon />
@@ -772,6 +798,12 @@ export default function DeploymentDrawer(props: {
               token={props.token}
               namespace={ns}
               replicaSetName={drawerReplicaSet}
+            />
+            <NamespaceDrawer
+              open={!!drawerNamespace}
+              onClose={() => setDrawerNamespace(null)}
+              token={props.token}
+              namespaceName={drawerNamespace}
             />
           </>
         )}

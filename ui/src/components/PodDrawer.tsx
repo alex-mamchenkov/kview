@@ -33,7 +33,7 @@ import { apiGet, toApiError, type ApiError } from "../api";
 import { useConnectionState } from "../connectionState";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
-import { eventChipColor } from "../utils/k8sUi";
+import { eventChipColor, phaseChipColor } from "../utils/k8sUi";
 import ConditionsTable from "./shared/ConditionsTable";
 import CodeBlock from "./shared/CodeBlock";
 import IngressDrawer from "./IngressDrawer";
@@ -44,6 +44,8 @@ import StatefulSetDrawer from "./StatefulSetDrawer";
 import DaemonSetDrawer from "./DaemonSetDrawer";
 import JobDrawer from "./JobDrawer";
 import NodeDrawer from "./NodeDrawer";
+import ServiceAccountDrawer from "./ServiceAccountDrawer";
+import NamespaceDrawer from "./NamespaceDrawer";
 import Section from "./shared/Section";
 import KeyValueTable from "./shared/KeyValueTable";
 import AccessDeniedState from "./shared/AccessDeniedState";
@@ -344,6 +346,8 @@ export default function PodDrawer(props: {
   const [drawerDaemonSet, setDrawerDaemonSet] = useState<string | null>(null);
   const [drawerJob, setDrawerJob] = useState<string | null>(null);
   const [drawerNode, setDrawerNode] = useState<string | null>(null);
+  const [drawerServiceAccount, setDrawerServiceAccount] = useState<string | null>(null);
+  const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
 
   // Logs UI state
   const [container, setContainer] = useState<string>("");
@@ -462,6 +466,8 @@ export default function PodDrawer(props: {
     setDrawerDaemonSet(null);
     setDrawerJob(null);
     setDrawerNode(null);
+    setDrawerServiceAccount(null);
+    setDrawerNamespace(null);
     stopLogs();
 
     setLoading(true);
@@ -714,7 +720,14 @@ export default function PodDrawer(props: {
   };
   const summaryItems = useMemo(
     () => [
-      { label: "Phase", value: valueOrDash(summary?.phase) },
+      {
+        label: "Phase",
+        value: summary?.phase ? (
+          <Chip size="small" label={summary.phase} color={phaseChipColor(summary.phase)} />
+        ) : (
+          "-"
+        ),
+      },
       { label: "Ready", value: valueOrDash(summary?.ready) },
       {
         label: "Restarts",
@@ -757,7 +770,17 @@ export default function PodDrawer(props: {
             "-"
           ),
       },
-      { label: "Service Account", value: valueOrDash(summary?.serviceAccount) },
+      {
+        label: "Service Account",
+        value: summary?.serviceAccount ? (
+          <ResourceLinkChip
+            label={summary.serviceAccount}
+            onClick={() => setDrawerServiceAccount(summary.serviceAccount)}
+          />
+        ) : (
+          "-"
+        ),
+      },
     ],
     [summary]
   );
@@ -784,7 +807,8 @@ export default function PodDrawer(props: {
       <Box sx={{ width: 820, p: 2, display: "flex", flexDirection: "column", height: "100%" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            Pod: {name || "-"} <Typography component="span" variant="body2">({ns})</Typography>
+            Pod: {name || "-"}{" "}
+            <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} />
           </Typography>
           <IconButton onClick={props.onClose}>
             <CloseIcon />
@@ -969,7 +993,14 @@ export default function PodDrawer(props: {
                                         </Typography>
                                       ),
                                     },
-                                    { label: "State", value: valueOrDash(ctn.state) },
+                                    {
+                                      label: "State",
+                                      value: ctn.state ? (
+                                        <Chip size="small" label={ctn.state} color={containerStateColor(ctn.state)} />
+                                      ) : (
+                                        "-"
+                                      ),
+                                    },
                                     { label: "Reason", value: valueOrDash(ctn.reason) },
                                     {
                                       label: "Message",
@@ -1697,6 +1728,19 @@ export default function PodDrawer(props: {
               onClose={() => setDrawerNode(null)}
               token={props.token}
               nodeName={drawerNode}
+            />
+            <ServiceAccountDrawer
+              open={!!drawerServiceAccount}
+              onClose={() => setDrawerServiceAccount(null)}
+              token={props.token}
+              namespace={ns}
+              serviceAccountName={drawerServiceAccount}
+            />
+            <NamespaceDrawer
+              open={!!drawerNamespace}
+              onClose={() => setDrawerNamespace(null)}
+              token={props.token}
+              namespaceName={drawerNamespace}
             />
           </>
         )}

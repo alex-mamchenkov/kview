@@ -34,6 +34,7 @@ import MetadataSection from "./shared/MetadataSection";
 import ConditionsTable from "./shared/ConditionsTable";
 import EventsList from "./shared/EventsList";
 import CodeBlock from "./shared/CodeBlock";
+import NamespaceDrawer from "./NamespaceDrawer";
 
 type ReplicaSetDetails = {
   summary: ReplicaSetSummary;
@@ -150,6 +151,7 @@ export default function ReplicaSetDrawer(props: {
   const [err, setErr] = useState("");
   const [drawerPod, setDrawerPod] = useState<string | null>(null);
   const [drawerDeployment, setDrawerDeployment] = useState<string | null>(null);
+  const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
 
   const ns = props.namespace;
   const name = props.replicaSetName;
@@ -163,6 +165,7 @@ export default function ReplicaSetDrawer(props: {
     setEvents([]);
     setDrawerPod(null);
     setDrawerDeployment(null);
+    setDrawerNamespace(null);
     setLoading(true);
 
     (async () => {
@@ -191,7 +194,14 @@ export default function ReplicaSetDrawer(props: {
   const summaryItems = useMemo(
     () => [
       { label: "Name", value: valueOrDash(summary?.name) },
-      { label: "Namespace", value: valueOrDash(summary?.namespace) },
+      {
+        label: "Namespace",
+        value: summary?.namespace ? (
+          <ResourceLinkChip label={summary.namespace} onClick={() => setDrawerNamespace(summary.namespace)} />
+        ) : (
+          "-"
+        ),
+      },
       {
         label: "Owner Deployment",
         value:
@@ -210,7 +220,21 @@ export default function ReplicaSetDrawer(props: {
         value: linkedPods ? `${linkedPods.ready}/${linkedPods.total}` : "-",
       },
       { label: "Age", value: fmtAge(summary?.ageSec) },
-      { label: "Selector", value: valueOrDash(summary?.selector) },
+      {
+        label: "Selector",
+        value: (() => {
+          if (!summary?.selector) return "-";
+          const parts = summary.selector.split(",").map((s) => s.trim()).filter(Boolean);
+          if (parts.length === 0) return "-";
+          return (
+            <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+              {parts.map((part) => (
+                <Chip key={part} size="small" label={part} />
+              ))}
+            </Box>
+          );
+        })(),
+      },
     ],
     [summary, owner, linkedPods]
   );
@@ -232,7 +256,8 @@ export default function ReplicaSetDrawer(props: {
       <Box sx={{ width: 820, p: 2, display: "flex", flexDirection: "column", height: "100%" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            ReplicaSet: {name || "-"} <Typography component="span" variant="body2">({ns})</Typography>
+            ReplicaSet: {name || "-"}{" "}
+            <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} />
           </Typography>
           <IconButton onClick={props.onClose}>
             <CloseIcon />
@@ -485,6 +510,12 @@ export default function ReplicaSetDrawer(props: {
               token={props.token}
               namespace={ns}
               deploymentName={drawerDeployment}
+            />
+            <NamespaceDrawer
+              open={!!drawerNamespace}
+              onClose={() => setDrawerNamespace(null)}
+              token={props.token}
+              namespaceName={drawerNamespace}
             />
           </>
         )}
