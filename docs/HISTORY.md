@@ -2,6 +2,34 @@
 
 This file tracks notable changes and decisions to make future sessions easier.
 
+## 2026-02-11 — UI Consistency Refactor + Cross-Links Sweep
+
+### Shared components created
+- **MetadataSection** (`shared/MetadataSection.tsx`): renders labels & annotations as chips with tooltips for long values. Supports `wrapInSection={false}` for embedding inside existing Accordions (e.g. workload template metadata).
+- **ConditionsTable** (`shared/ConditionsTable.tsx`): canonical 5-column conditions table with accordion/section variants, auto-expand on unhealthy, and customisable `isHealthy`/`chipColor` callbacks (receives full `Condition` object for resources with non-standard health logic like Node and Namespace).
+- **EventsList** (`shared/EventsList.tsx`): compact events table with type-based color chips.
+- **CodeBlock** (`shared/CodeBlock.tsx`): monospace, scrollable block with copy-to-clipboard for YAML/manifests/values.
+
+### Drawers refactored to shared components
+All 22 detail drawers now use the shared component catalogue instead of inline implementations:
+- **Metadata**: MetadataSection replaces inline label/annotation rendering in Deployment, Pod, Service, Ingress, ConfigMap, Secret, StatefulSet, DaemonSet, ReplicaSet, CronJob, Node, Namespace, ServiceAccount, CRD.
+- **Conditions**: ConditionsTable replaces inline condition tables in Deployment, Pod, DaemonSet, StatefulSet, ReplicaSet, Job, PVC, PV, Node, Namespace, CRD.
+- **Events**: EventsList replaces inline events rendering in all drawers except Pod (which retains custom container filter).
+- **YAML/Code**: CodeBlock replaces raw SyntaxHighlighter usage in all drawers except Pod logs (which retains custom JSON pretty-printing).
+
+### Bug fixes
+- **PVC/PV conditions**: were rendered as plain text; now use ConditionsTable with proper status chips and health highlighting.
+- **Helm release status**: was rendered as plain text; now uses `helmStatusChipColor` for consistent chip colors.
+- **Node drawer metadata**: was missing entirely; added MetadataSection to Overview tab.
+- **ConditionsTable chipColor prop**: fixed type from `(status?: string)` to `(cond: Condition)` to support resources that need the full condition object for color logic.
+
+### Cross-links
+- Helm Release drawer Overview tab now shows owned resources (parsed from rendered manifest YAML) as clickable `ResourceLinkChip` components grouped by kind.
+- Manifest parsing uses regex-based YAML splitter (`helmManifest.ts`) — no new dependencies.
+- Navigation supported for: Deployment, Service, ConfigMap, Secret, ServiceAccount, ClusterRole, ClusterRoleBinding, Role, RoleBinding, Ingress, PVC, DaemonSet, StatefulSet, CronJob, Job.
+
+---
+
 ## 2026-02-11 — Helm SDK Full Integration
 
 ### Backend

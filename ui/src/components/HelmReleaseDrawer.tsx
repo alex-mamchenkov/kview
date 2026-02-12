@@ -14,17 +14,32 @@ import {
   TableBody,
   TableRow,
   TableCell,
-  Button,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { apiGet } from "../api";
 import { useConnectionState } from "../connectionState";
 import { fmtTs, valueOrDash } from "../utils/format";
+import { helmStatusChipColor } from "../utils/k8sUi";
+import { parseManifestResources, groupResourcesByKind, canNavigateToKind } from "../utils/helmManifest";
+import type { ManifestResource } from "../utils/helmManifest";
 import Section from "./shared/Section";
 import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
+import ResourceLinkChip from "./shared/ResourceLinkChip";
+import CodeBlock from "./shared/CodeBlock";
+import DeploymentDrawer from "./DeploymentDrawer";
+import StatefulSetDrawer from "./StatefulSetDrawer";
+import DaemonSetDrawer from "./DaemonSetDrawer";
+import ServiceDrawer from "./ServiceDrawer";
+import IngressDrawer from "./IngressDrawer";
+import ConfigMapDrawer from "./ConfigMapDrawer";
+import SecretDrawer from "./SecretDrawer";
+import JobDrawer from "./JobDrawer";
+import CronJobDrawer from "./CronJobDrawer";
+import PersistentVolumeClaimDrawer from "./PersistentVolumeClaimDrawer";
+import ServiceAccountDrawer from "./ServiceAccountDrawer";
+import CustomResourceDefinitionDrawer from "./CustomResourceDefinitionDrawer";
 
 type HelmHook = {
   name: string;
@@ -70,71 +85,6 @@ type HelmReleaseRevision = {
   description?: string;
 };
 
-type ChipColor = "success" | "warning" | "error" | "default";
-
-function helmStatusChipColor(status?: string | null): ChipColor {
-  switch (status) {
-    case "deployed":
-      return "success";
-    case "superseded":
-      return "default";
-    case "failed":
-      return "error";
-    case "pending-install":
-    case "pending-upgrade":
-    case "pending-rollback":
-    case "uninstalling":
-      return "warning";
-    case "unknown":
-      return "warning";
-    default:
-      return "default";
-  }
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <Button
-      size="small"
-      startIcon={<ContentCopyIcon />}
-      onClick={() => {
-        navigator.clipboard.writeText(text).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        });
-      }}
-      sx={{ mb: 1 }}
-    >
-      {copied ? "Copied" : "Copy"}
-    </Button>
-  );
-}
-
-function MonospaceBlock({ text }: { text: string }) {
-  return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      <CopyButton text={text} />
-      <Box
-        sx={{
-          flexGrow: 1,
-          overflow: "auto",
-          fontFamily: "monospace",
-          fontSize: "0.8rem",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-all",
-          bgcolor: "#f5f5f5",
-          p: 1.5,
-          borderRadius: 1,
-          border: "1px solid #e0e0e0",
-        }}
-      >
-        {text}
-      </Box>
-    </Box>
-  );
-}
-
 export default function HelmReleaseDrawer(props: {
   open: boolean;
   onClose: () => void;
@@ -148,6 +98,9 @@ export default function HelmReleaseDrawer(props: {
   const [details, setDetails] = useState<HelmReleaseDetails | null>(null);
   const [err, setErr] = useState("");
 
+  // Sub-drawer state for cross-links
+  const [linkedResource, setLinkedResource] = useState<ManifestResource | null>(null);
+
   const ns = props.namespace;
   const name = props.releaseName;
 
@@ -158,6 +111,7 @@ export default function HelmReleaseDrawer(props: {
     setErr("");
     setDetails(null);
     setLoading(true);
+    setLinkedResource(null);
 
     (async () => {
       const det = await apiGet<any>(
@@ -179,6 +133,16 @@ export default function HelmReleaseDrawer(props: {
   const hooks = details?.hooks || [];
   const yaml = details?.yaml || "";
 
+  // Parse manifest resources for cross-links
+  const manifestResources = useMemo(
+    () => (manifest ? parseManifestResources(manifest) : []),
+    [manifest],
+  );
+  const groupedResources = useMemo(
+    () => groupResourcesByKind(manifestResources),
+    [manifestResources],
+  );
+
   // Build tab labels dynamically, hiding empty optional tabs.
   const tabDefs = useMemo(() => {
     const tabs: { label: string; id: string }[] = [{ label: "Overview", id: "overview" }];
@@ -199,9 +163,13 @@ export default function HelmReleaseDrawer(props: {
       { label: "Namespace", value: valueOrDash(summary?.namespace) },
       {
         label: "Status",
-        value: valueOrDash(summary?.status),
-        chip: true,
-        chipColor: helmStatusChipColor(summary?.status),
+        value: (
+          <Chip
+            size="small"
+            label={valueOrDash(summary?.status)}
+            color={helmStatusChipColor(summary?.status)}
+          />
+        ),
       },
       { label: "Revision", value: valueOrDash(summary?.revision) },
       { label: "Chart", value: valueOrDash(summary?.chart) },
@@ -213,6 +181,14 @@ export default function HelmReleaseDrawer(props: {
     ],
     [summary],
   );
+
+  function openManifestResource(r: ManifestResource) {
+    if (canNavigateToKind(r.kind)) {
+      setLinkedResource(r);
+    }
+  }
+
+  const linkedKind = linkedResource?.kind;
 
   return (
     <Drawer
@@ -280,17 +256,45 @@ export default function HelmReleaseDrawer(props: {
                       </Typography>
                     </Section>
                   )}
+
+                  {/* Managed Resources (cross-links from manifest) */}
+                  {groupedResources.length > 0 && (
+                    <Section title="Managed Resources">
+                      <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mt: 1 }}>
+                        {groupedResources.map((group) => (
+                          <Box key={group.kind}>
+                            <Typography variant="caption" color="text.secondary">
+                              {group.kind} ({group.items.length})
+                            </Typography>
+                            <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 0.5 }}>
+                              {group.items.map((r) => (
+                                <ResourceLinkChip
+                                  key={`${r.kind}/${r.namespace || ""}/${r.name}`}
+                                  label={r.name}
+                                  onClick={
+                                    canNavigateToKind(r.kind)
+                                      ? () => openManifestResource(r)
+                                      : undefined
+                                  }
+                                />
+                              ))}
+                            </Box>
+                          </Box>
+                        ))}
+                      </Box>
+                    </Section>
+                  )}
                 </Box>
               )}
 
               {/* VALUES */}
               {activeTabId === "values" && (
-                <MonospaceBlock text={values} />
+                <CodeBlock code={values} />
               )}
 
               {/* MANIFEST */}
               {activeTabId === "manifest" && (
-                <MonospaceBlock text={manifest} />
+                <CodeBlock code={manifest} />
               )}
 
               {/* HOOKS */}
@@ -379,14 +383,99 @@ export default function HelmReleaseDrawer(props: {
 
               {/* NOTES */}
               {activeTabId === "notes" && (
-                <MonospaceBlock text={notes} />
+                <CodeBlock code={notes} />
               )}
 
               {/* YAML */}
               {activeTabId === "yaml" && (
-                <MonospaceBlock text={yaml} />
+                <CodeBlock code={yaml} language="yaml" />
               )}
             </Box>
+
+            {/* Sub-drawers for cross-linked resources */}
+            <DeploymentDrawer
+              open={linkedKind === "Deployment"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              namespace={linkedResource?.namespace || ns}
+              deploymentName={linkedResource?.kind === "Deployment" ? linkedResource.name : null}
+            />
+            <StatefulSetDrawer
+              open={linkedKind === "StatefulSet"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              namespace={linkedResource?.namespace || ns}
+              statefulSetName={linkedResource?.kind === "StatefulSet" ? linkedResource.name : null}
+            />
+            <DaemonSetDrawer
+              open={linkedKind === "DaemonSet"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              namespace={linkedResource?.namespace || ns}
+              daemonSetName={linkedResource?.kind === "DaemonSet" ? linkedResource.name : null}
+            />
+            <ServiceDrawer
+              open={linkedKind === "Service"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              namespace={linkedResource?.namespace || ns}
+              serviceName={linkedResource?.kind === "Service" ? linkedResource.name : null}
+            />
+            <IngressDrawer
+              open={linkedKind === "Ingress"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              namespace={linkedResource?.namespace || ns}
+              ingressName={linkedResource?.kind === "Ingress" ? linkedResource.name : null}
+            />
+            <ConfigMapDrawer
+              open={linkedKind === "ConfigMap"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              namespace={linkedResource?.namespace || ns}
+              configMapName={linkedResource?.kind === "ConfigMap" ? linkedResource.name : null}
+            />
+            <SecretDrawer
+              open={linkedKind === "Secret"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              namespace={linkedResource?.namespace || ns}
+              secretName={linkedResource?.kind === "Secret" ? linkedResource.name : null}
+            />
+            <JobDrawer
+              open={linkedKind === "Job"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              namespace={linkedResource?.namespace || ns}
+              jobName={linkedResource?.kind === "Job" ? linkedResource.name : null}
+            />
+            <CronJobDrawer
+              open={linkedKind === "CronJob"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              namespace={linkedResource?.namespace || ns}
+              cronJobName={linkedResource?.kind === "CronJob" ? linkedResource.name : null}
+            />
+            <PersistentVolumeClaimDrawer
+              open={linkedKind === "PersistentVolumeClaim"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              namespace={linkedResource?.namespace || ns}
+              pvcName={linkedResource?.kind === "PersistentVolumeClaim" ? linkedResource.name : null}
+            />
+            <ServiceAccountDrawer
+              open={linkedKind === "ServiceAccount"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              namespace={linkedResource?.namespace || ns}
+              serviceAccountName={linkedResource?.kind === "ServiceAccount" ? linkedResource.name : null}
+            />
+            <CustomResourceDefinitionDrawer
+              open={linkedKind === "CustomResourceDefinition"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              crdName={linkedResource?.kind === "CustomResourceDefinition" ? linkedResource.name : null}
+            />
           </>
         )}
       </Box>

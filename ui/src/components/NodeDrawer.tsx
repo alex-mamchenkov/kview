@@ -22,7 +22,9 @@ import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../api";
 import { useConnectionState } from "../connectionState";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import MetadataSection from "./shared/MetadataSection";
+import ConditionsTable from "./shared/ConditionsTable";
+import CodeBlock from "./shared/CodeBlock";
 import PodDrawer from "./PodDrawer";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { nodeStatusChipColor, phaseChipColor } from "../utils/k8sUi";
@@ -297,6 +299,8 @@ export default function NodeDrawer(props: {
                       )}
                     </AccordionDetails>
                   </Accordion>
+
+                  <MetadataSection labels={details?.metadata?.labels} annotations={details?.metadata?.annotations} />
                 </Box>
               )}
 
@@ -348,64 +352,18 @@ export default function NodeDrawer(props: {
               {/* CONDITIONS */}
               {tab === 2 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  <Accordion defaultExpanded={hasUnhealthyConditions}>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="subtitle2">Node Conditions</Typography>
-                      {hasUnhealthyConditions && (
-                        <Chip size="small" color="error" label="Unhealthy" sx={{ ml: 1 }} />
-                      )}
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      {conditions.length === 0 ? (
-                        <EmptyState message="No conditions reported." />
-                      ) : (
-                        <Table size="small">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell>Condition</TableCell>
-                              <TableCell>Status</TableCell>
-                              <TableCell>Reason</TableCell>
-                              <TableCell>Message</TableCell>
-                              <TableCell>Last Transition</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {conditions.map((c, idx) => {
-                              const unhealthy = !isNodeConditionHealthy(c);
-                              return (
-                                <TableRow
-                                  key={c.type || String(idx)}
-                                  sx={{
-                                    backgroundColor: unhealthy ? "rgba(211, 47, 47, 0.08)" : "transparent",
-                                  }}
-                                >
-                                  <TableCell>{valueOrDash(c.type)}</TableCell>
-                                  <TableCell>
-                                    <Chip size="small" label={valueOrDash(c.status)} color={nodeConditionChipColor(c)} />
-                                  </TableCell>
-                                  <TableCell>{valueOrDash(c.reason)}</TableCell>
-                                  <TableCell sx={{ maxWidth: 320, whiteSpace: "pre-wrap" }}>
-                                    {valueOrDash(c.message)}
-                                  </TableCell>
-                                  <TableCell>{c.lastTransitionTime ? fmtTs(c.lastTransitionTime) : "-"}</TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </AccordionDetails>
-                  </Accordion>
+                  <ConditionsTable
+                    conditions={conditions}
+                    isHealthy={isNodeConditionHealthy}
+                    chipColor={(cond) => nodeConditionChipColor(cond)}
+                    title="Node Conditions"
+                  />
                 </Box>
               )}
 
               {/* YAML */}
               {tab === 3 && (
-                <Box sx={{ border: "1px solid #ddd", borderRadius: 2, overflow: "auto", height: "100%" }}>
-                  <SyntaxHighlighter language="yaml" showLineNumbers wrapLongLines>
-                    {details?.yaml || ""}
-                  </SyntaxHighlighter>
-                </Box>
+                <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
             </Box>
             <PodDrawer

@@ -18,10 +18,11 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import { apiGet, toApiError, type ApiError } from "../api";
 import { useConnectionState } from "../connectionState";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
-import { eventChipColor } from "../utils/k8sUi";
 import Section from "./shared/Section";
+import MetadataSection from "./shared/MetadataSection";
+import EventsList from "./shared/EventsList";
+import CodeBlock from "./shared/CodeBlock";
 import KeyValueTable from "./shared/KeyValueTable";
 import AccessDeniedState from "./shared/AccessDeniedState";
 import EmptyState from "./shared/EmptyState";
@@ -223,37 +224,7 @@ export default function ServiceAccountDrawer(props: {
                     <KeyValueTable rows={summaryItems} columns={3} />
                   </Box>
 
-                  <Section title="Metadata">
-                    <Box sx={{ mt: 1 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        Labels
-                      </Typography>
-                      {Object.entries(metadata?.labels || {}).length === 0 ? (
-                        <EmptyState message="No labels." sx={{ mt: 0.5 }} />
-                      ) : (
-                        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
-                          {Object.entries(metadata?.labels || {}).map(([k, v]) => (
-                            <Chip key={k} size="small" label={`${k}=${v}`} />
-                          ))}
-                        </Box>
-                      )}
-                    </Box>
-
-                    <Box sx={{ mt: 2 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        Annotations
-                      </Typography>
-                      {Object.entries(metadata?.annotations || {}).length === 0 ? (
-                        <EmptyState message="No annotations." sx={{ mt: 0.5 }} />
-                      ) : (
-                        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
-                          {Object.entries(metadata?.annotations || {}).map(([k, v]) => (
-                            <Chip key={k} size="small" label={`${k}=${v}`} />
-                          ))}
-                        </Box>
-                      )}
-                    </Box>
-                  </Section>
+                  <MetadataSection labels={metadata?.labels} annotations={metadata?.annotations} />
                 </Box>
               )}
 
@@ -300,38 +271,13 @@ export default function ServiceAccountDrawer(props: {
               {/* EVENTS */}
               {tab === 2 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  {events.length === 0 ? (
-                    <EmptyState message="No events found for this ServiceAccount." />
-                  ) : (
-                    events.map((e, idx) => (
-                      <Box key={idx} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.25 }}>
-                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                            <Chip size="small" label={e.type || "Unknown"} color={eventChipColor(e.type)} />
-                            <Typography variant="subtitle2">
-                              {valueOrDash(e.reason)} (x{valueOrDash(e.count)})
-                            </Typography>
-                          </Box>
-                          <Typography variant="caption" color="text.secondary">
-                            {fmtTs(e.lastSeen)}
-                          </Typography>
-                        </Box>
-                        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", mt: 0.5 }}>
-                          {valueOrDash(e.message)}
-                        </Typography>
-                      </Box>
-                    ))
-                  )}
+                  <EventsList events={events} emptyMessage="No events found for this ServiceAccount." />
                 </Box>
               )}
 
               {/* YAML */}
               {tab === 3 && (
-                <Box sx={{ border: "1px solid #ddd", borderRadius: 2, overflow: "auto", height: "100%" }}>
-                  <SyntaxHighlighter language="yaml" showLineNumbers wrapLongLines>
-                    {details?.yaml || ""}
-                  </SyntaxHighlighter>
-                </Box>
+                <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
             </Box>
           </>

@@ -1,4 +1,4 @@
-type ChipColor = "success" | "warning" | "error" | "default";
+export type ChipColor = "success" | "warning" | "error" | "default";
 
 export function phaseChipColor(phase?: string | null): ChipColor {
   switch (phase) {
@@ -108,6 +108,26 @@ export function pvPhaseChipColor(phase?: string | null): ChipColor {
       return "warning";
     case "Failed":
       return "error";
+    default:
+      return "default";
+  }
+}
+
+export function helmStatusChipColor(status?: string | null): ChipColor {
+  switch (status) {
+    case "deployed":
+      return "success";
+    case "superseded":
+      return "default";
+    case "failed":
+      return "error";
+    case "pending-install":
+    case "pending-upgrade":
+    case "pending-rollback":
+    case "uninstalling":
+      return "warning";
+    case "unknown":
+      return "warning";
     default:
       return "default";
   }

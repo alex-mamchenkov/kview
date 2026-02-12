@@ -1,273 +1,95 @@
 # kview
 
-kview is a local, single-binary Kubernetes UI inspired by Lens.
+kview is a **local, single-binary** Kubernetes UI inspired by Lens (and the “fast feedback” vibe of k9s), built for **day-to-day inspection and troubleshooting** without memorizing kubectl/helm commands.
 
-The goal of the project is to replace frequent kubectl / helm usage for day-to-day
-cluster inspection and troubleshooting, without memorizing command syntax.
-
-The application runs a local HTTP server and serves a web UI from a single Go binary.
+- **Local-first**: runs on your machine, serves a local web UI, embeds the UI in the Go binary.
+- **View-only**: no cluster mutations from the UI.
+- **Operator-oriented**: dense information, quick scanning, deep links between related resources.
+- **RBAC-aware**: handles partial permissions gracefully and avoids “false empty” lists.
 
 ---
 
-## Features
+## What you get
 
-- Multiple kube contexts (clusters)
-- Namespace selection with:
-  - search
-  - favourites
-  - per-context persistence
-- Nodes view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- Namespaces view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- Pods view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-  - last event summary
-- Deployments view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-  - last event summary
-- DaemonSets view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- StatefulSets view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- ReplicaSets view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- Jobs view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- CronJobs view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- Services view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- Ingresses view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- ConfigMaps view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- Secrets view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- Service Accounts view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- Roles view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- Role Bindings view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- Cluster Roles view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- Cluster Role Bindings view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- PersistentVolumes view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- PersistentVolumeClaims view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- Custom Resource Definitions view:
-  - sorting
-  - filtering
-  - single selection
-  - refresh interval + last refresh timestamp
-- Helm Releases view:
-  - list per namespace using Helm v3 SDK
-  - status, revision, chart, app version, updated time
-  - filter by name, chart, or version
-  - refresh interval + last refresh timestamp
-- Helm Charts view:
-  - cluster-wide logical chart aggregation
-  - chart name, version, app version, release count, namespaces
-  - filter by chart or version
-  - refresh interval + last refresh timestamp
-- Node details drawer:
-  - overview summary + capacity/taints
-  - pods list with click-through to Pod drawer
-  - conditions, YAML
-- Namespace details drawer:
-  - overview summary + metadata
-  - conditions, YAML
-- Deployment details drawer:
-  - overview summary + conditions
-  - rollout summary + diagnostics
-  - ReplicaSets table with click-through to ReplicaSet drawer
-  - pods list with click-through to Pod drawer
-  - spec summary (template, scheduling, volumes, metadata)
-  - events, YAML
-- StatefulSet details drawer:
-  - overview summary + conditions
-  - pods list with click-through to Pod drawer
-  - spec summary (template, scheduling, volumes, metadata)
-  - events, YAML
-- DaemonSet details drawer:
-  - overview summary + conditions
-  - pods list with click-through to Pod drawer
-  - spec summary (template, scheduling, volumes, metadata)
-  - events, YAML
-- ReplicaSet details drawer:
-  - overview summary + conditions
-  - pods list with click-through to Pod drawer
-  - owner Deployment link
-  - spec summary (template, scheduling, volumes, metadata)
-  - events, YAML
-- Job details drawer:
-  - overview summary + conditions
-  - pods list with click-through to Pod drawer
-  - events, YAML
-- CronJob details drawer:
-  - overview summary + policy
-  - jobs list with click-through to Job drawer
-  - spec summary (template, scheduling, volumes, metadata)
-  - events, YAML
-- Service details drawer:
-  - overview summary + ports + traffic notes
-  - endpoints list with click-through to Pod drawer
-  - events, YAML
-- Ingress details drawer:
-  - overview summary + warnings
-  - rules grouped by host
-  - TLS entries
-  - events, YAML
-- ConfigMap details drawer:
-  - overview summary + metadata
-  - keys list + size summary
-  - events, YAML
-- Secret details drawer:
-  - overview summary + metadata
-  - keys list (no values)
-  - events
-- ServiceAccount details drawer:
-  - overview summary + metadata
-  - RoleBindings list (best-effort)
-  - events, YAML
-- Role details drawer:
-  - overview summary
-  - rules table
-  - events, YAML
-- RoleBinding details drawer:
-  - overview summary
-  - subjects table
-  - RoleRef details + navigation
-  - events, YAML
-- ClusterRole details drawer:
-  - overview summary
-  - rules table
-  - events, YAML
-- ClusterRoleBinding details drawer:
-  - overview summary
-  - subjects table
-  - RoleRef details + navigation
-  - events, YAML
-- PersistentVolume details drawer:
-  - overview summary + status
-  - spec summary (access modes, volume mode, reclaim policy, volume source)
-  - events, YAML
-- PersistentVolumeClaim details drawer:
-  - overview summary + status
-  - spec summary (access modes, volume mode, requests)
-  - events, YAML
-- Custom Resource Definition details drawer:
-  - overview summary (group, scope, kind, names, conversion, conditions)
-  - versions table (served, storage, deprecated)
-  - events, YAML
-- Helm Release details drawer:
-  - overview: name, namespace, status, revision, chart, app version, storage backend, first/last deployed
-  - values: full user-supplied values (YAML, copy-friendly)
-  - manifest: full rendered manifest (monospace, copy-friendly)
-  - hooks: name, kind, events, weight, delete policies
-  - history: all revisions with status, chart, updated, description
-  - notes (when available)
-  - YAML: full release serialized as YAML
-- Helm Chart details drawer:
-  - overview: chart name, version, app version, release count
-  - namespaces listing
-- Pod details drawer:
-  - overview summary + health conditions
-  - containers: runtime, resources, env, mounts, probes
-  - resources: volumes, image pull secrets, security context
-  - scheduling: node selectors, tolerations, topology spread
-  - events, YAML
-  - logs with:
-    - container selector
-    - follow / stop (WebSocket)
-    - text filter
-    - line limits
-    - pretty mode
-    - wrap toggle
-- RBAC-friendly behavior:
-  - does not assume access to `default` namespace
-  - handles Forbidden responses gracefully
-- Local-first, no cloud, no telemetry
+### Core UX model
+- Permanent left navigation + main list view
+- Right-side **drawer** for details (the list stays visible)
+- Tabs inside drawers: **Overview + resource-specific + Events + YAML** (Logs where applicable)
+
+### Global behaviors
+- Text filter + quick filters
+- Refresh interval selector + “last refresh” timestamp
+- Stable selection + “Open” action + double-click to open drawer
+- RBAC-aware empty states (smart “can-i” checks where available)
+- Global “backend unreachable / recovered” banner (no spam)
+
+---
+
+## Supported resources
+
+### 🧩 Workloads (namespaced)
+- Pods (includes Logs)
+- Deployments (includes rollout diagnostics + ReplicaSets deep-linking)
+- Stateful Sets
+- Daemon Sets
+- Jobs
+- Cron Jobs
+
+### 🌐 Networking (namespaced)
+- Services
+- Ingresses
+
+### ⚙️ Configuration (namespaced)
+- Config Maps
+- Secrets
+
+### 💾 Storage
+- Persistent Volume Claims (namespaced)
+- Persistent Volumes (cluster-scoped)
+
+### 🧠 Cluster
+- Nodes (cluster-scoped)
+- Namespaces (cluster-scoped)
+
+### 🔐 RBAC / Access Control
+- Service Accounts (namespaced)
+- Roles (namespaced)
+- Role Bindings (namespaced)
+- Cluster Roles (cluster-scoped)
+- Cluster Role Bindings (cluster-scoped)
+
+### 🧩 Extensions / Operators
+- Custom Resource Definitions (CRDs) (cluster-scoped)
+
+### 📦 Helm
+- Helm Releases (namespaced)
+- Helm Charts (cluster-level aggregated view)
+
+---
+
+## Details drawers (high-level)
+Most resources follow a consistent drawer pattern:
+- **Overview**: identity + status + key operational fields
+- **Resource-specific**: Pods / Rollout / Rules / Spec / Subjects / Rules (varies per resource)
+- **Events**: compact event list with severity cues
+- **YAML**: raw YAML view (monospace, copy-friendly)
+
+Pods additionally support **Logs** (WebSocket follow, filters, wrap/pretty toggles).
 
 ---
 
 ## Requirements
-
 Backend:
-- Go 1.25 or newer
+- Go 1.25+
 
-Frontend:
-- Node.js 20+ (required by Vite toolchain)
+Frontend (development only):
+- Node.js 20+
 - npm
 
 Kubernetes access:
 - Working kubeconfig
-- Supports `exec` auth plugins (OIDC), including:
-  - `kubectl oidc-login`
-- `kubectl` must be executable in the same environment where kview is run
+- Supports `exec` auth plugins (e.g., `kubectl oidc-login`)
+- `kubectl` must be available in PATH for exec plugins
 
 ---
 
@@ -275,99 +97,95 @@ Kubernetes access:
 
 If your kubeconfig is split across multiple files:
 
+```bash
 export KUBECONFIG="$HOME/.kube/cluster1.yaml:$HOME/.kube/cluster2.yaml"
+```
 
-Kubeconfig loading semantics:
-- If `KUBECONFIG` is unset, kview uses `~/.kube/config`.
-- If `KUBECONFIG` is set, it can be a single path or a list:
-  - Unix/macOS separator: `:`
-  - Windows separator: `;`
-- Each entry can be a file or a directory:
-  - Directories are read non-recursively, sorted lexicographically.
-  - Invalid/missing entries are skipped with warnings.
-- Later files override earlier ones; the last non-empty `current-context` wins.
-- Client creation uses the selected context explicitly (not `current-context`).
+Run:
 
-Run kview:
-
+```bash
 make run
+```
 
-The server will print a local URL similar to:
+The server prints a local URL like:
 
+```text
 http://127.0.0.1:10443/?token=XXXXXXXX
+```
 
-Open that URL in your browser.
+Open it in your browser.
 
 ---
 
 ## Build a single binary
 
+```bash
 make build
 ./kview
+```
 
-The resulting binary embeds the UI and does not require Node.js to run.
+The binary embeds the UI and does not require Node.js to run.
 
 ---
 
 ## Make targets
 
-- make ui
-  installs UI dependencies, builds UI, copies output into internal/server/ui_dist
+- `make ui`  
+  Install UI deps, build UI, copy output into `internal/server/ui_dist`
 
-- make run
-  builds UI and runs Go server
+- `make run`  
+  Build UI and run Go server
 
-- make build
-  builds UI and kview binary
+- `make build`  
+  Build UI and build the `kview` binary
 
-- make clean
-  removes UI build artifacts and embedded UI output
+- `make clean`  
+  Remove UI build artifacts and embedded UI output
 
 ---
 
 ## Authentication notes (OIDC / exec plugins)
+kview uses `client-go` and respects kubeconfig `users[].user.exec`.
 
-kview uses client-go and respects kubeconfig users[].user.exec.
+If your kubeconfig contains something like:
 
-If your kubeconfig contains:
-
+```yaml
 command: kubectl
 args:
   - oidc-login
   - get-token
+```
 
-Then kubectl and the plugin must be available in PATH.
+Then `kubectl` and the plugin must be available in PATH.
 
 Common pitfall:
-- plugin works in one directory via direnv
+- the plugin works in one directory via `direnv`
 - but fails when running kview elsewhere
 
-Solution:
-- ensure plugin path (often $HOME/.krew/bin) is in PATH
+Fix:
+- ensure the plugin path (often `$HOME/.krew/bin`) is in PATH
 - or run kview from the same environment
 
-Exec env defaults:
-- kview provides `KUBECONFIG`, `BROWSER`, `XDG_CACHE_HOME`, and `KUBECACHEDIR`
-  to exec plugins when missing, so auth behaves consistently outside `.envrc`.
+kview also provides helpful defaults (`KUBECONFIG`, `BROWSER`, `XDG_CACHE_HOME`, `KUBECACHEDIR`) to exec plugins when missing.
 
 ---
 
 ## Repository structure
 
+```text
 cmd/kview/                main entrypoint
 internal/cluster/         kubeconfig and context management
-internal/kube/            Kubernetes API helpers
+internal/kube/            Kubernetes API helpers and handlers
 internal/stream/          WebSocket streaming (logs)
 internal/server/          HTTP server, routing, embedded UI
-ui/                        React + Vite frontend
-docs/                      project documentation
+ui/                       React + Vite frontend
+docs/                     project documentation
+```
 
 ---
 
-## Project status
-
-This is an actively evolving personal tool.
-APIs and UX may change quickly.
-
-See docs/HISTORY.md for a detailed changelog.
-See docs/AI_AGENT_RULES.md for AI and contribution rules.
+## Documentation
+- `docs/ROADMAP.md` — planned phases and upcoming work
+- `docs/HISTORY.md` — changelog-style progress log
+- `docs/UI_UX_GUIDE.md` — UI/UX contract (must stay consistent with implementation)
+- `docs/AI_AGENT_RULES.md` — rules for AI-assisted development

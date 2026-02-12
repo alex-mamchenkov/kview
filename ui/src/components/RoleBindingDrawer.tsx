@@ -19,13 +19,13 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import { apiGet, toApiError, type ApiError } from "../api";
 import { useConnectionState } from "../connectionState";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
-import { eventChipColor } from "../utils/k8sUi";
 import KeyValueTable from "./shared/KeyValueTable";
 import AccessDeniedState from "./shared/AccessDeniedState";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
+import EventsList from "./shared/EventsList";
+import CodeBlock from "./shared/CodeBlock";
 import RoleDrawer from "./RoleDrawer";
 import ClusterRoleDrawer from "./ClusterRoleDrawer";
 
@@ -249,38 +249,13 @@ export default function RoleBindingDrawer(props: {
               {/* EVENTS */}
               {tab === 3 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  {events.length === 0 ? (
-                    <EmptyState message="No events found for this RoleBinding." />
-                  ) : (
-                    events.map((e, idx) => (
-                      <Box key={idx} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.25 }}>
-                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                            <Chip size="small" label={e.type || "Unknown"} color={eventChipColor(e.type)} />
-                            <Typography variant="subtitle2">
-                              {valueOrDash(e.reason)} (x{valueOrDash(e.count)})
-                            </Typography>
-                          </Box>
-                          <Typography variant="caption" color="text.secondary">
-                            {fmtTs(e.lastSeen)}
-                          </Typography>
-                        </Box>
-                        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", mt: 0.5 }}>
-                          {valueOrDash(e.message)}
-                        </Typography>
-                      </Box>
-                    ))
-                  )}
+                  <EventsList events={events} emptyMessage="No events found for this RoleBinding." />
                 </Box>
               )}
 
               {/* YAML */}
               {tab === 4 && (
-                <Box sx={{ border: "1px solid #ddd", borderRadius: 2, overflow: "auto", height: "100%" }}>
-                  <SyntaxHighlighter language="yaml" showLineNumbers wrapLongLines>
-                    {details?.yaml || ""}
-                  </SyntaxHighlighter>
-                </Box>
+                <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
             </Box>
           </>

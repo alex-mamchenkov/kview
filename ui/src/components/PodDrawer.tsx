@@ -33,7 +33,9 @@ import { apiGet, toApiError, type ApiError } from "../api";
 import { useConnectionState } from "../connectionState";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
-import { conditionStatusColor, eventChipColor } from "../utils/k8sUi";
+import { eventChipColor } from "../utils/k8sUi";
+import ConditionsTable from "./shared/ConditionsTable";
+import CodeBlock from "./shared/CodeBlock";
 import IngressDrawer from "./IngressDrawer";
 import ServiceDrawer from "./ServiceDrawer";
 import DeploymentDrawer from "./DeploymentDrawer";
@@ -819,54 +821,10 @@ export default function PodDrawer(props: {
                     <KeyValueTable rows={summaryItems} columns={3} />
                   </Box>
 
-                  <Accordion defaultExpanded={hasUnhealthyConditions}>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="subtitle2">Health & Conditions</Typography>
-                      {hasUnhealthyConditions && (
-                        <Chip size="small" color="error" label="Unhealthy" sx={{ ml: 1 }} />
-                      )}
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      {(details?.conditions || []).length === 0 ? (
-                        <EmptyState message="No conditions reported." />
-                      ) : (
-                        <Table size="small">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell>Condition</TableCell>
-                              <TableCell>Status</TableCell>
-                              <TableCell>Reason</TableCell>
-                              <TableCell>Message</TableCell>
-                              <TableCell>Last Transition</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {(details?.conditions || []).map((c, idx) => {
-                              const unhealthy = !isConditionHealthy(c);
-                              return (
-                                <TableRow
-                                  key={c.type || String(idx)}
-                                  sx={{
-                                    backgroundColor: unhealthy ? "rgba(211, 47, 47, 0.08)" : "transparent",
-                                  }}
-                                >
-                                  <TableCell>{valueOrDash(c.type)}</TableCell>
-                                  <TableCell>
-                                    <Chip size="small" label={valueOrDash(c.status)} color={conditionStatusColor(c.status)} />
-                                  </TableCell>
-                                  <TableCell>{valueOrDash(c.reason)}</TableCell>
-                                  <TableCell sx={{ maxWidth: 320, whiteSpace: "pre-wrap" }}>
-                                    {valueOrDash(c.message)}
-                                  </TableCell>
-                                  <TableCell>{c.lastTransitionTime ? fmtTs(c.lastTransitionTime) : "-"}</TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </AccordionDetails>
-                  </Accordion>
+                  <ConditionsTable
+                    conditions={details?.conditions || []}
+                    title="Health & Conditions"
+                  />
 
                   <Accordion
                     defaultExpanded={
@@ -1585,11 +1543,7 @@ export default function PodDrawer(props: {
 
               {/* YAML */}
               {tab === 5 && (
-                <Box sx={{ border: "1px solid #ddd", borderRadius: 2, overflow: "auto", height: "100%" }}>
-                  <SyntaxHighlighter language="yaml" showLineNumbers wrapLongLines>
-                    {details?.yaml || ""}
-                  </SyntaxHighlighter>
-                </Box>
+                <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
 
               {/* LOGS */}

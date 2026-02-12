@@ -22,14 +22,15 @@ import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../api";
 import { useConnectionState } from "../connectionState";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import JobDrawer from "./JobDrawer";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
-import { eventChipColor } from "../utils/k8sUi";
 import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
 import Section from "./shared/Section";
+import MetadataSection from "./shared/MetadataSection";
+import EventsList from "./shared/EventsList";
+import CodeBlock from "./shared/CodeBlock";
 
 type CronJobDetails = {
   summary: CronJobSummary;
@@ -470,33 +471,11 @@ export default function CronJobDrawer(props: {
                       <Typography variant="subtitle2">Template Metadata</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
-                      <Typography variant="caption" color="text.secondary">
-                        Labels
-                      </Typography>
-                      {Object.entries(details?.spec?.metadata?.labels || {}).length === 0 ? (
-                        <EmptyState message="No labels." sx={{ mt: 0.5 }} />
-                      ) : (
-                        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
-                          {Object.entries(details?.spec?.metadata?.labels || {}).map(([k, v]) => (
-                            <Chip key={k} size="small" label={`${k}=${v}`} />
-                          ))}
-                        </Box>
-                      )}
-
-                      <Box sx={{ mt: 2 }}>
-                        <Typography variant="caption" color="text.secondary">
-                          Annotations
-                        </Typography>
-                        {Object.entries(details?.spec?.metadata?.annotations || {}).length === 0 ? (
-                          <EmptyState message="No annotations." sx={{ mt: 0.5 }} />
-                        ) : (
-                          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
-                            {Object.entries(details?.spec?.metadata?.annotations || {}).map(([k, v]) => (
-                              <Chip key={k} size="small" label={`${k}=${v}`} />
-                            ))}
-                          </Box>
-                        )}
-                      </Box>
+                      <MetadataSection
+                        labels={details?.spec?.metadata?.labels}
+                        annotations={details?.spec?.metadata?.annotations}
+                        wrapInSection={false}
+                      />
                     </AccordionDetails>
                   </Accordion>
                 </Box>
@@ -505,38 +484,13 @@ export default function CronJobDrawer(props: {
               {/* EVENTS */}
               {tab === 3 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  {events.length === 0 ? (
-                    <EmptyState message="No events found for this CronJob." />
-                  ) : (
-                    events.map((e, idx) => (
-                      <Box key={idx} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.25 }}>
-                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                            <Chip size="small" label={e.type || "Unknown"} color={eventChipColor(e.type)} />
-                            <Typography variant="subtitle2">
-                              {valueOrDash(e.reason)} (x{valueOrDash(e.count)})
-                            </Typography>
-                          </Box>
-                          <Typography variant="caption" color="text.secondary">
-                            {fmtTs(e.lastSeen)}
-                          </Typography>
-                        </Box>
-                        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", mt: 0.5 }}>
-                          {valueOrDash(e.message)}
-                        </Typography>
-                      </Box>
-                    ))
-                  )}
+                  <EventsList events={events} emptyMessage="No events found for this CronJob." />
                 </Box>
               )}
 
               {/* YAML */}
               {tab === 4 && (
-                <Box sx={{ border: "1px solid #ddd", borderRadius: 2, overflow: "auto", height: "100%" }}>
-                  <SyntaxHighlighter language="yaml" showLineNumbers wrapLongLines>
-                    {details?.yaml || ""}
-                  </SyntaxHighlighter>
-                </Box>
+                <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
             </Box>
             <JobDrawer

@@ -22,15 +22,17 @@ import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../api";
 import { useConnectionState } from "../connectionState";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import PodDrawer from "./PodDrawer";
 import CronJobDrawer from "./CronJobDrawer";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
-import { conditionStatusColor, eventChipColor, jobStatusChipColor, phaseChipColor } from "../utils/k8sUi";
+import { jobStatusChipColor, phaseChipColor } from "../utils/k8sUi";
 import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
 import ResourceLinkChip from "./shared/ResourceLinkChip";
+import ConditionsTable from "./shared/ConditionsTable";
+import EventsList from "./shared/EventsList";
+import CodeBlock from "./shared/CodeBlock";
 
 type JobDetails = {
   summary: JobSummary;
@@ -248,54 +250,7 @@ export default function JobDrawer(props: {
                     />
                   </Box>
 
-                  <Accordion defaultExpanded={hasUnhealthyConditions}>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="subtitle2">Conditions & Health</Typography>
-                      {hasUnhealthyConditions && (
-                        <Chip size="small" color="error" label="Unhealthy" sx={{ ml: 1 }} />
-                      )}
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      {(details?.conditions || []).length === 0 ? (
-                        <EmptyState message="No conditions reported." />
-                      ) : (
-                        <Table size="small">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell>Condition</TableCell>
-                              <TableCell>Status</TableCell>
-                              <TableCell>Reason</TableCell>
-                              <TableCell>Message</TableCell>
-                              <TableCell>Last Transition</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {(details?.conditions || []).map((c, idx) => {
-                              const unhealthy = !isConditionHealthy(c);
-                              return (
-                                <TableRow
-                                  key={c.type || String(idx)}
-                                  sx={{
-                                    backgroundColor: unhealthy ? "rgba(211, 47, 47, 0.08)" : "transparent",
-                                  }}
-                                >
-                                  <TableCell>{valueOrDash(c.type)}</TableCell>
-                                  <TableCell>
-                                    <Chip size="small" label={valueOrDash(c.status)} color={conditionStatusColor(c.status)} />
-                                  </TableCell>
-                                  <TableCell>{valueOrDash(c.reason)}</TableCell>
-                                  <TableCell sx={{ maxWidth: 320, whiteSpace: "pre-wrap" }}>
-                                    {valueOrDash(c.message)}
-                                  </TableCell>
-                                  <TableCell>{c.lastTransitionTime ? fmtTs(c.lastTransitionTime) : "-"}</TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </AccordionDetails>
-                  </Accordion>
+                  <ConditionsTable conditions={details?.conditions || []} isHealthy={isConditionHealthy} />
                 </Box>
               )}
 
@@ -343,38 +298,13 @@ export default function JobDrawer(props: {
               {/* EVENTS */}
               {tab === 2 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  {events.length === 0 ? (
-                    <EmptyState message="No events found for this Job." />
-                  ) : (
-                    events.map((e, idx) => (
-                      <Box key={idx} sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.25 }}>
-                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                            <Chip size="small" label={e.type || "Unknown"} color={eventChipColor(e.type)} />
-                            <Typography variant="subtitle2">
-                              {valueOrDash(e.reason)} (x{valueOrDash(e.count)})
-                            </Typography>
-                          </Box>
-                          <Typography variant="caption" color="text.secondary">
-                            {fmtTs(e.lastSeen)}
-                          </Typography>
-                        </Box>
-                        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", mt: 0.5 }}>
-                          {valueOrDash(e.message)}
-                        </Typography>
-                      </Box>
-                    ))
-                  )}
+                  <EventsList events={events} emptyMessage="No events found for this Job." />
                 </Box>
               )}
 
               {/* YAML */}
               {tab === 3 && (
-                <Box sx={{ border: "1px solid #ddd", borderRadius: 2, overflow: "auto", height: "100%" }}>
-                  <SyntaxHighlighter language="yaml" showLineNumbers wrapLongLines>
-                    {details?.yaml || ""}
-                  </SyntaxHighlighter>
-                </Box>
+                <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
             </Box>
             <PodDrawer
