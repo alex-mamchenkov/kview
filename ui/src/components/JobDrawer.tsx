@@ -25,10 +25,11 @@ import { useConnectionState } from "../connectionState";
 import PodDrawer from "./PodDrawer";
 import CronJobDrawer from "./CronJobDrawer";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
-import { jobStatusChipColor, phaseChipColor } from "../utils/k8sUi";
+import { eventChipColor, jobStatusChipColor, phaseChipColor } from "../utils/k8sUi";
 import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
+import Section from "./shared/Section";
 import ResourceLinkChip from "./shared/ResourceLinkChip";
 import ConditionsTable from "./shared/ConditionsTable";
 import EventsList from "./shared/EventsList";
@@ -251,6 +252,30 @@ export default function JobDrawer(props: {
                   </Box>
 
                   <ConditionsTable conditions={details?.conditions || []} isHealthy={isConditionHealthy} />
+
+                  {events.length > 0 && (() => {
+                    const lastEvent = events[events.length - 1];
+                    return (
+                      <Section title="Last Event">
+                        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, mt: 1 }}>
+                          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                            <Chip size="small" label={lastEvent.type} color={eventChipColor(lastEvent.type)} />
+                            <Typography variant="body2" fontWeight="medium">{lastEvent.reason}</Typography>
+                            {lastEvent.lastSeen > 0 && (
+                              <Typography variant="caption" color="text.secondary">
+                                {fmtTs(lastEvent.lastSeen)}
+                              </Typography>
+                            )}
+                          </Box>
+                          {lastEvent.message && (
+                            <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-wrap" }}>
+                              {lastEvent.message}
+                            </Typography>
+                          )}
+                        </Box>
+                      </Section>
+                    );
+                  })()}
                 </Box>
               )}
 

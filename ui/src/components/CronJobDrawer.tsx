@@ -24,9 +24,11 @@ import { apiGet } from "../api";
 import { useConnectionState } from "../connectionState";
 import JobDrawer from "./JobDrawer";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
+import { jobStatusChipColor } from "../utils/k8sUi";
 import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
+import AccessDeniedState from "./shared/AccessDeniedState";
 import Section from "./shared/Section";
 import MetadataSection from "./shared/MetadataSection";
 import EventsList from "./shared/EventsList";
@@ -35,9 +37,8 @@ import CodeBlock from "./shared/CodeBlock";
 type CronJobDetails = {
   summary: CronJobSummary;
   policy: CronJobPolicy;
-  activeJobs?: CronJobJob[];
-  recentJobs?: CronJobJob[];
-  linkedJobs?: CronJobJobsSummary;
+  allJobs?: CronJobJob[];
+  jobsForbidden?: boolean;
   spec: CronJobSpec;
   metadata: CronJobMetadata;
   yaml: string;
@@ -56,12 +57,14 @@ type CronJobSummary = {
   name: string;
   namespace: string;
   schedule: string;
+  scheduleHint?: string;
   timeZone?: string;
   concurrencyPolicy?: string;
   suspend: boolean;
   active: number;
   lastScheduleTime?: number;
   lastSuccessfulTime?: number;
+  lastRunStatus?: string;
   ageSec: number;
 };
 
@@ -73,11 +76,11 @@ type CronJobPolicy = {
 
 type CronJobJob = {
   name: string;
+  status: string;
   startTime?: number;
-};
-
-type CronJobJobsSummary = {
-  total: number;
+  completionTime?: number;
+  durationSec?: number;
+  ageSec?: number;
 };
 
 type CronJobSpec = {
@@ -120,6 +123,17 @@ function formatSuspend(suspend?: boolean) {
   if (suspend == null) return "-";
   const suspended = Boolean(suspend);
   return <Chip size="small" label={suspended ? "Yes" : "No"} color={suspended ? "warning" : "default"} />;
+}
+
+function formatSchedule(schedule?: string, hint?: string) {
+  if (!schedule) return "-";
+  if (hint) return `${schedule} (${hint})`;
+  return schedule;
+}
+
+function formatDuration(seconds?: number) {
+  if (!seconds || seconds <= 0) return "-";
+  return fmtAge(seconds, "detail");
 }
 
 export default function CronJobDrawer(props: {
@@ -170,13 +184,7 @@ export default function CronJobDrawer(props: {
 
   const summary = details?.summary;
   const policy = details?.policy;
-  const activeJobs = details?.activeJobs || [];
-  const recentJobsRaw = details?.recentJobs || [];
-  const activeNames = useMemo(() => new Set(activeJobs.map((j) => j.name)), [activeJobs]);
-  const recentJobs = useMemo(
-    () => recentJobsRaw.filter((j) => j.name && !activeNames.has(j.name)),
-    [recentJobsRaw, activeNames]
-  );
+  const allJobs = details?.allJobs || [];
 
   const hasPolicy =
     policy?.startingDeadlineSeconds != null ||
@@ -187,28 +195,24 @@ export default function CronJobDrawer(props: {
     () => [
       { label: "Name", value: valueOrDash(summary?.name) },
       { label: "Namespace", value: valueOrDash(summary?.namespace) },
-      { label: "Schedule", value: valueOrDash(summary?.schedule) },
+      { label: "Schedule", value: formatSchedule(summary?.schedule, summary?.scheduleHint) },
       { label: "Time Zone", value: valueOrDash(summary?.timeZone) },
       { label: "Concurrency Policy", value: valueOrDash(summary?.concurrencyPolicy) },
       { label: "Suspend", value: formatSuspend(summary?.suspend) },
       { label: "Active Jobs", value: valueOrDash(summary?.active) },
+      {
+        label: "Last Run Status",
+        value: summary?.lastRunStatus ? (
+          <Chip size="small" label={summary.lastRunStatus} color={jobStatusChipColor(summary.lastRunStatus)} />
+        ) : (
+          "-"
+        ),
+      },
       { label: "Last Schedule", value: summary?.lastScheduleTime ? fmtTs(summary.lastScheduleTime) : "-" },
       { label: "Last Successful", value: summary?.lastSuccessfulTime ? fmtTs(summary.lastSuccessfulTime) : "-" },
       { label: "Age", value: fmtAge(summary?.ageSec) },
     ],
     [summary]
-  );
-
-  const jobRow = (j: CronJobJob, idx: number) => (
-    <TableRow
-      key={j.name || String(idx)}
-      hover
-      onClick={() => j.name && setDrawerJob(j.name)}
-      sx={{ cursor: j.name ? "pointer" : "default" }}
-    >
-      <TableCell>{valueOrDash(j.name)}</TableCell>
-      <TableCell>{j.startTime ? fmtTs(j.startTime) : "-"}</TableCell>
-    </TableRow>
   );
 
   return (
@@ -295,42 +299,42 @@ export default function CronJobDrawer(props: {
               {/* JOBS */}
               {tab === 1 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
-                  {activeJobs.length === 0 && recentJobs.length === 0 ? (
-                    <EmptyState message="No active or recent Jobs found for this CronJob." />
+                  {details?.jobsForbidden ? (
+                    <AccessDeniedState resourceLabel="Jobs" />
+                  ) : allJobs.length === 0 ? (
+                    <EmptyState message="No Jobs found for this CronJob." />
                   ) : (
-                    <>
-                      <Section title="Active Jobs" divider={false}>
-                        {activeJobs.length === 0 ? (
-                          <EmptyState message="No active Jobs." sx={{ mt: 1 }} />
-                        ) : (
-                          <Table size="small" sx={{ mt: 1 }}>
-                            <TableHead>
-                              <TableRow>
-                                <TableCell>Job</TableCell>
-                                <TableCell>Start Time</TableCell>
-                              </TableRow>
-                            </TableHead>
-                            <TableBody>{activeJobs.map(jobRow)}</TableBody>
-                          </Table>
-                        )}
-                      </Section>
-
-                      <Section title="Recent Jobs" divider={false}>
-                        {recentJobs.length === 0 ? (
-                          <EmptyState message="No recent Jobs." sx={{ mt: 1 }} />
-                        ) : (
-                          <Table size="small" sx={{ mt: 1 }}>
-                            <TableHead>
-                              <TableRow>
-                                <TableCell>Job</TableCell>
-                                <TableCell>Start Time</TableCell>
-                              </TableRow>
-                            </TableHead>
-                            <TableBody>{recentJobs.map(jobRow)}</TableBody>
-                          </Table>
-                        )}
-                      </Section>
-                    </>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Name</TableCell>
+                          <TableCell>Status</TableCell>
+                          <TableCell>Started</TableCell>
+                          <TableCell>Completed</TableCell>
+                          <TableCell>Duration</TableCell>
+                          <TableCell>Age</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {allJobs.map((j, idx) => (
+                          <TableRow
+                            key={j.name || String(idx)}
+                            hover
+                            onClick={() => j.name && setDrawerJob(j.name)}
+                            sx={{ cursor: j.name ? "pointer" : "default" }}
+                          >
+                            <TableCell>{valueOrDash(j.name)}</TableCell>
+                            <TableCell>
+                              <Chip size="small" label={valueOrDash(j.status)} color={jobStatusChipColor(j.status)} />
+                            </TableCell>
+                            <TableCell>{j.startTime ? fmtTs(j.startTime) : "-"}</TableCell>
+                            <TableCell>{j.completionTime ? fmtTs(j.completionTime) : "-"}</TableCell>
+                            <TableCell>{formatDuration(j.durationSec)}</TableCell>
+                            <TableCell>{fmtAge(j.ageSec)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   )}
                 </Box>
               )}

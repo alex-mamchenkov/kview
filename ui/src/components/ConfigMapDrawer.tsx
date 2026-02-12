@@ -18,6 +18,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../api";
 import { useConnectionState } from "../connectionState";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
+import { detectLanguageFromKey } from "../utils/syntaxDetect";
 import Section from "./shared/Section";
 import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
@@ -410,19 +411,8 @@ export default function ConfigMapDrawer(props: {
                                     Showing first {MAX_VALUE_PREVIEW_CHARS} characters… See full content in YAML tab.
                                   </Typography>
                                 )}
-                                <Box
-                                  sx={{
-                                    border: "1px solid #ddd",
-                                    borderRadius: 2,
-                                    p: 1,
-                                    mt: truncated ? 0.5 : 0,
-                                    backgroundColor: "#fafafa",
-                                    fontFamily: "monospace",
-                                    whiteSpace: "pre-wrap",
-                                    fontSize: "0.8125rem",
-                                  }}
-                                >
-                                  {dataValue.value}
+                                <Box sx={{ mt: truncated ? 0.5 : 0 }}>
+                                  <CodeBlock code={dataValue.value} language={detectLanguageFromKey(k.name)} showCopy />
                                 </Box>
                               </>
                             ) : (

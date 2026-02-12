@@ -29,6 +29,16 @@ import MetadataSection from "./shared/MetadataSection";
 import EventsList from "./shared/EventsList";
 import CodeBlock from "./shared/CodeBlock";
 
+function buildIngressUrls(hosts?: string[], tls?: IngressTLS[]): { host: string; url: string }[] {
+  if (!hosts || hosts.length === 0) return [];
+  const tlsHosts = new Set<string>();
+  (tls || []).forEach((t) => (t.hosts || []).forEach((h) => tlsHosts.add(h)));
+  return hosts.map((host) => {
+    const proto = tlsHosts.has(host) ? "https" : "http";
+    return { host, url: `${proto}://${host}` };
+  });
+}
+
 type IngressDetails = {
   summary: IngressSummary;
   rules: IngressRule[];
@@ -239,6 +249,28 @@ export default function IngressDrawer(props: {
                     <KeyValueTable rows={summaryItems} columns={3} />
                   </Box>
 
+                  {(() => {
+                    const urls = buildIngressUrls(summary?.hosts, details?.tls);
+                    if (urls.length === 0) return null;
+                    return (
+                      <Section title="URLs">
+                        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, mt: 1 }}>
+                          {urls.map((u) => (
+                            <Typography
+                              key={u.host}
+                              variant="body2"
+                              sx={{ fontFamily: "monospace" }}
+                            >
+                              <a href={u.url} target="_blank" rel="noopener noreferrer">
+                                {u.url}
+                              </a>
+                            </Typography>
+                          ))}
+                        </Box>
+                      </Section>
+                    );
+                  })()}
+
                   <Section title="Default Backend">
                     {!details?.defaultBackend?.serviceName ? (
                       <EmptyState message="No default backend configured." sx={{ mt: 1 }} />
@@ -264,10 +296,19 @@ export default function IngressDrawer(props: {
                   {(details?.rules || []).length === 0 ? (
                     <EmptyState message="No rules configured for this Ingress." />
                   ) : (
-                    (details?.rules || []).map((rule, idx) => (
+                    (details?.rules || []).map((rule, idx) => {
+                      const ruleUrls = buildIngressUrls(rule.host ? [rule.host] : [], details?.tls);
+                      const ruleUrl = ruleUrls[0]?.url;
+                      return (
                       <Section
                         key={`${rule.host || "rule"}-${idx}`}
-                        title={`Host: ${valueOrDash(rule.host)}`}
+                        title={
+                          ruleUrl ? (
+                            <>Host: <a href={ruleUrl} target="_blank" rel="noopener noreferrer">{rule.host}</a></>
+                          ) : (
+                            `Host: ${valueOrDash(rule.host)}`
+                          )
+                        }
                         dividerPlacement="content"
                         sx={{ mt: idx === 0 ? 0 : 1 }}
                       >
@@ -305,7 +346,8 @@ export default function IngressDrawer(props: {
                           </Table>
                         )}
                       </Section>
-                    ))
+                    );
+                    })
                   )}
                 </Box>
               )}

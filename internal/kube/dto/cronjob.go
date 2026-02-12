@@ -12,26 +12,27 @@ type CronJobDTO struct {
 }
 
 type CronJobDetailsDTO struct {
-	Summary    CronJobSummaryDTO     `json:"summary"`
-	Policy     CronJobPolicyDTO      `json:"policy"`
-	ActiveJobs []CronJobJobDTO       `json:"activeJobs,omitempty"`
-	RecentJobs []CronJobJobDTO       `json:"recentJobs,omitempty"`
-	LinkedJobs CronJobJobsSummaryDTO `json:"linkedJobs"`
-	Spec       CronJobSpecDTO        `json:"spec"`
-	Metadata   CronJobMetadataDTO    `json:"metadata"`
-	YAML       string                `json:"yaml"`
+	Summary       CronJobSummaryDTO     `json:"summary"`
+	Policy        CronJobPolicyDTO      `json:"policy"`
+	AllJobs       []CronJobJobDTO       `json:"allJobs,omitempty"`
+	JobsForbidden bool                  `json:"jobsForbidden,omitempty"`
+	Spec          CronJobSpecDTO        `json:"spec"`
+	Metadata      CronJobMetadataDTO    `json:"metadata"`
+	YAML          string                `json:"yaml"`
 }
 
 type CronJobSummaryDTO struct {
 	Name               string `json:"name"`
 	Namespace          string `json:"namespace"`
 	Schedule           string `json:"schedule"`
+	ScheduleHint       string `json:"scheduleHint,omitempty"`
 	TimeZone           string `json:"timeZone,omitempty"`
 	ConcurrencyPolicy  string `json:"concurrencyPolicy,omitempty"`
 	Suspend            bool   `json:"suspend"`
 	Active             int32  `json:"active"`
 	LastScheduleTime   int64  `json:"lastScheduleTime,omitempty"`
 	LastSuccessfulTime int64  `json:"lastSuccessfulTime,omitempty"`
+	LastRunStatus      string `json:"lastRunStatus,omitempty"`
 	AgeSec             int64  `json:"ageSec"`
 }
 
@@ -42,12 +43,12 @@ type CronJobPolicyDTO struct {
 }
 
 type CronJobJobDTO struct {
-	Name      string `json:"name"`
-	StartTime int64  `json:"startTime,omitempty"`
-}
-
-type CronJobJobsSummaryDTO struct {
-	Total int32 `json:"total"`
+	Name           string `json:"name"`
+	Status         string `json:"status"`
+	StartTime      int64  `json:"startTime,omitempty"`
+	CompletionTime int64  `json:"completionTime,omitempty"`
+	DurationSec    int64  `json:"durationSec,omitempty"`
+	AgeSec         int64  `json:"ageSec,omitempty"`
 }
 
 type CronJobSpecDTO struct {

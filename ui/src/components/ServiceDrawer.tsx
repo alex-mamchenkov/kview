@@ -53,6 +53,7 @@ type ServiceSummary = {
   namespace: string;
   type: string;
   clusterIPs?: string[];
+  externalName?: string;
   selector?: Record<string, string>;
   sessionAffinity?: string;
   ageSec?: number;
@@ -115,6 +116,37 @@ function formatIngressAddresses(addrs?: string[]) {
 function formatIngressTlsLabel(count?: number) {
   const num = Number(count || 0);
   return num > 0 ? `Yes (${num})` : "No";
+}
+
+function buildExternalUrls(
+  summary?: ServiceSummary,
+  traffic?: ServiceTraffic,
+  ports?: ServicePort[],
+): string[] {
+  if (!summary) return [];
+  const urls: string[] = [];
+
+  if (summary.type === "LoadBalancer" && traffic?.loadBalancerIngress?.length) {
+    for (const addr of traffic.loadBalancerIngress) {
+      if (!addr) continue;
+      const has443 = (ports || []).some((p) => p.port === 443);
+      const has80 = (ports || []).some((p) => p.port === 80);
+      if (has443) urls.push(`https://${addr}`);
+      else if (has80) urls.push(`http://${addr}`);
+      else {
+        // Show first port
+        const first = (ports || [])[0];
+        if (first) urls.push(`http://${addr}:${first.port}`);
+        else urls.push(`http://${addr}`);
+      }
+    }
+  }
+
+  if (summary.type === "ExternalName" && summary.externalName) {
+    urls.push(`http://${summary.externalName}`);
+  }
+
+  return urls;
 }
 
 export default function ServiceDrawer(props: {
@@ -324,6 +356,28 @@ export default function ServiceDrawer(props: {
                       ]}
                     />
                   </Section>
+
+                  {(() => {
+                    const urls = buildExternalUrls(summary, details?.traffic, details?.ports);
+                    if (urls.length === 0) return null;
+                    return (
+                      <Section title="External URLs">
+                        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, mt: 1 }}>
+                          {urls.map((url) => (
+                            <Typography
+                              key={url}
+                              variant="body2"
+                              sx={{ fontFamily: "monospace" }}
+                            >
+                              <a href={url} target="_blank" rel="noopener noreferrer">
+                                {url}
+                              </a>
+                            </Typography>
+                          ))}
+                        </Box>
+                      </Section>
+                    );
+                  })()}
 
                   <MetadataSection labels={details?.summary?.labels} annotations={details?.summary?.annotations} />
                 </Box>

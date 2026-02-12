@@ -11,8 +11,16 @@ type SecretDTO struct {
 
 type SecretDetailsDTO struct {
 	Summary  SecretSummaryDTO  `json:"summary"`
+	Keys     []SecretKeyDTO    `json:"keys"`
 	KeyNames []string          `json:"keyNames"`
 	Metadata SecretMetadataDTO `json:"metadata"`
+	YAML     string            `json:"yaml"`
+}
+
+type SecretKeyDTO struct {
+	Name      string `json:"name"`
+	Value     string `json:"value"`
+	SizeBytes int    `json:"sizeBytes"`
 }
 
 type SecretSummaryDTO struct {

@@ -9,22 +9,35 @@ import {
   Divider,
   CircularProgress,
   Chip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../api";
 import { useConnectionState } from "../connectionState";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
-import Section from "./shared/Section";
+import { detectLanguageFromKey } from "../utils/syntaxDetect";
 import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
 import MetadataSection from "./shared/MetadataSection";
 import EventsList from "./shared/EventsList";
+import CodeBlock from "./shared/CodeBlock";
 
 type SecretDetails = {
   summary: SecretSummary;
+  keys?: SecretKey[];
   keyNames: string[];
   metadata: SecretMetadata;
+  yaml?: string;
+};
+
+type SecretKey = {
+  name: string;
+  value: string;
+  sizeBytes: number;
 };
 
 type SecretSummary = {
@@ -56,6 +69,15 @@ function formatImmutable(val?: boolean) {
   return val ? "Yes" : "No";
 }
 
+function formatBytes(bytes?: number) {
+  if (bytes === undefined || bytes === null) return "-";
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(1)} MB`;
+}
+
 export default function SecretDrawer(props: {
   open: boolean;
   onClose: () => void;
@@ -69,6 +91,7 @@ export default function SecretDrawer(props: {
   const [details, setDetails] = useState<SecretDetails | null>(null);
   const [events, setEvents] = useState<EventDTO[]>([]);
   const [err, setErr] = useState("");
+  const [expandedKeys, setExpandedKeys] = useState<Record<string, boolean>>({});
 
   const ns = props.namespace;
   const name = props.secretName;
@@ -80,6 +103,7 @@ export default function SecretDrawer(props: {
     setErr("");
     setDetails(null);
     setEvents([]);
+    setExpandedKeys({});
     setLoading(true);
 
     (async () => {
@@ -116,7 +140,8 @@ export default function SecretDrawer(props: {
     [summary]
   );
 
-  const keys = details?.keyNames || [];
+  const keys = details?.keys || [];
+  const hasKeys = keys.length > 0;
 
   return (
     <Drawer
@@ -159,6 +184,7 @@ export default function SecretDrawer(props: {
               <Tab label="Overview" />
               <Tab label="Keys" />
               <Tab label="Events" />
+              <Tab label="YAML" />
             </Tabs>
 
             <Box sx={{ mt: 2, flexGrow: 1, minHeight: 0, overflow: "hidden" }}>
@@ -176,28 +202,38 @@ export default function SecretDrawer(props: {
               {/* KEYS */}
               {tab === 1 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  <Typography variant="caption" color="text.secondary">
-                    Secret values are not displayed.
-                  </Typography>
-                  {keys.length === 0 ? (
+                  {!hasKeys ? (
                     <EmptyState message="No keys found for this Secret." />
                   ) : (
-                    <Box sx={{ border: "1px solid #ddd", borderRadius: 2, overflow: "hidden" }}>
-                      {keys.map((k, idx) => (
-                        <Box
-                          key={k || idx}
-                          sx={{
-                            px: 1.5,
-                            py: 1,
-                            borderBottom: idx === keys.length - 1 ? "none" : "1px solid #eee",
-                          }}
+                    keys.map((k, idx) => {
+                      const keyId = k.name || String(idx);
+                      const lang = detectLanguageFromKey(k.name);
+
+                      return (
+                        <Accordion
+                          key={keyId}
+                          expanded={!!expandedKeys[keyId]}
+                          onChange={() =>
+                            setExpandedKeys((prev) => ({
+                              ...prev,
+                              [keyId]: !prev[keyId],
+                            }))
+                          }
                         >
-                          <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
-                            {valueOrDash(k)}
-                          </Typography>
-                        </Box>
-                      ))}
-                    </Box>
+                          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", flexGrow: 1 }}>
+                              <Typography variant="subtitle2" sx={{ fontFamily: "monospace" }}>
+                                {valueOrDash(k.name)}
+                              </Typography>
+                              {k.sizeBytes !== undefined && <Chip size="small" label={formatBytes(k.sizeBytes)} />}
+                            </Box>
+                          </AccordionSummary>
+                          <AccordionDetails>
+                            <CodeBlock code={k.value} language={lang} showCopy />
+                          </AccordionDetails>
+                        </Accordion>
+                      );
+                    })
                   )}
                 </Box>
               )}
@@ -207,6 +243,11 @@ export default function SecretDrawer(props: {
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
                   <EventsList events={events} emptyMessage="No events found for this Secret." />
                 </Box>
+              )}
+
+              {/* YAML */}
+              {tab === 3 && (
+                <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
             </Box>
           </>

@@ -73,6 +73,7 @@ func GetServiceDetails(ctx context.Context, c *cluster.Clients, namespace, name 
 		Namespace:       svc.Namespace,
 		Type:            serviceType(svc.Spec.Type),
 		ClusterIPs:      serviceClusterIPs(svc.Spec),
+		ExternalName:    svc.Spec.ExternalName,
 		Selector:        selector,
 		SessionAffinity: string(svc.Spec.SessionAffinity),
 		AgeSec:          age,

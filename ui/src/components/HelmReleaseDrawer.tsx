@@ -28,6 +28,7 @@ import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
 import ResourceLinkChip from "./shared/ResourceLinkChip";
 import CodeBlock from "./shared/CodeBlock";
+import AutolinkText from "./shared/AutolinkText";
 import DeploymentDrawer from "./DeploymentDrawer";
 import StatefulSetDrawer from "./StatefulSetDrawer";
 import DaemonSetDrawer from "./DaemonSetDrawer";
@@ -391,7 +392,24 @@ export default function HelmReleaseDrawer(props: {
 
               {/* NOTES */}
               {activeTabId === "notes" && (
-                <CodeBlock code={notes} />
+                <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+                  <Box
+                    sx={{
+                      flexGrow: 1,
+                      overflow: "auto",
+                      fontFamily: "monospace",
+                      fontSize: "0.8rem",
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-all",
+                      bgcolor: "#f5f5f5",
+                      p: 1.5,
+                      borderRadius: 1,
+                      border: "1px solid #e0e0e0",
+                    }}
+                  >
+                    <AutolinkText text={notes} />
+                  </Box>
+                </Box>
               )}
 
               {/* YAML */}

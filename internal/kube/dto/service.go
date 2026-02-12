@@ -13,6 +13,7 @@ type ServiceSummaryDTO struct {
 	Namespace       string            `json:"namespace"`
 	Type            string            `json:"type"`
 	ClusterIPs      []string          `json:"clusterIPs"`
+	ExternalName    string            `json:"externalName,omitempty"`
 	Selector        map[string]string `json:"selector,omitempty"`
 	SessionAffinity string            `json:"sessionAffinity,omitempty"`
 	AgeSec          int64             `json:"ageSec"`
