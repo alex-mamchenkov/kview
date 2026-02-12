@@ -8,7 +8,6 @@ import {
   IconButton,
   Divider,
   CircularProgress,
-  Button,
   FormControl,
   InputLabel,
   Select,
@@ -291,26 +290,17 @@ function formatIngressTlsLabel(count?: number) {
   return num > 0 ? `Yes (${num})` : "No";
 }
 
-function formatPrettyWithLineNumbers(lines: string[]): { text: string; hiddenLineNumbers: Set<number> } {
+function formatPretty(lines: string[]): string {
   const out: string[] = [];
-  const hidden = new Set<number>();
-  let lineNo = 1;
-
   lines.forEach((line) => {
     const prettyStr = tryPrettyJSONLine(line);
     if (prettyStr) {
-      const parts = prettyStr.split("\n");
-      parts.forEach((p, i) => {
-        out.push(p);
-        if (i > 0) hidden.add(lineNo);
-        lineNo++;
-      });
+      out.push(prettyStr);
     } else {
       out.push(line);
-      lineNo++;
     }
   });
-  return { text: out.join("\n"), hiddenLineNumbers: hidden };
+  return out.join("\n");
 }
 
 export default function PodDrawer(props: {
@@ -615,7 +605,7 @@ export default function PodDrawer(props: {
     networkingIngressesLoading,
   ]);
 
-  const { renderedLogs, hiddenLineNumbers } = useMemo(() => {
+  const renderedLogs = useMemo(() => {
     const q = logsFilter.trim().toLowerCase();
 
     const filtered = q
@@ -625,13 +615,12 @@ export default function PodDrawer(props: {
     const limited = lineLimit > 0 ? filtered.slice(-lineLimit) : filtered;
 
     if (!pretty) {
-      return { renderedLogs: limited.join("\n"), hiddenLineNumbers: new Set<number>() };
+      return limited.join("\n");
     }
 
     // Pretty: try parse each line as JSON; if parsed -> pretty multi-line
     // If not JSON -> keep as-is line.
-    const formatted = formatPrettyWithLineNumbers(limited);
-    return { renderedLogs: formatted.text, hiddenLineNumbers: formatted.hiddenLineNumbers };
+    return formatPretty(limited);
   }, [logLines, logsFilter, pretty, lineLimit]);
 
   useEffect(() => {
@@ -694,8 +683,28 @@ export default function PodDrawer(props: {
       });
     }
 
+    // Phase vs health confusion hint:
+    // If phase is Succeeded but there are explicit unhealthy signals, add a subtle note.
+    if (summary?.phase === "Succeeded") {
+      const conditions = details.conditions || [];
+      const hasUnhealthyCond = conditions.some((c) => c.status !== "True");
+      const hasWaitingContainer = containers.some(
+        (c) => c.state === "Waiting" && c.reason
+      );
+      const hasWarningEvents = (events || []).some((e) => e.type === "Warning");
+
+      if (hasUnhealthyCond || hasWaitingContainer || hasWarningEvents) {
+        warnings.push({
+          message:
+            "Pod phase is Succeeded, but some conditions/events indicate issues.",
+          detail:
+            "This can happen with short-lived pods (e.g., init containers, Jobs) where phase reflects completion but conditions/events captured earlier problems.",
+        });
+      }
+    }
+
     return warnings;
-  }, [details]);
+  }, [details, events]);
 
   const openController = (kind: string, name: string) => {
     switch (kind) {
@@ -835,7 +844,7 @@ export default function PodDrawer(props: {
               <Tab label="Logs" />
             </Tabs>
 
-            <Box sx={{ mt: 2, flexGrow: 1, minHeight: 0, overflow: "hidden" }}>
+            <Box sx={{ mt: 3, flexGrow: 1, minHeight: 0, overflow: "hidden" }}>
               {/* OVERVIEW */}
               {tab === 0 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
@@ -1527,10 +1536,11 @@ export default function PodDrawer(props: {
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                     <FormControl size="small" sx={{ minWidth: 220 }}>
-                      <InputLabel id="events-container-label">Container</InputLabel>
+                      <InputLabel id="events-container-label" shrink>Container</InputLabel>
                       <Select
                         labelId="events-container-label"
                         label="Container"
+                        displayEmpty
                         value={eventsContainerFilter}
                         onChange={(e) => setEventsContainerFilter(String(e.target.value))}
                       >
@@ -1637,14 +1647,22 @@ export default function PodDrawer(props: {
                       label="Wrap lines"
                     />
 
-                    <Box sx={{ flexGrow: 1 }} />
-
-                    <Button variant="contained" onClick={startLogsFollow} disabled={following || !name}>
-                      Follow
-                    </Button>
-                    <Button variant="outlined" onClick={stopLogs} disabled={!following}>
-                      Stop
-                    </Button>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={following}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              startLogsFollow();
+                            } else {
+                              stopLogs();
+                            }
+                          }}
+                          disabled={!name}
+                        />
+                      }
+                      label="Follow"
+                    />
                   </Box>
 
                   <Box
@@ -1655,10 +1673,6 @@ export default function PodDrawer(props: {
                       key={`${pretty}-${wrapLines}`}
                       language={pretty ? "json" : "text"}
                       wrapLongLines={wrapLines}
-                      showLineNumbers
-                      lineNumberStyle={(lineNumber) =>
-                        hiddenLineNumbers.has(lineNumber) ? { visibility: "hidden" } : {}
-                      }
                       customStyle={{
                         margin: 0,
                         background: "transparent",
