@@ -203,7 +203,7 @@ export default function App() {
       <Box component="main" sx={{ flexGrow: 1, p: 2, mt: 8 }}>
         <ConnectionBanner />
         {section === "nodes" ? <NodesTable token={token} /> : null}
-        {section === "namespaces" ? <NamespacesTable token={token} /> : null}
+        {section === "namespaces" ? <NamespacesTable token={token} onNavigate={(sec, ns) => { onSelectNamespace(ns); onSelectSection(sec as Section); }} /> : null}
         {section === "pods" && namespace ? <PodsTable token={token} namespace={namespace} /> : null}
         {section === "deployments" && namespace ? (
           <DeploymentsTable token={token} namespace={namespace} />

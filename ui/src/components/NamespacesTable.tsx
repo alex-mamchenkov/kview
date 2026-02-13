@@ -54,7 +54,7 @@ const cols: GridColDef[] = [
   },
 ];
 
-export default function NamespacesTable({ token }: { token: string }) {
+export default function NamespacesTable({ token, onNavigate }: { token: string; onNavigate?: (section: string, namespace: string) => void }) {
   const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>([]);
   const selectedName = useMemo(() => {
     if (!selectionModel.length) return null;
@@ -158,6 +158,7 @@ export default function NamespacesTable({ token }: { token: string }) {
         onClose={() => setDrawerName(null)}
         token={token}
         namespaceName={drawerName}
+        onNavigate={onNavigate}
       />
     </Paper>
   );

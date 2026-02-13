@@ -129,6 +129,35 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, map[string]any{"active": active, "item": det})
 		})
 
+		api.Get("/namespaces/{name}/summary", func(w http.ResponseWriter, r *http.Request) {
+			name := chi.URLParam(r, "name")
+			if name == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "missing namespace name"})
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+			defer cancel()
+
+			clients, active, err := s.mgr.GetClients(ctx)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			summary, err := kube.GetNamespaceSummary(ctx, clients, name)
+			if err != nil {
+				status := http.StatusInternalServerError
+				if apierrors.IsForbidden(err) {
+					status = http.StatusForbidden
+				}
+				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{"active": active, "item": summary})
+		})
+
 		api.Post("/auth/can-i", func(w http.ResponseWriter, r *http.Request) {
 			var body struct {
 				Verb      string  `json:"verb"`
