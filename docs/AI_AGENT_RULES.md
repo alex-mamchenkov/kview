@@ -8,13 +8,13 @@ UI_UX_GUIDE.md is the authoritative UI contract.
 
 ## Core Principles
 
-1. View-only unless explicitly instructed otherwise.
+1. Follow `UI_UX_GUIDE.md` strictly. The app is **view-first**, and mutations are allowed only when the UI contract explicitly permits them and the milestone scope requires them.
 2. RBAC-aware behavior must always be respected.
 3. Cross-resource linking is mandatory whenever logically possible.
 4. Follow the “title above value” layout rule.
 5. Use shared UI components — avoid ad-hoc styling.
 6. No new dependencies unless explicitly approved.
-7. Always run `make build` before suggesting documentation updates or commit messages.
+7. Always run `make build` before reporting completion. Provide build output and fix issues.
 
 ---
 
@@ -52,15 +52,20 @@ If inconsistency is detected → refactor immediately.
 
 ---
 
-## Commit Flow
+## Commit Flow (Agent)
 
 After implementation:
 
 1. Run `make build`
 2. Fix errors
-3. Propose commit message
-4. Propose doc updates if needed
-5. Ask user before applying documentation changes
+3. Provide:
+   - a short summary of what changed
+   - files changed
+   - how to verify (manual steps / endpoints / UI clicks)
+   - any follow-up risks or TODOs
+
+Do NOT:
+- propose commit messages
+- change documentation files (`README.md`, `docs/*.md`) unless explicitly requested
 
 Never auto-commit.
-

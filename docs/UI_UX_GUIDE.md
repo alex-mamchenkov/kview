@@ -14,7 +14,8 @@ If implementation and this document disagree, either:
 - Drawer-based navigation model: lists stay visible, drawer is the detail surface.
 - Dense, scan-friendly layout (minimal chrome, minimal scrolling where possible).
 - Prefer explicit data over visual noise: tables, chips, and compact sections over charts.
-- View-only: the UI must not mutate cluster state.
+- View-first by default: the UI prioritizes clarity and navigation over control.
+- Mutations are allowed **only** behind explicit UX guardrails (see “Mutations Contract”).
 
 ---
 
@@ -209,3 +210,40 @@ the fix should be:
 1) Update/add shared components
 2) Align all drawers to the shared components
 3) Keep this guide updated as the contract
+
+
+---
+
+## 1.x Mutations Contract (Cluster Changes)
+
+kview is **view-first**, but supports a controlled set of cluster mutations (Milestone 2+).
+
+### Availability rules
+- Actions MUST be RBAC-aware.
+- If an action is not permitted, it MUST be:
+  - hidden, or
+  - disabled with a short reason (preferred when discoverability matters).
+
+### Confirmation rules
+- Destructive actions (e.g., delete, helm uninstall) MUST require confirmation.
+- For high-risk actions (delete, uninstall), use **typed confirmation**:
+  - user must type the exact resource name (or release name) to proceed.
+
+### Execution rules
+- Actions MUST run through the backend (no direct client-side kubectl-like logic).
+- UI MUST show:
+  - loading/progress state while action runs
+  - success confirmation (non-intrusive)
+  - inline error near the action **with details** (and optional toast)
+
+### Error presentation
+- Errors MUST be actionable and specific:
+  - Forbidden → show AccessDenied and the attempted verb/resource
+  - NotFound → show “Already deleted / no longer exists”
+  - Conflict → show “Resource changed; refresh and retry”
+- Do not bury errors in logs-only surfaces.
+
+### Placement and consistency
+- Actions belong in the **Section header right side** (or an Actions menu) inside a drawer.
+- Use shared confirmation dialog and shared action button patterns.
+- Do not introduce ad-hoc button styles.
