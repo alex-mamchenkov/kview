@@ -14,6 +14,7 @@ import {
   TableRow,
   TableCell,
   TableBody,
+  LinearProgress,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { apiGet } from "../api";
@@ -22,6 +23,7 @@ import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { namespacePhaseChipColor, helmStatusChipColor } from "../utils/k8sUi";
 import type { ChipColor } from "../utils/k8sUi";
 import KeyValueTable from "./shared/KeyValueTable";
+import AccessDeniedState from "./shared/AccessDeniedState";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
 import Section from "./shared/Section";
@@ -110,6 +112,20 @@ type NamespaceHelmRelease = {
   revision: number;
 };
 
+type ResourceQuotaEntry = {
+  key: string;
+  used: string;
+  hard: string;
+  ratio?: number;
+};
+
+type ResourceQuota = {
+  name: string;
+  namespace: string;
+  ageSec: number;
+  entries: ResourceQuotaEntry[];
+};
+
 function isNamespaceConditionHealthy(cond: NamespaceCondition): boolean {
   return cond.status === "False";
 }
@@ -119,6 +135,20 @@ function namespaceConditionChipColor(status?: string): "success" | "warning" | "
   if (status === "False") return "success";
   if (status === "Unknown") return "warning";
   return "default";
+}
+
+function quotaGaugeColor(ratio?: number): "success" | "warning" | "error" {
+  if (ratio == null) return "success";
+  if (ratio >= 0.9) return "error";
+  if (ratio >= 0.7) return "warning";
+  return "success";
+}
+
+function quotaGaugeMuiColor(ratio?: number): string {
+  const level = quotaGaugeColor(ratio);
+  if (level === "error") return "#d32f2f";
+  if (level === "warning") return "#ed6c02";
+  return "#2e7d32";
 }
 
 const sectionMap: Record<string, string> = {
@@ -150,6 +180,10 @@ export default function NamespaceDrawer(props: {
   const [err, setErr] = useState("");
   const [summaryRes, setSummaryRes] = useState<NamespaceSummaryResources | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [quotas, setQuotas] = useState<ResourceQuota[]>([]);
+  const [quotasLoading, setQuotasLoading] = useState(false);
+  const [quotasErr, setQuotasErr] = useState("");
+  const [quotasForbidden, setQuotasForbidden] = useState(false);
 
   // nested drawer state
   const [drawerPod, setDrawerPod] = useState<string | null>(null);
@@ -172,6 +206,10 @@ export default function NamespaceDrawer(props: {
     setDrawerDeployment(null);
     setDrawerJob(null);
     setDrawerHelmRelease(null);
+    setQuotas([]);
+    setQuotasErr("");
+    setQuotasForbidden(false);
+    setQuotasLoading(true);
 
     const encodedName = encodeURIComponent(name);
 
@@ -190,6 +228,20 @@ export default function NamespaceDrawer(props: {
     })()
       .catch(() => {})
       .finally(() => setSummaryLoading(false));
+
+    (async () => {
+      const res = await apiGet<any>(`/api/namespaces/${encodedName}/resourcequotas`, props.token);
+      setQuotas(res?.items ?? []);
+    })()
+      .catch((e: any) => {
+        const status = e?.status;
+        if (status === 403 || status === 401) {
+          setQuotasForbidden(true);
+        } else {
+          setQuotasErr(String(e));
+        }
+      })
+      .finally(() => setQuotasLoading(false));
   }, [props.open, name, props.token, retryNonce]);
 
   const summary = details?.summary;
@@ -289,6 +341,7 @@ export default function NamespaceDrawer(props: {
             <Tabs value={tab} onChange={(_, v) => setTab(v)}>
               <Tab label="Overview" />
               <Tab label="Conditions" />
+              <Tab label="ResourceQuotas" />
               <Tab label="YAML" />
             </Tabs>
 
@@ -449,8 +502,94 @@ export default function NamespaceDrawer(props: {
                 </Box>
               )}
 
-              {/* YAML */}
+              {/* RESOURCE QUOTAS */}
               {tab === 2 && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  {quotasLoading ? (
+                    <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
+                      <CircularProgress />
+                    </Box>
+                  ) : quotasForbidden ? (
+                    <AccessDeniedState status={403} resourceLabel="resource quotas" />
+                  ) : quotasErr ? (
+                    <ErrorState message={quotasErr} />
+                  ) : quotas.length === 0 ? (
+                    <EmptyState message="No ResourceQuotas in this namespace." />
+                  ) : (
+                    quotas.map((rq) => (
+                      <Section key={rq.name} title={`ResourceQuota: ${rq.name}`}>
+                        <KeyValueTable
+                          rows={[
+                            { label: "Name", value: rq.name, monospace: true },
+                            { label: "Age", value: fmtAge(rq.ageSec) },
+                          ]}
+                          columns={2}
+                        />
+                        <Table size="small" sx={{ mt: 1.5 }}>
+                          <TableHead>
+                            <TableRow>
+                              <TableCell sx={{ width: "30%", fontWeight: 600 }}>Resource</TableCell>
+                              <TableCell sx={{ width: "50%", fontWeight: 600 }}>Usage</TableCell>
+                              <TableCell sx={{ width: "20%", fontWeight: 600, textAlign: "right" }}>Used / Hard</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {rq.entries.map((entry) => {
+                              const pct = entry.ratio != null ? Math.round(entry.ratio * 100) : null;
+                              const color = quotaGaugeMuiColor(entry.ratio);
+                              return (
+                                <TableRow key={entry.key}>
+                                  <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>
+                                    {entry.key}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Box sx={{ position: "relative", display: "flex", alignItems: "center" }}>
+                                      <LinearProgress
+                                        variant="determinate"
+                                        value={pct != null ? Math.min(pct, 100) : 0}
+                                        sx={{
+                                          width: "100%",
+                                          height: 20,
+                                          borderRadius: 1,
+                                          backgroundColor: "rgba(0,0,0,0.08)",
+                                          "& .MuiLinearProgress-bar": {
+                                            backgroundColor: color,
+                                            borderRadius: 1,
+                                          },
+                                        }}
+                                      />
+                                      <Typography
+                                        variant="caption"
+                                        sx={{
+                                          position: "absolute",
+                                          width: "100%",
+                                          textAlign: "center",
+                                          fontSize: 11,
+                                          fontWeight: 600,
+                                          color: pct != null && pct >= 50 ? "#fff" : "text.primary",
+                                          lineHeight: "20px",
+                                        }}
+                                      >
+                                        {pct != null ? `${pct}%` : "-"}
+                                      </Typography>
+                                    </Box>
+                                  </TableCell>
+                                  <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
+                                    {entry.used} / {entry.hard}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </Section>
+                    ))
+                  )}
+                </Box>
+              )}
+
+              {/* YAML */}
+              {tab === 3 && (
                 <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
             </Box>
