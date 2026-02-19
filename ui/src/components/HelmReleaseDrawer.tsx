@@ -29,6 +29,7 @@ import ErrorState from "./shared/ErrorState";
 import ResourceLinkChip from "./shared/ResourceLinkChip";
 import CodeBlock from "./shared/CodeBlock";
 import AutolinkText from "./shared/AutolinkText";
+import { HelmReleaseActions } from "./HelmActions";
 import DeploymentDrawer from "./DeploymentDrawer";
 import StatefulSetDrawer from "./StatefulSetDrawer";
 import DaemonSetDrawer from "./DaemonSetDrawer";
@@ -93,6 +94,7 @@ export default function HelmReleaseDrawer(props: {
   token: string;
   namespace: string;
   releaseName: string | null;
+  onRefresh?: () => void;
 }) {
   const { retryNonce } = useConnectionState();
   const [tab, setTab] = useState(0);
@@ -221,6 +223,18 @@ export default function HelmReleaseDrawer(props: {
             Helm Release: {name || "-"}{" "}
             <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} />
           </Typography>
+          {name && !loading && !err && (
+            <HelmReleaseActions
+              token={props.token}
+              namespace={ns}
+              releaseName={name}
+              onRefresh={() => props.onRefresh?.()}
+              onDeleted={() => {
+                props.onClose();
+                props.onRefresh?.();
+              }}
+            />
+          )}
           <IconButton onClick={props.onClose}>
             <CloseIcon />
           </IconButton>

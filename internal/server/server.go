@@ -2254,6 +2254,156 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
 		})
 
+		// --- Helm mutation endpoints ---
+
+		api.Post("/helm/uninstall", func(w http.ResponseWriter, r *http.Request) {
+			ctxName := r.Header.Get("X-Kview-Context")
+			if ctxName == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{
+					"error": &APIError{Code: ErrCodeValidation, Message: "missing X-Kview-Context header"},
+				})
+				return
+			}
+
+			var body kube.HelmUninstallRequest
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Namespace == "" || body.Release == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": validationError("namespace and release are required")})
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+			defer cancel()
+
+			clients, _, err := s.mgr.GetClientsForContext(ctx, ctxName)
+			if err != nil {
+				if errors.Is(err, cluster.ErrUnknownContext) {
+					writeJSON(w, http.StatusNotFound, map[string]any{"error": &APIError{Code: ErrCodeNotFound, Message: err.Error()}})
+					return
+				}
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": &APIError{Code: ErrCodeInternal, Message: err.Error()}})
+				return
+			}
+
+			result, err := kube.HelmUninstall(ctx, clients, body)
+			if err != nil {
+				status, apiErr := mapHelmError(err)
+				writeJSON(w, status, map[string]any{"context": ctxName, "error": apiErr})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"context": ctxName, "result": result})
+		})
+
+		api.Post("/helm/upgrade", func(w http.ResponseWriter, r *http.Request) {
+			ctxName := r.Header.Get("X-Kview-Context")
+			if ctxName == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{
+					"error": &APIError{Code: ErrCodeValidation, Message: "missing X-Kview-Context header"},
+				})
+				return
+			}
+
+			var body kube.HelmUpgradeRequest
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Namespace == "" || body.Release == "" || body.Chart == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": validationError("namespace, release, and chart are required")})
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+			defer cancel()
+
+			clients, _, err := s.mgr.GetClientsForContext(ctx, ctxName)
+			if err != nil {
+				if errors.Is(err, cluster.ErrUnknownContext) {
+					writeJSON(w, http.StatusNotFound, map[string]any{"error": &APIError{Code: ErrCodeNotFound, Message: err.Error()}})
+					return
+				}
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": &APIError{Code: ErrCodeInternal, Message: err.Error()}})
+				return
+			}
+
+			result, err := kube.HelmUpgrade(ctx, clients, body)
+			if err != nil {
+				status, apiErr := mapHelmError(err)
+				writeJSON(w, status, map[string]any{"context": ctxName, "error": apiErr})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"context": ctxName, "result": result})
+		})
+
+		api.Post("/helm/install", func(w http.ResponseWriter, r *http.Request) {
+			ctxName := r.Header.Get("X-Kview-Context")
+			if ctxName == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{
+					"error": &APIError{Code: ErrCodeValidation, Message: "missing X-Kview-Context header"},
+				})
+				return
+			}
+
+			var body kube.HelmInstallRequest
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Namespace == "" || body.Release == "" || body.Chart == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": validationError("namespace, release, and chart are required")})
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+			defer cancel()
+
+			clients, _, err := s.mgr.GetClientsForContext(ctx, ctxName)
+			if err != nil {
+				if errors.Is(err, cluster.ErrUnknownContext) {
+					writeJSON(w, http.StatusNotFound, map[string]any{"error": &APIError{Code: ErrCodeNotFound, Message: err.Error()}})
+					return
+				}
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": &APIError{Code: ErrCodeInternal, Message: err.Error()}})
+				return
+			}
+
+			result, err := kube.HelmInstall(ctx, clients, body)
+			if err != nil {
+				status, apiErr := mapHelmError(err)
+				writeJSON(w, status, map[string]any{"context": ctxName, "error": apiErr})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"context": ctxName, "result": result})
+		})
+
+		api.Post("/helm/reinstall", func(w http.ResponseWriter, r *http.Request) {
+			ctxName := r.Header.Get("X-Kview-Context")
+			if ctxName == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{
+					"error": &APIError{Code: ErrCodeValidation, Message: "missing X-Kview-Context header"},
+				})
+				return
+			}
+
+			var body kube.HelmReinstallRequest
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Namespace == "" || body.Release == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": validationError("namespace and release are required")})
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+			defer cancel()
+
+			clients, _, err := s.mgr.GetClientsForContext(ctx, ctxName)
+			if err != nil {
+				if errors.Is(err, cluster.ErrUnknownContext) {
+					writeJSON(w, http.StatusNotFound, map[string]any{"error": &APIError{Code: ErrCodeNotFound, Message: err.Error()}})
+					return
+				}
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": &APIError{Code: ErrCodeInternal, Message: err.Error()}})
+				return
+			}
+
+			result, err := kube.HelmReinstall(ctx, clients, body)
+			if err != nil {
+				status, apiErr := mapHelmError(err)
+				writeJSON(w, status, map[string]any{"context": ctxName, "error": apiErr})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"context": ctxName, "result": result})
+		})
+
 		api.Post("/capabilities", func(w http.ResponseWriter, r *http.Request) {
 			ctxName := r.Header.Get("X-Kview-Context")
 			if ctxName == "" {

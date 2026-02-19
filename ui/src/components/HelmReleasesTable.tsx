@@ -4,6 +4,7 @@ import { DataGrid, GridColDef, GridRowSelectionModel } from "@mui/x-data-grid";
 import { apiGet } from "../api";
 import { fmtTs, valueOrDash } from "../utils/format";
 import HelmReleaseDrawer from "./HelmReleaseDrawer";
+import { HelmInstallButton } from "./HelmActions";
 import useListQuery from "../utils/useListQuery";
 import useEmptyListAccessCheck from "../utils/useEmptyListAccessCheck";
 import { getResourceLabel, listResourceAccess } from "../utils/k8sResources";
@@ -110,7 +111,7 @@ export default function HelmReleasesTable({ token, namespace }: { token: string;
     return items.map((r) => ({ ...r, id: `${r.namespace}/${r.name}` }));
   }, [token, namespace]);
 
-  const { items: rows, error, loading, lastRefresh } = useListQuery<Row>({
+  const { items: rows, error, loading, lastRefresh, refetch } = useListQuery<Row>({
     enabled: !!namespace,
     refreshSec,
     fetchItems: fetchRows,
@@ -191,7 +192,9 @@ export default function HelmReleasesTable({ token, namespace }: { token: string;
           }}
         />
       </div>
-      <Box sx={{ mt: 1, display: "flex", justifyContent: "flex-end" }}>
+      <Box sx={{ mt: 1, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 1 }}>
+        <HelmInstallButton token={token} namespace={namespace} onSuccess={() => void refetch()} />
+        <Box sx={{ flexGrow: 1 }} />
         <Typography variant="caption" color="text.secondary">
           Last refresh: {lastRefresh ? lastRefresh.toLocaleString() : "-"}
         </Typography>
@@ -203,6 +206,7 @@ export default function HelmReleasesTable({ token, namespace }: { token: string;
         token={token}
         namespace={namespace}
         releaseName={drawerName}
+        onRefresh={() => void refetch()}
       />
     </Paper>
   );
