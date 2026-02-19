@@ -28,6 +28,7 @@ import WarningsSection, { type Warning } from "./shared/WarningsSection";
 import MetadataSection from "./shared/MetadataSection";
 import EventsList from "./shared/EventsList";
 import CodeBlock from "./shared/CodeBlock";
+import IngressActions from "./IngressActions";
 
 function buildIngressUrls(hosts?: string[], tls?: IngressTLS[]): { host: string; url: string }[] {
   if (!hosts || hosts.length === 0) return [];
@@ -243,6 +244,17 @@ export default function IngressDrawer(props: {
               {/* OVERVIEW */}
               {tab === 0 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  {name && (
+                    <Section title="Actions" divider={false}>
+                      <IngressActions
+                        token={props.token}
+                        namespace={ns}
+                        ingressName={name}
+                        onDeleted={props.onClose}
+                      />
+                    </Section>
+                  )}
+
                   <WarningsSection warnings={ingressWarnings} />
 
                   <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>

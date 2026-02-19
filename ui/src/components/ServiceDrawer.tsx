@@ -30,6 +30,7 @@ import ErrorState from "./shared/ErrorState";
 import MetadataSection from "./shared/MetadataSection";
 import EventsList from "./shared/EventsList";
 import CodeBlock from "./shared/CodeBlock";
+import ServiceActions from "./ServiceActions";
 
 type ServiceDetails = {
   summary: ServiceSummary;
@@ -307,6 +308,17 @@ export default function ServiceDrawer(props: {
               {/* OVERVIEW */}
               {tab === 0 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  {name && (
+                    <Section title="Actions" divider={false}>
+                      <ServiceActions
+                        token={props.token}
+                        namespace={ns}
+                        serviceName={name}
+                        onDeleted={props.onClose}
+                      />
+                    </Section>
+                  )}
+
                   <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
                     <KeyValueTable rows={summaryItems} columns={3} />
                   </Box>
