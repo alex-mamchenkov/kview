@@ -68,40 +68,9 @@ func HandleDaemonSetRestart(ctx context.Context, c *cluster.Clients, req ActionR
 
 // HandleDaemonSetDelete deletes the daemonset.
 func HandleDaemonSetDelete(ctx context.Context, c *cluster.Clients, req ActionRequest) (*ActionResult, error) {
-	if err := validateDaemonSetTarget(req); err != nil {
-		return &ActionResult{Status: "error", Message: err.Error()}, nil
-	}
-
-	opts := metav1.DeleteOptions{}
-
-	if raw, ok := req.Params["propagationPolicy"]; ok {
-		policyStr, ok := raw.(string)
-		if !ok {
-			return &ActionResult{Status: "error", Message: "params.propagationPolicy must be a string"}, nil
-		}
-		switch policyStr {
-		case "Foreground", "Background", "Orphan":
-			policy := metav1.DeletionPropagation(policyStr)
-			opts.PropagationPolicy = &policy
-		default:
-			return &ActionResult{Status: "error", Message: fmt.Sprintf("invalid propagationPolicy %q", policyStr)}, nil
-		}
-	} else {
-		policy := metav1.DeletePropagationBackground
-		opts.PropagationPolicy = &policy
-	}
-
-	err := c.Clientset.AppsV1().DaemonSets(req.Namespace).Delete(ctx, req.Name, opts)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ActionResult{
-		Status:  "ok",
-		Message: fmt.Sprintf("Deleted daemonset %s/%s", req.Namespace, req.Name),
-		Details: map[string]any{
-			"namespace": req.Namespace,
-			"name":      req.Name,
+	return handleNamespacedDelete(ctx, req, "apps", "daemonsets", "daemonset",
+		func(ctx context.Context, ns, name string, opts metav1.DeleteOptions) error {
+			return c.Clientset.AppsV1().DaemonSets(ns).Delete(ctx, name, opts)
 		},
-	}, nil
+	)
 }

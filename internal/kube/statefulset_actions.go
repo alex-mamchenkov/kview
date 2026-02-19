@@ -112,40 +112,9 @@ func HandleStatefulSetRestart(ctx context.Context, c *cluster.Clients, req Actio
 
 // HandleStatefulSetDelete deletes the statefulset.
 func HandleStatefulSetDelete(ctx context.Context, c *cluster.Clients, req ActionRequest) (*ActionResult, error) {
-	if err := validateStatefulSetTarget(req); err != nil {
-		return &ActionResult{Status: "error", Message: err.Error()}, nil
-	}
-
-	opts := metav1.DeleteOptions{}
-
-	if raw, ok := req.Params["propagationPolicy"]; ok {
-		policyStr, ok := raw.(string)
-		if !ok {
-			return &ActionResult{Status: "error", Message: "params.propagationPolicy must be a string"}, nil
-		}
-		switch policyStr {
-		case "Foreground", "Background", "Orphan":
-			policy := metav1.DeletionPropagation(policyStr)
-			opts.PropagationPolicy = &policy
-		default:
-			return &ActionResult{Status: "error", Message: fmt.Sprintf("invalid propagationPolicy %q", policyStr)}, nil
-		}
-	} else {
-		policy := metav1.DeletePropagationBackground
-		opts.PropagationPolicy = &policy
-	}
-
-	err := c.Clientset.AppsV1().StatefulSets(req.Namespace).Delete(ctx, req.Name, opts)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ActionResult{
-		Status:  "ok",
-		Message: fmt.Sprintf("Deleted statefulset %s/%s", req.Namespace, req.Name),
-		Details: map[string]any{
-			"namespace": req.Namespace,
-			"name":      req.Name,
+	return handleNamespacedDelete(ctx, req, "apps", "statefulsets", "statefulset",
+		func(ctx context.Context, ns, name string, opts metav1.DeleteOptions) error {
+			return c.Clientset.AppsV1().StatefulSets(ns).Delete(ctx, name, opts)
 		},
-	}, nil
+	)
 }
