@@ -29,6 +29,7 @@ import { loadState, saveState, toggleFavouriteNamespace, type Section } from "./
 import { useConnectionState } from "./connectionState";
 import ConnectionBanner from "./components/shared/ConnectionBanner";
 import { ActiveContextProvider } from "./activeContext";
+import MutationProvider from "./components/mutations/MutationProvider";
 
 function getToken(): string {
   const u = new URL(window.location.href);
@@ -178,6 +179,7 @@ export default function App() {
 
   return (
     <ActiveContextProvider value={activeContext}>
+    <MutationProvider>
     <Box sx={{ display: "flex", height: "100vh" }}>
       <CssBaseline />
       <AppBar position="fixed" sx={{ zIndex: 1201 }}>
@@ -253,6 +255,7 @@ export default function App() {
         </Alert>
       </Snackbar>
     </Box>
+    </MutationProvider>
     </ActiveContextProvider>
   );
 }
