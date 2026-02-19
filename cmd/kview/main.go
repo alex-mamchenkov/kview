@@ -36,6 +36,22 @@ func main() {
 	srv.Actions().Register("helm.upgrade", kube.HandleHelmUpgrade)
 	srv.Actions().Register("helm.reinstall", kube.HandleHelmReinstall)
 
+	srv.Actions().Register("pod.delete", kube.HandlePodDelete)
+
+	srv.Actions().Register("daemonset.restart", kube.HandleDaemonSetRestart)
+	srv.Actions().Register("daemonset.delete", kube.HandleDaemonSetDelete)
+
+	srv.Actions().Register("statefulset.scale", kube.HandleStatefulSetScale)
+	srv.Actions().Register("statefulset.restart", kube.HandleStatefulSetRestart)
+	srv.Actions().Register("statefulset.delete", kube.HandleStatefulSetDelete)
+
+	srv.Actions().Register("replicaset.scale", kube.HandleReplicaSetScale)
+	srv.Actions().Register("replicaset.delete", kube.HandleReplicaSetDelete)
+
+	srv.Actions().Register("job.delete", kube.HandleJobDelete)
+
+	srv.Actions().Register("cronjob.delete", kube.HandleCronJobDelete)
+
 	url := fmt.Sprintf("http://%s/?token=%s", *addr, token)
 	log.Printf("kview listening on http://%s", *addr)
 	log.Printf("open: %s", url)

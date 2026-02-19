@@ -24,6 +24,7 @@ import { apiGet } from "../api";
 import { useConnectionState } from "../connectionState";
 import PodDrawer from "./PodDrawer";
 import CronJobDrawer from "./CronJobDrawer";
+import JobActions from "./JobActions";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { eventChipColor, jobStatusChipColor, phaseChipColor } from "../utils/k8sUi";
 import KeyValueTable from "./shared/KeyValueTable";
@@ -243,6 +244,17 @@ export default function JobDrawer(props: {
               {/* OVERVIEW */}
               {tab === 0 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  {name && (
+                    <Section title="Actions" divider={false}>
+                      <JobActions
+                        token={props.token}
+                        namespace={ns}
+                        jobName={name}
+                        onDeleted={props.onClose}
+                      />
+                    </Section>
+                  )}
+
                   <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
                     <KeyValueTable
                       rows={summaryItems}

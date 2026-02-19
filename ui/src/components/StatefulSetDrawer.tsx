@@ -23,11 +23,13 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../api";
 import { useConnectionState } from "../connectionState";
 import PodDrawer from "./PodDrawer";
+import StatefulSetActions from "./StatefulSetActions";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { phaseChipColor } from "../utils/k8sUi";
 import KeyValueTable from "./shared/KeyValueTable";
 import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
+import Section from "./shared/Section";
 import MetadataSection from "./shared/MetadataSection";
 import ConditionsTable from "./shared/ConditionsTable";
 import EventsList from "./shared/EventsList";
@@ -146,6 +148,7 @@ export default function StatefulSetDrawer(props: {
   const [events, setEvents] = useState<EventDTO[]>([]);
   const [err, setErr] = useState("");
   const [drawerPod, setDrawerPod] = useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
 
   const ns = props.namespace;
   const name = props.statefulSetName;
@@ -176,7 +179,7 @@ export default function StatefulSetDrawer(props: {
     })()
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false));
-  }, [props.open, name, ns, props.token, retryNonce]);
+  }, [props.open, name, ns, props.token, retryNonce, refreshNonce]);
 
   const summary = details?.summary;
   const metadata = details?.metadata;
@@ -256,6 +259,19 @@ export default function StatefulSetDrawer(props: {
               {/* OVERVIEW */}
               {tab === 0 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  {name && (
+                    <Section title="Actions" divider={false}>
+                      <StatefulSetActions
+                        token={props.token}
+                        namespace={ns}
+                        statefulSetName={name}
+                        currentReplicas={summary?.desired ?? 0}
+                        onRefresh={() => setRefreshNonce((n) => n + 1)}
+                        onDeleted={props.onClose}
+                      />
+                    </Section>
+                  )}
+
                   <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
                     <KeyValueTable
                       rows={summaryItems}

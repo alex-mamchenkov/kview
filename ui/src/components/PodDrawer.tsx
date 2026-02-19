@@ -43,6 +43,7 @@ import StatefulSetDrawer from "./StatefulSetDrawer";
 import DaemonSetDrawer from "./DaemonSetDrawer";
 import JobDrawer from "./JobDrawer";
 import NodeDrawer from "./NodeDrawer";
+import PodActions from "./PodActions";
 import ServiceAccountDrawer from "./ServiceAccountDrawer";
 import NamespaceDrawer from "./NamespaceDrawer";
 import Section from "./shared/Section";
@@ -848,6 +849,17 @@ export default function PodDrawer(props: {
               {/* OVERVIEW */}
               {tab === 0 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  {name && (
+                    <Section title="Actions" divider={false}>
+                      <PodActions
+                        token={props.token}
+                        namespace={ns}
+                        podName={name}
+                        onDeleted={props.onClose}
+                      />
+                    </Section>
+                  )}
+
                   <WarningsSection warnings={podWarnings} />
 
                   <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>

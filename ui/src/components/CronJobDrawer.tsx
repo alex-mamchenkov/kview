@@ -23,6 +23,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../api";
 import { useConnectionState } from "../connectionState";
 import JobDrawer from "./JobDrawer";
+import CronJobActions from "./CronJobActions";
 import { fmtAge, fmtTs, valueOrDash } from "../utils/format";
 import { jobStatusChipColor } from "../utils/k8sUi";
 import KeyValueTable from "./shared/KeyValueTable";
@@ -261,6 +262,17 @@ export default function CronJobDrawer(props: {
               {/* OVERVIEW */}
               {tab === 0 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  {name && (
+                    <Section title="Actions" divider={false}>
+                      <CronJobActions
+                        token={props.token}
+                        namespace={ns}
+                        cronJobName={name}
+                        onDeleted={props.onClose}
+                      />
+                    </Section>
+                  )}
+
                   <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
                     <KeyValueTable
                       rows={summaryItems}
