@@ -1,15 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Box } from "@mui/material";
-import { apiPostWithContext } from "../api";
 import { useActiveContext } from "../activeContext";
 import ActionButton from "./mutations/ActionButton";
-
-type Capabilities = {
-  delete: boolean;
-  update: boolean;
-  patch: boolean;
-  create: boolean;
-};
+import { useResourceCapabilities, RBAC_DISABLED_REASON } from "./mutations/useResourceCapabilities";
+import { buildDeleteDescriptor } from "../lib/actions/builders";
 
 type Props = {
   token: string;
@@ -20,20 +14,13 @@ type Props = {
 
 export default function SecretActions({ token, namespace, secretName, onDeleted }: Props) {
   const activeContext = useActiveContext();
-  const [caps, setCaps] = useState<Capabilities | null>(null);
-
-  useEffect(() => {
-    if (!activeContext || !secretName) return;
-    setCaps(null);
-    apiPostWithContext<{ capabilities: Capabilities }>(
-      "/api/capabilities",
-      token,
-      activeContext,
-      { group: "", resource: "secrets", namespace, name: secretName },
-    )
-      .then((res) => setCaps(res.capabilities))
-      .catch(() => setCaps({ delete: false, update: false, patch: false, create: false }));
-  }, [activeContext, token, namespace, secretName]);
+  const caps = useResourceCapabilities({
+    token,
+    group: "",
+    resource: "secrets",
+    namespace,
+    name: secretName,
+  });
 
   const canDelete = caps ? caps.delete : false;
 
@@ -50,19 +37,18 @@ export default function SecretActions({ token, namespace, secretName, onDeleted 
       <ActionButton
         label="Delete"
         color="error"
-        descriptor={{
+        descriptor={buildDeleteDescriptor({
           id: "secret.delete",
           title: "Delete Secret",
           description: "Permanently removes the Secret. Workloads referencing this Secret will fail on next restart.",
-          risk: "high",
-          confirmSpec: { mode: "typed", requiredValue: secretName },
           group: "",
           resource: "secrets",
-        }}
+          requiredValue: secretName,
+        })}
         targetRef={targetRef}
         token={token}
         disabled={!canDelete}
-        disabledReason={!canDelete && caps ? "Not permitted by RBAC" : ""}
+        disabledReason={!canDelete && caps ? RBAC_DISABLED_REASON : ""}
         onSuccess={onDeleted}
       />
     </Box>

@@ -1,15 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Box } from "@mui/material";
-import { apiPostWithContext } from "../api";
 import { useActiveContext } from "../activeContext";
 import ActionButton from "./mutations/ActionButton";
-
-type Capabilities = {
-  delete: boolean;
-  update: boolean;
-  patch: boolean;
-  create: boolean;
-};
+import {
+  useResourceCapabilities,
+  canPatchOrUpdate,
+  RBAC_DISABLED_REASON,
+} from "./mutations/useResourceCapabilities";
+import { buildDeleteDescriptor, buildScaleDescriptor } from "../lib/actions/builders";
 
 type Props = {
   token: string;
@@ -29,22 +27,15 @@ export default function ReplicaSetActions({
   onDeleted,
 }: Props) {
   const activeContext = useActiveContext();
-  const [caps, setCaps] = useState<Capabilities | null>(null);
+  const caps = useResourceCapabilities({
+    token,
+    group: "apps",
+    resource: "replicasets",
+    namespace,
+    name: replicaSetName,
+  });
 
-  useEffect(() => {
-    if (!activeContext || !replicaSetName) return;
-    setCaps(null);
-    apiPostWithContext<{ capabilities: Capabilities }>(
-      "/api/capabilities",
-      token,
-      activeContext,
-      { group: "apps", resource: "replicasets", namespace, name: replicaSetName },
-    )
-      .then((res) => setCaps(res.capabilities))
-      .catch(() => setCaps({ delete: false, update: false, patch: false, create: false }));
-  }, [activeContext, token, namespace, replicaSetName]);
-
-  const canScale = caps ? caps.patch || caps.update : false;
+  const canScale = canPatchOrUpdate(caps);
   const canDelete = caps ? caps.delete : false;
 
   const targetRef = {
@@ -59,29 +50,18 @@ export default function ReplicaSetActions({
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
       <ActionButton
         label="Scale"
-        descriptor={{
+        descriptor={buildScaleDescriptor({
           id: "replicaset.scale",
           title: "Scale ReplicaSet",
           description: "Set the desired number of replicas.",
-          risk: "low",
-          confirmSpec: { mode: "simple" },
           group: "apps",
           resource: "replicasets",
-          paramSpecs: [
-            {
-              kind: "numeric",
-              key: "replicas",
-              label: "Replicas",
-              min: 0,
-              defaultValue: currentReplicas,
-              required: true,
-            },
-          ],
-        }}
+          defaultReplicas: currentReplicas,
+        })}
         targetRef={targetRef}
         token={token}
         disabled={!canScale}
-        disabledReason={!canScale && caps ? "Not permitted by RBAC" : ""}
+        disabledReason={!canScale && caps ? RBAC_DISABLED_REASON : ""}
         initialParams={{ replicas: String(currentReplicas) }}
         onSuccess={onRefresh}
       />
@@ -89,19 +69,18 @@ export default function ReplicaSetActions({
       <ActionButton
         label="Delete"
         color="error"
-        descriptor={{
+        descriptor={buildDeleteDescriptor({
           id: "replicaset.delete",
           title: "Delete ReplicaSet",
           description: "Permanently removes the replicaset and its pods.",
-          risk: "high",
-          confirmSpec: { mode: "typed", requiredValue: replicaSetName },
           group: "apps",
           resource: "replicasets",
-        }}
+          requiredValue: replicaSetName,
+        })}
         targetRef={targetRef}
         token={token}
         disabled={!canDelete}
-        disabledReason={!canDelete && caps ? "Not permitted by RBAC" : ""}
+        disabledReason={!canDelete && caps ? RBAC_DISABLED_REASON : ""}
         onSuccess={onDeleted}
       />
     </Box>

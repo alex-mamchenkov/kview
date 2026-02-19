@@ -1,15 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Box } from "@mui/material";
-import { apiPostWithContext } from "../api";
 import { useActiveContext } from "../activeContext";
 import ActionButton from "./mutations/ActionButton";
-
-type Capabilities = {
-  delete: boolean;
-  update: boolean;
-  patch: boolean;
-  create: boolean;
-};
+import {
+  useResourceCapabilities,
+  canPatchOrUpdate,
+  RBAC_DISABLED_REASON,
+} from "./mutations/useResourceCapabilities";
+import { buildDeleteDescriptor, buildRestartDescriptor } from "../lib/actions/builders";
 
 type Props = {
   token: string;
@@ -27,22 +25,15 @@ export default function DaemonSetActions({
   onDeleted,
 }: Props) {
   const activeContext = useActiveContext();
-  const [caps, setCaps] = useState<Capabilities | null>(null);
+  const caps = useResourceCapabilities({
+    token,
+    group: "apps",
+    resource: "daemonsets",
+    namespace,
+    name: daemonSetName,
+  });
 
-  useEffect(() => {
-    if (!activeContext || !daemonSetName) return;
-    setCaps(null);
-    apiPostWithContext<{ capabilities: Capabilities }>(
-      "/api/capabilities",
-      token,
-      activeContext,
-      { group: "apps", resource: "daemonsets", namespace, name: daemonSetName },
-    )
-      .then((res) => setCaps(res.capabilities))
-      .catch(() => setCaps({ delete: false, update: false, patch: false, create: false }));
-  }, [activeContext, token, namespace, daemonSetName]);
-
-  const canRestart = caps ? caps.patch || caps.update : false;
+  const canRestart = canPatchOrUpdate(caps);
   const canDelete = caps ? caps.delete : false;
 
   const targetRef = {
@@ -57,38 +48,35 @@ export default function DaemonSetActions({
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
       <ActionButton
         label="Restart"
-        descriptor={{
+        descriptor={buildRestartDescriptor({
           id: "daemonset.restart",
           title: "Restart DaemonSet",
           description: "Performs a rolling restart by patching the pod template annotation.",
-          risk: "low",
-          confirmSpec: { mode: "simple" },
           group: "apps",
           resource: "daemonsets",
-        }}
+        })}
         targetRef={targetRef}
         token={token}
         disabled={!canRestart}
-        disabledReason={!canRestart && caps ? "Not permitted by RBAC" : ""}
+        disabledReason={!canRestart && caps ? RBAC_DISABLED_REASON : ""}
         onSuccess={onRefresh}
       />
 
       <ActionButton
         label="Delete"
         color="error"
-        descriptor={{
+        descriptor={buildDeleteDescriptor({
           id: "daemonset.delete",
           title: "Delete DaemonSet",
           description: "Permanently removes the daemonset and its pods.",
-          risk: "high",
-          confirmSpec: { mode: "typed", requiredValue: daemonSetName },
           group: "apps",
           resource: "daemonsets",
-        }}
+          requiredValue: daemonSetName,
+        })}
         targetRef={targetRef}
         token={token}
         disabled={!canDelete}
-        disabledReason={!canDelete && caps ? "Not permitted by RBAC" : ""}
+        disabledReason={!canDelete && caps ? RBAC_DISABLED_REASON : ""}
         onSuccess={onDeleted}
       />
     </Box>

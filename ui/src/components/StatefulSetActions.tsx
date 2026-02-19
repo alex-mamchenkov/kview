@@ -1,15 +1,17 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Box } from "@mui/material";
-import { apiPostWithContext } from "../api";
 import { useActiveContext } from "../activeContext";
 import ActionButton from "./mutations/ActionButton";
-
-type Capabilities = {
-  delete: boolean;
-  update: boolean;
-  patch: boolean;
-  create: boolean;
-};
+import {
+  useResourceCapabilities,
+  canPatchOrUpdate,
+  RBAC_DISABLED_REASON,
+} from "./mutations/useResourceCapabilities";
+import {
+  buildDeleteDescriptor,
+  buildRestartDescriptor,
+  buildScaleDescriptor,
+} from "../lib/actions/builders";
 
 type Props = {
   token: string;
@@ -29,23 +31,16 @@ export default function StatefulSetActions({
   onDeleted,
 }: Props) {
   const activeContext = useActiveContext();
-  const [caps, setCaps] = useState<Capabilities | null>(null);
+  const caps = useResourceCapabilities({
+    token,
+    group: "apps",
+    resource: "statefulsets",
+    namespace,
+    name: statefulSetName,
+  });
 
-  useEffect(() => {
-    if (!activeContext || !statefulSetName) return;
-    setCaps(null);
-    apiPostWithContext<{ capabilities: Capabilities }>(
-      "/api/capabilities",
-      token,
-      activeContext,
-      { group: "apps", resource: "statefulsets", namespace, name: statefulSetName },
-    )
-      .then((res) => setCaps(res.capabilities))
-      .catch(() => setCaps({ delete: false, update: false, patch: false, create: false }));
-  }, [activeContext, token, namespace, statefulSetName]);
-
-  const canScale = caps ? caps.patch || caps.update : false;
-  const canRestart = caps ? caps.patch || caps.update : false;
+  const canScale = canPatchOrUpdate(caps);
+  const canRestart = canPatchOrUpdate(caps);
   const canDelete = caps ? caps.delete : false;
 
   const targetRef = {
@@ -60,67 +55,53 @@ export default function StatefulSetActions({
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
       <ActionButton
         label="Scale"
-        descriptor={{
+        descriptor={buildScaleDescriptor({
           id: "statefulset.scale",
           title: "Scale StatefulSet",
           description: "Set the desired number of replicas.",
-          risk: "low",
-          confirmSpec: { mode: "simple" },
           group: "apps",
           resource: "statefulsets",
-          paramSpecs: [
-            {
-              kind: "numeric",
-              key: "replicas",
-              label: "Replicas",
-              min: 0,
-              defaultValue: currentReplicas,
-              required: true,
-            },
-          ],
-        }}
+          defaultReplicas: currentReplicas,
+        })}
         targetRef={targetRef}
         token={token}
         disabled={!canScale}
-        disabledReason={!canScale && caps ? "Not permitted by RBAC" : ""}
+        disabledReason={!canScale && caps ? RBAC_DISABLED_REASON : ""}
         initialParams={{ replicas: String(currentReplicas) }}
         onSuccess={onRefresh}
       />
 
       <ActionButton
         label="Restart"
-        descriptor={{
+        descriptor={buildRestartDescriptor({
           id: "statefulset.restart",
           title: "Restart StatefulSet",
           description: "Performs a rolling restart by patching the pod template annotation.",
-          risk: "low",
-          confirmSpec: { mode: "simple" },
           group: "apps",
           resource: "statefulsets",
-        }}
+        })}
         targetRef={targetRef}
         token={token}
         disabled={!canRestart}
-        disabledReason={!canRestart && caps ? "Not permitted by RBAC" : ""}
+        disabledReason={!canRestart && caps ? RBAC_DISABLED_REASON : ""}
         onSuccess={onRefresh}
       />
 
       <ActionButton
         label="Delete"
         color="error"
-        descriptor={{
+        descriptor={buildDeleteDescriptor({
           id: "statefulset.delete",
           title: "Delete StatefulSet",
           description: "Permanently removes the statefulset and its pods.",
-          risk: "high",
-          confirmSpec: { mode: "typed", requiredValue: statefulSetName },
           group: "apps",
           resource: "statefulsets",
-        }}
+          requiredValue: statefulSetName,
+        })}
         targetRef={targetRef}
         token={token}
         disabled={!canDelete}
-        disabledReason={!canDelete && caps ? "Not permitted by RBAC" : ""}
+        disabledReason={!canDelete && caps ? RBAC_DISABLED_REASON : ""}
         onSuccess={onDeleted}
       />
     </Box>

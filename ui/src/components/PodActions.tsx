@@ -1,15 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Box } from "@mui/material";
-import { apiPostWithContext } from "../api";
 import { useActiveContext } from "../activeContext";
 import ActionButton from "./mutations/ActionButton";
-
-type Capabilities = {
-  delete: boolean;
-  update: boolean;
-  patch: boolean;
-  create: boolean;
-};
+import { useResourceCapabilities, RBAC_DISABLED_REASON } from "./mutations/useResourceCapabilities";
+import { buildDeleteDescriptor } from "../lib/actions/builders";
 
 type Props = {
   token: string;
@@ -20,20 +14,13 @@ type Props = {
 
 export default function PodActions({ token, namespace, podName, onDeleted }: Props) {
   const activeContext = useActiveContext();
-  const [caps, setCaps] = useState<Capabilities | null>(null);
-
-  useEffect(() => {
-    if (!activeContext || !podName) return;
-    setCaps(null);
-    apiPostWithContext<{ capabilities: Capabilities }>(
-      "/api/capabilities",
-      token,
-      activeContext,
-      { group: "", resource: "pods", namespace, name: podName },
-    )
-      .then((res) => setCaps(res.capabilities))
-      .catch(() => setCaps({ delete: false, update: false, patch: false, create: false }));
-  }, [activeContext, token, namespace, podName]);
+  const caps = useResourceCapabilities({
+    token,
+    group: "",
+    resource: "pods",
+    namespace,
+    name: podName,
+  });
 
   const canDelete = caps ? caps.delete : false;
 
@@ -50,19 +37,18 @@ export default function PodActions({ token, namespace, podName, onDeleted }: Pro
       <ActionButton
         label="Delete"
         color="error"
-        descriptor={{
+        descriptor={buildDeleteDescriptor({
           id: "pod.delete",
           title: "Delete Pod",
           description: "Permanently removes the pod. A new pod may be created by the owner controller.",
-          risk: "high",
-          confirmSpec: { mode: "typed", requiredValue: podName },
           group: "",
           resource: "pods",
-        }}
+          requiredValue: podName,
+        })}
         targetRef={targetRef}
         token={token}
         disabled={!canDelete}
-        disabledReason={!canDelete && caps ? "Not permitted by RBAC" : ""}
+        disabledReason={!canDelete && caps ? RBAC_DISABLED_REASON : ""}
         onSuccess={onDeleted}
       />
     </Box>

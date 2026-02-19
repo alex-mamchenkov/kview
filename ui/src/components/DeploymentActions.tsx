@@ -1,15 +1,17 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Box } from "@mui/material";
-import { apiPostWithContext } from "../api";
 import { useActiveContext } from "../activeContext";
 import ActionButton from "./mutations/ActionButton";
-
-type Capabilities = {
-  delete: boolean;
-  update: boolean;
-  patch: boolean;
-  create: boolean;
-};
+import {
+  useResourceCapabilities,
+  canPatchOrUpdate,
+  RBAC_DISABLED_REASON,
+} from "./mutations/useResourceCapabilities";
+import {
+  buildDeleteDescriptor,
+  buildRestartDescriptor,
+  buildScaleDescriptor,
+} from "../lib/actions/builders";
 
 type Props = {
   token: string;
@@ -29,24 +31,16 @@ export default function DeploymentActions({
   onDeleted,
 }: Props) {
   const activeContext = useActiveContext();
-  const [caps, setCaps] = useState<Capabilities | null>(null);
+  const caps = useResourceCapabilities({
+    token,
+    group: "apps",
+    resource: "deployments",
+    namespace,
+    name: deploymentName,
+  });
 
-  // Fetch RBAC capabilities for this deployment.
-  useEffect(() => {
-    if (!activeContext || !deploymentName) return;
-    setCaps(null);
-    apiPostWithContext<{ capabilities: Capabilities }>(
-      "/api/capabilities",
-      token,
-      activeContext,
-      { group: "apps", resource: "deployments", namespace, name: deploymentName },
-    )
-      .then((res) => setCaps(res.capabilities))
-      .catch(() => setCaps({ delete: false, update: false, patch: false, create: false }));
-  }, [activeContext, token, namespace, deploymentName]);
-
-  const canScale = caps ? caps.patch || caps.update : false;
-  const canRestart = caps ? caps.patch || caps.update : false;
+  const canScale = canPatchOrUpdate(caps);
+  const canRestart = canPatchOrUpdate(caps);
   const canDelete = caps ? caps.delete : false;
 
   const targetRef = {
@@ -61,67 +55,53 @@ export default function DeploymentActions({
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
       <ActionButton
         label="Scale"
-        descriptor={{
+        descriptor={buildScaleDescriptor({
           id: "scale",
           title: "Scale Deployment",
           description: "Set the desired number of replicas.",
-          risk: "low",
-          confirmSpec: { mode: "simple" },
           group: "apps",
           resource: "deployments",
-          paramSpecs: [
-            {
-              kind: "numeric",
-              key: "replicas",
-              label: "Replicas",
-              min: 0,
-              defaultValue: currentReplicas,
-              required: true,
-            },
-          ],
-        }}
+          defaultReplicas: currentReplicas,
+        })}
         targetRef={targetRef}
         token={token}
         disabled={!canScale}
-        disabledReason={!canScale && caps ? "Not permitted by RBAC" : ""}
+        disabledReason={!canScale && caps ? RBAC_DISABLED_REASON : ""}
         initialParams={{ replicas: String(currentReplicas) }}
         onSuccess={onRefresh}
       />
 
       <ActionButton
         label="Restart"
-        descriptor={{
+        descriptor={buildRestartDescriptor({
           id: "restart",
           title: "Restart Deployment",
           description: "Performs a rolling restart by patching the pod template annotation.",
-          risk: "low",
-          confirmSpec: { mode: "simple" },
           group: "apps",
           resource: "deployments",
-        }}
+        })}
         targetRef={targetRef}
         token={token}
         disabled={!canRestart}
-        disabledReason={!canRestart && caps ? "Not permitted by RBAC" : ""}
+        disabledReason={!canRestart && caps ? RBAC_DISABLED_REASON : ""}
         onSuccess={onRefresh}
       />
 
       <ActionButton
         label="Delete"
         color="error"
-        descriptor={{
+        descriptor={buildDeleteDescriptor({
           id: "delete",
           title: "Delete Deployment",
           description: "Permanently removes the deployment and its pods.",
-          risk: "high",
-          confirmSpec: { mode: "typed", requiredValue: deploymentName },
           group: "apps",
           resource: "deployments",
-        }}
+          requiredValue: deploymentName,
+        })}
         targetRef={targetRef}
         token={token}
         disabled={!canDelete}
-        disabledReason={!canDelete && caps ? "Not permitted by RBAC" : ""}
+        disabledReason={!canDelete && caps ? RBAC_DISABLED_REASON : ""}
         onSuccess={onDeleted}
       />
     </Box>

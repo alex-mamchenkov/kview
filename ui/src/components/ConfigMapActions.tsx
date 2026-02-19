@@ -1,15 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Box } from "@mui/material";
-import { apiPostWithContext } from "../api";
 import { useActiveContext } from "../activeContext";
 import ActionButton from "./mutations/ActionButton";
-
-type Capabilities = {
-  delete: boolean;
-  update: boolean;
-  patch: boolean;
-  create: boolean;
-};
+import { useResourceCapabilities, RBAC_DISABLED_REASON } from "./mutations/useResourceCapabilities";
+import { buildDeleteDescriptor } from "../lib/actions/builders";
 
 type Props = {
   token: string;
@@ -20,20 +14,13 @@ type Props = {
 
 export default function ConfigMapActions({ token, namespace, configMapName, onDeleted }: Props) {
   const activeContext = useActiveContext();
-  const [caps, setCaps] = useState<Capabilities | null>(null);
-
-  useEffect(() => {
-    if (!activeContext || !configMapName) return;
-    setCaps(null);
-    apiPostWithContext<{ capabilities: Capabilities }>(
-      "/api/capabilities",
-      token,
-      activeContext,
-      { group: "", resource: "configmaps", namespace, name: configMapName },
-    )
-      .then((res) => setCaps(res.capabilities))
-      .catch(() => setCaps({ delete: false, update: false, patch: false, create: false }));
-  }, [activeContext, token, namespace, configMapName]);
+  const caps = useResourceCapabilities({
+    token,
+    group: "",
+    resource: "configmaps",
+    namespace,
+    name: configMapName,
+  });
 
   const canDelete = caps ? caps.delete : false;
 
@@ -50,19 +37,18 @@ export default function ConfigMapActions({ token, namespace, configMapName, onDe
       <ActionButton
         label="Delete"
         color="error"
-        descriptor={{
+        descriptor={buildDeleteDescriptor({
           id: "configmap.delete",
           title: "Delete ConfigMap",
           description: "Permanently removes the ConfigMap. Workloads mounting this ConfigMap will fail on next restart.",
-          risk: "high",
-          confirmSpec: { mode: "typed", requiredValue: configMapName },
           group: "",
           resource: "configmaps",
-        }}
+          requiredValue: configMapName,
+        })}
         targetRef={targetRef}
         token={token}
         disabled={!canDelete}
-        disabledReason={!canDelete && caps ? "Not permitted by RBAC" : ""}
+        disabledReason={!canDelete && caps ? RBAC_DISABLED_REASON : ""}
         onSuccess={onDeleted}
       />
     </Box>
