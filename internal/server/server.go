@@ -2471,7 +2471,7 @@ func (s *Server) Router() http.Handler {
 				return
 			}
 
-			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+			ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
 			defer cancel()
 
 			clients, _, err := s.mgr.GetClientsForContext(ctx, ctxName)

@@ -9,15 +9,14 @@ import {
   DialogActions,
   FormControlLabel,
   TextField,
-  Typography,
-  CircularProgress,
   Alert,
-  Snackbar,
+  CircularProgress,
 } from "@mui/material";
 import { apiPostWithContext, toApiError } from "../api";
 import { useActiveContext } from "../activeContext";
+import ActionButton from "./mutations/ActionButton";
 
-// --- Uninstall / Upgrade buttons for a selected release ---
+// --- Uninstall / Upgrade / Reinstall buttons for a selected release ---
 
 type ReleaseActionsProps = {
   token: string;
@@ -35,62 +34,86 @@ export function HelmReleaseActions({
   onDeleted,
 }: ReleaseActionsProps) {
   const activeContext = useActiveContext();
-  const [uninstallOpen, setUninstallOpen] = useState(false);
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const [reinstallOpen, setReinstallOpen] = useState(false);
+
+  const targetRef = {
+    context: activeContext,
+    kind: "HelmRelease",
+    name: releaseName,
+    namespace,
+  };
 
   return (
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-      <Button size="small" variant="outlined" onClick={() => setReinstallOpen(true)}>
-        Reinstall
-      </Button>
-      <Button size="small" variant="outlined" onClick={() => setUpgradeOpen(true)}>
-        Upgrade
-      </Button>
-      <Button
-        size="small"
-        variant="outlined"
-        color="error"
-        onClick={() => setUninstallOpen(true)}
-      >
-        Uninstall
-      </Button>
+      <ActionButton
+        label="Reinstall"
+        descriptor={{
+          id: "helm.reinstall",
+          title: "Reinstall Helm Release",
+          description:
+            "Reinstalls the release using the currently installed chart and values.",
+          risk: "medium",
+          confirmSpec: { mode: "simple" },
+          group: "",
+          resource: "helmreleases",
+        }}
+        targetRef={targetRef}
+        token={token}
+        onSuccess={onRefresh}
+      />
 
-      <ReinstallDialog
-        open={reinstallOpen}
-        onClose={() => setReinstallOpen(false)}
-        token={token}
-        activeContext={activeContext}
-        namespace={namespace}
-        releaseName={releaseName}
-        onSuccess={() => {
-          setReinstallOpen(false);
-          onRefresh();
+      <ActionButton
+        label="Upgrade"
+        descriptor={{
+          id: "helm.upgrade",
+          title: "Upgrade Helm Release",
+          description: "Upgrades the release to a new chart version with optional value overrides.",
+          risk: "medium",
+          confirmSpec: { mode: "simple" },
+          group: "",
+          resource: "helmreleases",
+          paramSpecs: [
+            {
+              kind: "string",
+              key: "chart",
+              label: "Chart",
+              placeholder: "repo/chart or ./path",
+              required: true,
+            },
+            {
+              kind: "string",
+              key: "version",
+              label: "Version (optional)",
+              placeholder: "e.g. 1.2.3",
+            },
+            {
+              kind: "textarea",
+              key: "valuesYaml",
+              label: "Values YAML (optional)",
+              placeholder: "key: value",
+              minRows: 4,
+            },
+          ],
         }}
+        targetRef={targetRef}
+        token={token}
+        onSuccess={onRefresh}
       />
-      <UninstallDialog
-        open={uninstallOpen}
-        onClose={() => setUninstallOpen(false)}
-        token={token}
-        activeContext={activeContext}
-        namespace={namespace}
-        releaseName={releaseName}
-        onSuccess={() => {
-          setUninstallOpen(false);
-          onDeleted();
+
+      <ActionButton
+        label="Uninstall"
+        color="error"
+        descriptor={{
+          id: "helm.uninstall",
+          title: "Uninstall Helm Release",
+          description: "Permanently removes the Helm release from the cluster.",
+          risk: "high",
+          confirmSpec: { mode: "typed", requiredValue: releaseName },
+          group: "",
+          resource: "helmreleases",
         }}
-      />
-      <UpgradeDialog
-        open={upgradeOpen}
-        onClose={() => setUpgradeOpen(false)}
+        targetRef={targetRef}
         token={token}
-        activeContext={activeContext}
-        namespace={namespace}
-        releaseName={releaseName}
-        onSuccess={() => {
-          setUpgradeOpen(false);
-          onRefresh();
-        }}
+        onSuccess={onDeleted}
       />
     </Box>
   );
@@ -125,294 +148,6 @@ export function HelmInstallButton({ token, namespace, onSuccess }: InstallButton
         }}
       />
     </>
-  );
-}
-
-// --- Reinstall Dialog (simple confirm) ---
-
-type ReinstallResult = {
-  status: string;
-  message?: string;
-  details?: { applied?: number; skipped?: number };
-};
-
-function ReinstallDialog(props: {
-  open: boolean;
-  onClose: () => void;
-  token: string;
-  activeContext: string;
-  namespace: string;
-  releaseName: string;
-  onSuccess: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
-
-  useEffect(() => {
-    if (props.open) {
-      setError("");
-      setSuccessMsg("");
-    }
-  }, [props.open]);
-
-  async function handleConfirm() {
-    setBusy(true);
-    setError("");
-    try {
-      const res = await apiPostWithContext<{ context: string; result: ReinstallResult }>(
-        "/api/helm/reinstall",
-        props.token,
-        props.activeContext,
-        {
-          namespace: props.namespace,
-          release: props.releaseName,
-        }
-      );
-      const result = res?.result;
-      let msg = "Reinstall completed";
-      if (result?.message) {
-        msg = `Reinstall: ${result.message}`;
-        const d = result.details;
-        if (d && typeof d.applied === "number") {
-          msg += ` (applied ${d.applied}, skipped ${d.skipped ?? 0})`;
-        }
-      }
-      setSuccessMsg(msg);
-      props.onSuccess();
-    } catch (e) {
-      setError(toApiError(e).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <>
-      <Dialog open={props.open} onClose={props.onClose} maxWidth="xs" fullWidth>
-        <DialogTitle>Reinstall Helm Release</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">
-            Reinstall <strong>{props.releaseName}</strong> in namespace{" "}
-            <strong>{props.namespace}</strong> using the currently installed chart and values?
-          </Typography>
-          {error && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {error}
-            </Alert>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={props.onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button onClick={handleConfirm} disabled={busy} variant="contained">
-            {busy ? <CircularProgress size={20} /> : "Reinstall"}
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <Snackbar
-        open={!!successMsg}
-        autoHideDuration={4000}
-        onClose={() => setSuccessMsg("")}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert severity="success" onClose={() => setSuccessMsg("")}>
-          {successMsg}
-        </Alert>
-      </Snackbar>
-    </>
-  );
-}
-
-// --- Uninstall Dialog (typed confirmation) ---
-
-function UninstallDialog(props: {
-  open: boolean;
-  onClose: () => void;
-  token: string;
-  activeContext: string;
-  namespace: string;
-  releaseName: string;
-  onSuccess: () => void;
-}) {
-  const [confirmText, setConfirmText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (props.open) {
-      setConfirmText("");
-      setError("");
-    }
-  }, [props.open]);
-
-  const confirmed = confirmText === props.releaseName;
-
-  async function handleConfirm() {
-    if (!confirmed) return;
-    setBusy(true);
-    setError("");
-    try {
-      await apiPostWithContext("/api/helm/uninstall", props.token, props.activeContext, {
-        namespace: props.namespace,
-        release: props.releaseName,
-        keepHistory: false,
-      });
-      props.onSuccess();
-    } catch (e) {
-      const apiErr = toApiError(e);
-      if (apiErr.status === 404) {
-        props.onSuccess();
-        return;
-      }
-      setError(apiErr.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Dialog open={props.open} onClose={props.onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Uninstall Helm Release</DialogTitle>
-      <DialogContent>
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          This action is destructive and cannot be undone.
-        </Alert>
-        <Typography variant="body2" sx={{ mb: 2 }}>
-          To confirm, type the release name: <strong>{props.releaseName}</strong>
-        </Typography>
-        <TextField
-          autoFocus
-          fullWidth
-          label="Release name"
-          value={confirmText}
-          onChange={(e) => setConfirmText(e.target.value)}
-          disabled={busy}
-        />
-        {error && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {error}
-          </Alert>
-        )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={props.onClose} disabled={busy}>
-          Cancel
-        </Button>
-        <Button
-          onClick={handleConfirm}
-          disabled={!confirmed || busy}
-          variant="contained"
-          color="error"
-        >
-          {busy ? <CircularProgress size={20} /> : "Uninstall"}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
-// --- Upgrade Dialog ---
-
-function UpgradeDialog(props: {
-  open: boolean;
-  onClose: () => void;
-  token: string;
-  activeContext: string;
-  namespace: string;
-  releaseName: string;
-  onSuccess: () => void;
-}) {
-  const [chart, setChart] = useState("");
-  const [version, setVersion] = useState("");
-  const [valuesYaml, setValuesYaml] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (props.open) {
-      setChart("");
-      setVersion("");
-      setValuesYaml("");
-      setError("");
-    }
-  }, [props.open]);
-
-  const valid = chart.trim() !== "";
-
-  async function handleConfirm() {
-    if (!valid) return;
-    setBusy(true);
-    setError("");
-    try {
-      await apiPostWithContext("/api/helm/upgrade", props.token, props.activeContext, {
-        namespace: props.namespace,
-        release: props.releaseName,
-        chart: chart.trim(),
-        version: version.trim(),
-        valuesYaml,
-      });
-      props.onSuccess();
-    } catch (e) {
-      setError(toApiError(e).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Dialog open={props.open} onClose={props.onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Upgrade Helm Release</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2" sx={{ mb: 2 }}>
-          Upgrade <strong>{props.releaseName}</strong> in namespace{" "}
-          <strong>{props.namespace}</strong>
-        </Typography>
-        <TextField
-          autoFocus
-          fullWidth
-          label="Chart"
-          placeholder="repo/chart or ./path"
-          value={chart}
-          onChange={(e) => setChart(e.target.value)}
-          disabled={busy}
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          fullWidth
-          label="Version (optional)"
-          value={version}
-          onChange={(e) => setVersion(e.target.value)}
-          disabled={busy}
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          fullWidth
-          label="Values YAML (optional)"
-          multiline
-          minRows={4}
-          maxRows={12}
-          value={valuesYaml}
-          onChange={(e) => setValuesYaml(e.target.value)}
-          disabled={busy}
-          InputProps={{ sx: { fontFamily: "monospace", fontSize: "0.85rem" } }}
-        />
-        {error && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {error}
-          </Alert>
-        )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={props.onClose} disabled={busy}>
-          Cancel
-        </Button>
-        <Button onClick={handleConfirm} disabled={!valid || busy} variant="contained">
-          {busy ? <CircularProgress size={20} /> : "Upgrade"}
-        </Button>
-      </DialogActions>
-    </Dialog>
   );
 }
 

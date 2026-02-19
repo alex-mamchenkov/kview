@@ -98,6 +98,7 @@ export default function HelmReleaseDrawer(props: {
 }) {
   const { retryNonce } = useConnectionState();
   const [tab, setTab] = useState(0);
+  const [refreshNonce, setRefreshNonce] = useState(0);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<HelmReleaseDetails | null>(null);
   const [err, setErr] = useState("");
@@ -129,7 +130,7 @@ export default function HelmReleaseDrawer(props: {
     })()
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false));
-  }, [props.open, name, ns, props.token, retryNonce]);
+  }, [props.open, name, ns, props.token, retryNonce, refreshNonce]);
 
   const summary = details?.summary;
   const history = details?.history || [];
@@ -223,18 +224,6 @@ export default function HelmReleaseDrawer(props: {
             Helm Release: {name || "-"}{" "}
             <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} />
           </Typography>
-          {name && !loading && !err && (
-            <HelmReleaseActions
-              token={props.token}
-              namespace={ns}
-              releaseName={name}
-              onRefresh={() => props.onRefresh?.()}
-              onDeleted={() => {
-                props.onClose();
-                props.onRefresh?.();
-              }}
-            />
-          )}
           <IconButton onClick={props.onClose}>
             <CloseIcon />
           </IconButton>
@@ -268,6 +257,24 @@ export default function HelmReleaseDrawer(props: {
                     overflow: "auto",
                   }}
                 >
+                  {name && (
+                    <Section title="Actions" divider={false}>
+                      <HelmReleaseActions
+                        token={props.token}
+                        namespace={ns}
+                        releaseName={name}
+                        onRefresh={() => {
+                          setRefreshNonce((n) => n + 1);
+                          props.onRefresh?.();
+                        }}
+                        onDeleted={() => {
+                          props.onClose();
+                          props.onRefresh?.();
+                        }}
+                      />
+                    </Section>
+                  )}
+
                   <Box sx={{ border: "1px solid #ddd", borderRadius: 2, p: 1.5 }}>
                     <KeyValueTable rows={summaryItems} columns={3} />
                   </Box>

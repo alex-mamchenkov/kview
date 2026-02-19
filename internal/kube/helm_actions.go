@@ -318,6 +318,63 @@ func HelmReinstall(ctx context.Context, c *cluster.Clients, req HelmReinstallReq
 	}, nil
 }
 
+// ---------- ActionRegistry handlers ----------
+
+// HandleHelmUninstall dispatches the "helm.uninstall" action from the unified ActionRegistry.
+func HandleHelmUninstall(ctx context.Context, c *cluster.Clients, req ActionRequest) (*ActionResult, error) {
+	if req.Namespace == "" || req.Name == "" {
+		return &ActionResult{Status: "error", Message: "namespace and release name are required"}, nil
+	}
+	result, err := HelmUninstall(ctx, c, HelmUninstallRequest{
+		Namespace:   req.Namespace,
+		Release:     req.Name,
+		KeepHistory: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &ActionResult{Status: result.Status, Message: result.Message, Details: result.Details}, nil
+}
+
+// HandleHelmReinstall dispatches the "helm.reinstall" action from the unified ActionRegistry.
+func HandleHelmReinstall(ctx context.Context, c *cluster.Clients, req ActionRequest) (*ActionResult, error) {
+	if req.Namespace == "" || req.Name == "" {
+		return &ActionResult{Status: "error", Message: "namespace and release name are required"}, nil
+	}
+	result, err := HelmReinstall(ctx, c, HelmReinstallRequest{
+		Namespace: req.Namespace,
+		Release:   req.Name,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &ActionResult{Status: result.Status, Message: result.Message, Details: result.Details}, nil
+}
+
+// HandleHelmUpgrade dispatches the "helm.upgrade" action from the unified ActionRegistry.
+func HandleHelmUpgrade(ctx context.Context, c *cluster.Clients, req ActionRequest) (*ActionResult, error) {
+	if req.Namespace == "" || req.Name == "" {
+		return &ActionResult{Status: "error", Message: "namespace and release name are required"}, nil
+	}
+	chart, _ := req.Params["chart"].(string)
+	if chart == "" {
+		return &ActionResult{Status: "error", Message: "params.chart is required"}, nil
+	}
+	version, _ := req.Params["version"].(string)
+	valuesYaml, _ := req.Params["valuesYaml"].(string)
+	result, err := HelmUpgrade(ctx, c, HelmUpgradeRequest{
+		Namespace:  req.Namespace,
+		Release:    req.Name,
+		Chart:      chart,
+		Version:    version,
+		ValuesYaml: valuesYaml,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &ActionResult{Status: result.Status, Message: result.Message, Details: result.Details}, nil
+}
+
 // ---------- helpers ----------
 
 func parseValuesYaml(raw string) (map[string]any, error) {

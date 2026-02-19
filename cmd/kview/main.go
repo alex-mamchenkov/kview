@@ -32,6 +32,10 @@ func main() {
 	srv.Actions().Register("restart", kube.HandleDeploymentRestart)
 	srv.Actions().Register("delete", kube.HandleDeploymentDelete)
 
+	srv.Actions().Register("helm.uninstall", kube.HandleHelmUninstall)
+	srv.Actions().Register("helm.upgrade", kube.HandleHelmUpgrade)
+	srv.Actions().Register("helm.reinstall", kube.HandleHelmReinstall)
+
 	url := fmt.Sprintf("http://%s/?token=%s", *addr, token)
 	log.Printf("kview listening on http://%s", *addr)
 	log.Printf("open: %s", url)

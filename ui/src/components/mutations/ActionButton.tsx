@@ -17,6 +17,8 @@ export type ActionButtonProps = {
   disabled?: boolean;
   /** Shown as a tooltip when disabled (e.g. "Not permitted by RBAC"). */
   disabledReason?: string;
+  /** Pre-populated values for paramSpecs fields (keyed by NumericParamSpec.key). */
+  initialParams?: Record<string, string>;
 };
 
 /**
@@ -35,11 +37,12 @@ export default function ActionButton({
   variant = "outlined",
   disabled = false,
   disabledReason,
+  initialParams,
 }: ActionButtonProps) {
   const { open } = useMutationDialog();
 
   function handleClick() {
-    open({ descriptor, targetRef, token, onSuccess });
+    open({ descriptor, targetRef, token, onSuccess, initialParams });
   }
 
   return (

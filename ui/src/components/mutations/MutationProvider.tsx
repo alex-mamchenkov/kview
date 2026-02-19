@@ -9,6 +9,8 @@ export type OpenMutationParams = {
   token: string;
   /** Called immediately after a successful execution (before user closes). */
   onSuccess?: () => void;
+  /** Pre-populated values for paramSpecs fields (keyed by NumericParamSpec.key). */
+  initialParams?: Record<string, string>;
 };
 
 export type MutationContextValue = {
@@ -67,6 +69,7 @@ export default function MutationProvider({
           targetRef={active.params.targetRef}
           token={active.params.token}
           onSuccess={active.params.onSuccess}
+          initialParams={active.params.initialParams}
         />
       )}
     </MutationCtx.Provider>

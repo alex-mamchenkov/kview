@@ -22,9 +22,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../api";
 import { useConnectionState } from "../connectionState";
-import { useActiveContext } from "../activeContext";
 import DeploymentActions from "./DeploymentActions";
-import ActionButton from "./mutations/ActionButton";
 import Section from "./shared/Section";
 import PodDrawer from "./PodDrawer";
 import ReplicaSetDrawer from "./ReplicaSetDrawer";
@@ -169,7 +167,6 @@ export default function DeploymentDrawer(props: {
   deploymentName: string | null;
 }) {
   const { retryNonce } = useConnectionState();
-  const activeContext = useActiveContext();
   const [tab, setTab] = useState(0);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -353,43 +350,14 @@ export default function DeploymentDrawer(props: {
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
                   {name && (
                     <Section title="Actions" divider={false}>
-                      <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-                        <DeploymentActions
-                          token={props.token}
-                          namespace={ns}
-                          deploymentName={name}
-                          currentReplicas={summary?.desired ?? 0}
-                          onRefresh={() => setRefreshNonce((n) => n + 1)}
-                          onDeleted={props.onClose}
-                        />
-                        {/* Unified Mutation Framework — verification trigger */}
-                        <Box>
-                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-                            Unified Mutation Framework
-                          </Typography>
-                          <ActionButton
-                            label="Restart (New Dialog)"
-                            descriptor={{
-                              id: "restart",
-                              title: "Restart Deployment",
-                              description: "Performs a rolling restart by patching the pod template annotation.",
-                              risk: "low",
-                              confirmSpec: { mode: "simple" },
-                              group: "apps",
-                              resource: "deployments",
-                            }}
-                            targetRef={{
-                              context: activeContext,
-                              kind: "Deployment",
-                              name: name,
-                              namespace: ns,
-                              apiVersion: "apps/v1",
-                            }}
-                            token={props.token}
-                            onSuccess={() => setRefreshNonce((n) => n + 1)}
-                          />
-                        </Box>
-                      </Box>
+                      <DeploymentActions
+                        token={props.token}
+                        namespace={ns}
+                        deploymentName={name}
+                        currentReplicas={summary?.desired ?? 0}
+                        onRefresh={() => setRefreshNonce((n) => n + 1)}
+                        onDeleted={props.onClose}
+                      />
                     </Section>
                   )}
 
