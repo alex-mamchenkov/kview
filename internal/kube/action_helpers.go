@@ -2,7 +2,10 @@ package kube
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -77,6 +80,109 @@ func handleNamespacedDelete(
 		Details: map[string]any{
 			"namespace": req.Namespace,
 			"name":      req.Name,
+		},
+	}, nil
+}
+
+// parseReplicas reads and validates the "replicas" param from req.
+// On validation failure it returns a non-nil *ActionResult that the caller
+// should return immediately.
+func parseReplicas(req ActionRequest) (int32, *ActionResult) {
+	raw, ok := req.Params["replicas"]
+	if !ok {
+		return 0, &ActionResult{Status: "error", Message: "params.replicas is required"}
+	}
+	replicasFloat, ok := raw.(float64)
+	if !ok {
+		return 0, &ActionResult{Status: "error", Message: "params.replicas must be a number"}
+	}
+	if replicasFloat < 0 || replicasFloat != math.Trunc(replicasFloat) {
+		return 0, &ActionResult{Status: "error", Message: "params.replicas must be an integer >= 0"}
+	}
+	return int32(replicasFloat), nil
+}
+
+// rolloutRestartPatch returns the canonical MergePatch payload that sets the
+// kubectl.kubernetes.io/restartedAt annotation on the pod template.
+func rolloutRestartPatch(restartedAt string) []byte {
+	patch, _ := json.Marshal(map[string]any{
+		"spec": map[string]any{
+			"template": map[string]any{
+				"metadata": map[string]any{
+					"annotations": map[string]any{
+						"kubectl.kubernetes.io/restartedAt": restartedAt,
+					},
+				},
+			},
+		},
+	})
+	return patch
+}
+
+// handleNamespacedScale is the shared helper for scale action handlers.
+// It validates the target, parses replicas, builds the spec.replicas patch,
+// calls patchFn, and returns the canonical ActionResult.
+func handleNamespacedScale(
+	ctx context.Context,
+	req ActionRequest,
+	expectedGroup, expectedResource string,
+	patchFn func(ctx context.Context, ns, name string, patch []byte) error,
+) (*ActionResult, error) {
+	if err := validateNamespacedTarget(req, expectedGroup, expectedResource); err != nil {
+		return &ActionResult{Status: "error", Message: err.Error()}, nil
+	}
+
+	replicas, errResult := parseReplicas(req)
+	if errResult != nil {
+		return errResult, nil
+	}
+
+	patch, _ := json.Marshal(map[string]any{
+		"spec": map[string]any{"replicas": replicas},
+	})
+
+	if err := patchFn(ctx, req.Namespace, req.Name, patch); err != nil {
+		return nil, err
+	}
+
+	return &ActionResult{
+		Status:  "ok",
+		Message: fmt.Sprintf("Scaled %s/%s to %d replicas", req.Namespace, req.Name, replicas),
+		Details: map[string]any{
+			"namespace": req.Namespace,
+			"name":      req.Name,
+			"replicas":  replicas,
+		},
+	}, nil
+}
+
+// handleNamespacedRolloutRestart is the shared helper for rollout-restart
+// action handlers. It validates the target, builds the restart annotation
+// patch, calls patchFn, and returns the canonical ActionResult.
+func handleNamespacedRolloutRestart(
+	ctx context.Context,
+	req ActionRequest,
+	expectedGroup, expectedResource string,
+	patchFn func(ctx context.Context, ns, name string, patch []byte) error,
+) (*ActionResult, error) {
+	if err := validateNamespacedTarget(req, expectedGroup, expectedResource); err != nil {
+		return &ActionResult{Status: "error", Message: err.Error()}, nil
+	}
+
+	restartedAt := time.Now().UTC().Format(time.RFC3339)
+	patch := rolloutRestartPatch(restartedAt)
+
+	if err := patchFn(ctx, req.Namespace, req.Name, patch); err != nil {
+		return nil, err
+	}
+
+	return &ActionResult{
+		Status:  "ok",
+		Message: fmt.Sprintf("Restarted %s/%s", req.Namespace, req.Name),
+		Details: map[string]any{
+			"namespace":   req.Namespace,
+			"name":        req.Name,
+			"restartedAt": restartedAt,
 		},
 	}, nil
 }

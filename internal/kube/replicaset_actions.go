@@ -2,9 +2,6 @@ package kube
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"math"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -12,63 +9,16 @@ import (
 	"kview/internal/cluster"
 )
 
-func validateReplicaSetTarget(req ActionRequest) error {
-	if req.Group != "apps" {
-		return fmt.Errorf("unsupported group %q, expected \"apps\"", req.Group)
-	}
-	if req.Resource != "replicasets" {
-		return fmt.Errorf("unsupported resource %q, expected \"replicasets\"", req.Resource)
-	}
-	if req.Namespace == "" {
-		return fmt.Errorf("namespace is required")
-	}
-	if req.Name == "" {
-		return fmt.Errorf("name is required")
-	}
-	return nil
-}
-
 // HandleReplicaSetScale patches spec.replicas to the requested value.
 func HandleReplicaSetScale(ctx context.Context, c *cluster.Clients, req ActionRequest) (*ActionResult, error) {
-	if err := validateReplicaSetTarget(req); err != nil {
-		return &ActionResult{Status: "error", Message: err.Error()}, nil
-	}
-
-	raw, ok := req.Params["replicas"]
-	if !ok {
-		return &ActionResult{Status: "error", Message: "params.replicas is required"}, nil
-	}
-	replicasFloat, ok := raw.(float64)
-	if !ok {
-		return &ActionResult{Status: "error", Message: "params.replicas must be a number"}, nil
-	}
-	if replicasFloat < 0 || replicasFloat != math.Trunc(replicasFloat) {
-		return &ActionResult{Status: "error", Message: "params.replicas must be an integer >= 0"}, nil
-	}
-	replicas := int32(replicasFloat)
-
-	patch, _ := json.Marshal(map[string]any{
-		"spec": map[string]any{
-			"replicas": replicas,
+	return handleNamespacedScale(ctx, req, "apps", "replicasets",
+		func(ctx context.Context, ns, name string, patch []byte) error {
+			_, err := c.Clientset.AppsV1().ReplicaSets(ns).Patch(
+				ctx, name, types.MergePatchType, patch, metav1.PatchOptions{},
+			)
+			return err
 		},
-	})
-
-	_, err := c.Clientset.AppsV1().ReplicaSets(req.Namespace).Patch(
-		ctx, req.Name, types.MergePatchType, patch, metav1.PatchOptions{},
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ActionResult{
-		Status:  "ok",
-		Message: fmt.Sprintf("Scaled %s/%s to %d replicas", req.Namespace, req.Name, replicas),
-		Details: map[string]any{
-			"namespace": req.Namespace,
-			"name":      req.Name,
-			"replicas":  replicas,
-		},
-	}, nil
 }
 
 // HandleReplicaSetDelete deletes the replicaset.
