@@ -7,17 +7,17 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os/exec"
-	"runtime"
 
 	"kview/internal/cluster"
 	"kview/internal/kube"
+	"kview/internal/launcher"
 	"kview/internal/server"
 )
 
 func main() {
 	addr := flag.String("listen", "127.0.0.1:10443", "listen address")
-	open := flag.Bool("open", true, "open browser")
+	open := flag.Bool("open", true, "open browser (deprecated, use --mode)")
+	modeFlag := flag.String("mode", "", "launch mode: browser|webview|server")
 	flag.Parse()
 
 	mgr, err := cluster.NewManager()
@@ -84,8 +84,17 @@ func main() {
 	log.Printf("kview listening on http://%s", *addr)
 	log.Printf("open: %s", url)
 
-	if *open {
-		_ = openBrowser(url)
+	mode, err := launcher.ResolveMode(*modeFlag, *open, defaultMode)
+	if err != nil {
+		log.Fatalf("invalid mode: %v", err)
+	}
+
+	if mode != launcher.ModeServer {
+		go func() {
+			if err := launcher.Launch(mode, url); err != nil {
+				log.Printf("launcher error: %v", err)
+			}
+		}()
 	}
 
 	if err := http.ListenAndServe(*addr, srv.Router()); err != nil {
@@ -98,19 +107,3 @@ func randomToken(nbytes int) string {
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
-
-func openBrowser(url string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	default:
-		return nil
-	}
-	return cmd.Start()
-}
-
