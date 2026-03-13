@@ -4,7 +4,11 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ActivityTabs from "./ActivityTabs";
 
-export default function ActivityPanel() {
+type Props = {
+  token: string;
+};
+
+export default function ActivityPanel({ token }: Props) {
   const [open, setOpen] = useState(true);
   const [tab, setTab] = useState(0);
 
@@ -70,7 +74,7 @@ export default function ActivityPanel() {
             overflow: "hidden",
           }}
         >
-          <ActivityTabs tab={tab} />
+          <ActivityTabs tab={tab} token={token} />
         </Box>
       )}
     </Box>

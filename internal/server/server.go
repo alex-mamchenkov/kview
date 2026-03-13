@@ -29,18 +29,26 @@ type Server struct {
 	rt      runtime.RuntimeManager
 }
 
-func New(mgr *cluster.Manager, token string) *Server {
-	return &Server{
+func New(mgr *cluster.Manager, rt runtime.RuntimeManager, token string) *Server {
+	s := &Server{
 		mgr:     mgr,
 		token:   token,
 		actions: kube.NewActionRegistry(),
-		rt:      runtime.NewManager(),
+		rt:      rt,
 	}
+	// Best-effort runtime manager startup; failures are logged via regular logs.
+	_ = s.rt.Start(context.Background())
+	return s
 }
 
 // Actions returns the action registry for registering handlers.
 func (s *Server) Actions() *kube.ActionRegistry {
 	return s.actions
+}
+
+// Runtime exposes the runtime manager for startup/launcher logging.
+func (s *Server) Runtime() runtime.RuntimeManager {
+	return s.rt
 }
 
 func (s *Server) Router() http.Handler {
@@ -71,6 +79,26 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, map[string]any{
 				"items": activities,
 			})
+		})
+
+		api.Get("/activity/{id}/logs", func(w http.ResponseWriter, r *http.Request) {
+			id := chi.URLParam(r, "id")
+			if id == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "missing activity id"})
+				return
+			}
+
+			// Phase 2A: only runtime/system activity exposes logs.
+			if id != runtime.RuntimeActivityID {
+				writeJSON(w, http.StatusNotFound, map[string]any{"error": "logs not available for this activity"})
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			defer cancel()
+
+			logs := s.rt.Logs().List(ctx)
+			writeJSON(w, http.StatusOK, map[string]any{"items": logs})
 		})
 
 		api.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {

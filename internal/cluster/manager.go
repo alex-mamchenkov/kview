@@ -39,6 +39,19 @@ type Manager struct {
 	clients map[string]*Clients
 
 	kubeconfigFiles []string
+
+	logger Logger
+}
+
+// Logger is a minimal logger interface used by the cluster manager.
+type Logger interface {
+	Printf(format string, args ...any)
+}
+
+type stdLogger struct{}
+
+func (stdLogger) Printf(format string, args ...any) {
+	log.Printf(format, args...)
 }
 
 type Clients struct {
@@ -74,23 +87,23 @@ func kubeconfigLocations() []string {
 	return []string{envValue}
 }
 
-func expandKubeconfigLocations(locations []string) []string {
+func expandKubeconfigLocations(l Logger, locations []string) []string {
 	files := []string{}
 	for _, location := range locations {
 		info, err := os.Stat(location)
 		if err != nil {
 			if os.IsNotExist(err) {
-				log.Printf("kubeconfig: skip location %q: not found", location)
+				l.Printf("kubeconfig: skip location %q: not found", location)
 				continue
 			}
-			log.Printf("kubeconfig: skip location %q: %v", location, err)
+			l.Printf("kubeconfig: skip location %q: %v", location, err)
 			continue
 		}
 
 		if info.IsDir() {
 			entries, err := os.ReadDir(location)
 			if err != nil {
-				log.Printf("kubeconfig: skip directory %q: %v", location, err)
+				l.Printf("kubeconfig: skip directory %q: %v", location, err)
 				continue
 			}
 			names := make([]string, 0, len(entries))
@@ -138,10 +151,15 @@ func loadMergedKubeconfig(files []string) (*api.Config, []string, error) {
 }
 
 func NewManager() (*Manager, error) {
+	return NewManagerWithLogger(stdLogger{})
+}
+
+// NewManagerWithLogger allows callers to capture kubeconfig discovery logs.
+func NewManagerWithLogger(l Logger) (*Manager, error) {
 	locations := kubeconfigLocations()
-	log.Printf("kubeconfig: discovered locations: %v", locations)
-	files := expandKubeconfigLocations(locations)
-	log.Printf("kubeconfig: files to read: %v", files)
+	l.Printf("kubeconfig: discovered locations: %v", locations)
+	files := expandKubeconfigLocations(l, locations)
+	l.Printf("kubeconfig: files to read: %v", files)
 
 	cfg, effectiveFiles, err := loadMergedKubeconfig(files)
 	if err != nil {
@@ -153,6 +171,7 @@ func NewManager() (*Manager, error) {
 		activeContext:   cfg.CurrentContext,
 		clients:         map[string]*Clients{},
 		kubeconfigFiles: effectiveFiles,
+		logger:          l,
 	}
 	return m, nil
 }

@@ -39,3 +39,6 @@ type Activity struct {
 	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
+// RuntimeActivityID is the well-known ID for the runtime/system activity.
+const RuntimeActivityID = "runtime"
+

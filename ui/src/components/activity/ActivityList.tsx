@@ -16,6 +16,31 @@ type Props = {
   error?: string;
 };
 
+function statusChipColor(status: string):
+  | "default"
+  | "success"
+  | "warning"
+  | "error"
+  | "info"
+  | "primary"
+  | "secondary" {
+  switch (status) {
+    case "running":
+      return "success";
+    case "starting":
+    case "pending":
+      return "info";
+    case "stopping":
+      return "warning";
+    case "stopped":
+      return "default";
+    case "failed":
+      return "error";
+    default:
+      return "default";
+  }
+}
+
 export default function ActivityList({ items, loading, error }: Props) {
   const list = items || [];
 
@@ -59,7 +84,12 @@ export default function ActivityList({ items, loading, error }: Props) {
               <TableCell>{a.kind}</TableCell>
               <TableCell>{a.type}</TableCell>
               <TableCell>
-                <Chip size="small" label={a.status || "-"} />
+                <Chip
+                  size="small"
+                  label={a.status || "-"}
+                  color={statusChipColor(a.status)}
+                  sx={{ textTransform: "uppercase", fontSize: "0.65rem" }}
+                />
               </TableCell>
             </TableRow>
           ))}

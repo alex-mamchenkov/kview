@@ -286,7 +286,7 @@ function AppInner() {
               Connection restored
             </Alert>
           </Snackbar>
-          <ActivityPanel />
+          <ActivityPanel token={token} />
         </Box>
       </MutationProvider>
     </ActiveContextProvider>

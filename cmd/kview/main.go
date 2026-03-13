@@ -11,8 +11,18 @@ import (
 	"kview/internal/cluster"
 	"kview/internal/kube"
 	"kview/internal/launcher"
+	"kview/internal/runtime"
 	"kview/internal/server"
 )
+
+// runtimeLogger mirrors kubeconfig discovery messages into both stderr and runtime logs.
+type runtimeLogger struct{ rt runtime.RuntimeManager }
+
+func (l runtimeLogger) Printf(format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	log.Printf("%s", msg)
+	l.rt.Log(runtime.LogLevelInfo, "kubeconfig", msg)
+}
 
 func main() {
 	addr := flag.String("listen", "127.0.0.1:10443", "listen address")
@@ -20,13 +30,16 @@ func main() {
 	modeFlag := flag.String("mode", "", "launch mode: browser|webview|server")
 	flag.Parse()
 
-	mgr, err := cluster.NewManager()
+	// Initialize runtime manager first so we can capture startup logs including kubeconfig discovery.
+	rt := runtime.NewManager()
+
+	mgr, err := cluster.NewManagerWithLogger(runtimeLogger{rt: rt})
 	if err != nil {
 		log.Fatalf("init cluster manager: %v", err)
 	}
 
 	token := randomToken(24)
-	srv := server.New(mgr, token)
+	srv := server.New(mgr, rt, token)
 
 	srv.Actions().Register("scale", kube.HandleDeploymentScale)
 	srv.Actions().Register("restart", kube.HandleDeploymentRestart)
@@ -83,16 +96,22 @@ func main() {
 	url := fmt.Sprintf("http://%s/?token=%s", *addr, token)
 	log.Printf("kview listening on http://%s", *addr)
 	log.Printf("open: %s", url)
+	rt.Log(runtime.LogLevelInfo, "startup", fmt.Sprintf("listening on http://%s", *addr))
+	rt.Log(runtime.LogLevelInfo, "startup", fmt.Sprintf("application URL: %s", url))
 
 	mode, err := launcher.ResolveMode(*modeFlag, *open, defaultMode)
 	if err != nil {
 		log.Fatalf("invalid mode: %v", err)
 	}
+	rt.Log(runtime.LogLevelInfo, "startup", fmt.Sprintf("launch mode: %s", mode))
 
 	if mode != launcher.ModeServer {
 		go func() {
 			if err := launcher.Launch(mode, url); err != nil {
 				log.Printf("launcher error: %v", err)
+				rt.Log(runtime.LogLevelError, "launcher", err.Error())
+			} else {
+				rt.Log(runtime.LogLevelInfo, "launcher", "launcher started")
 			}
 		}()
 	}
