@@ -123,14 +123,14 @@ Status: COMPLETE
 
 ---
 
-### 🚧 Milestone 3 — Web Terminal
+### ✅ Milestone 3 — Web Terminal
 
-- Exec into containers
-- WebSocket streaming
-- RBAC-aware
-- Controlled lifecycle
+- Exec into containers (per-container Pod terminal)
+- WebSocket streaming wired through shared SessionManager
+- RBAC-aware (reuses existing capabilities / access model)
+- Controlled lifecycle via Activity/Session state machine and Activity Panel Sessions tab
 
-Status: PLANNED
+Status: COMPLETE
 
 ---
 

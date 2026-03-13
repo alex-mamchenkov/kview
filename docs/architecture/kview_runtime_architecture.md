@@ -94,23 +94,23 @@ The registry should be in-memory in the first implementation.
 
 Handles interactive or transport-like activities.
 
-Phase 1 purpose:
+Current responsibilities (as of Milestone 3):
 
-- define the abstraction
-- no real terminal or port-forward implementation yet
+- create session records
+- track session status using the shared Activity state machine
+- terminate sessions explicitly
+- mirror sessions into `ActivityRegistry` for visibility in the Activity Panel
+- back terminal WebSocket attach logic (for `session type = terminal`)
 
-Future responsibilities:
+Future responsibilities (for additional session types):
 
-- create session
-- track session status
-- terminate session
-- emit session events
-- bind session output streams
+- bind session output streams (beyond terminal)
+- emit richer session events
 
 Session types:
 
-- terminal session
-- port-forward session
+- terminal session (implemented)
+- port-forward session (planned)
 
 ---
 
@@ -292,9 +292,9 @@ Therefore:
 
 ---
 
-## Recommended Implementation Boundaries for Phase 1
+## Recommended Implementation Boundaries for Initial Runtime Foundation
 
-Phase 1 should implement:
+The initial runtime foundation implemented:
 
 - runtime package scaffolding
 - in-memory registry
@@ -302,9 +302,14 @@ Phase 1 should implement:
 - read-only listing API
 - clean ownership boundaries
 
-Phase 1 should not implement:
+On top of this, Milestone 3 added:
 
-- terminal exec runtime
+- `SessionManager` in-memory implementation
+- `session type = terminal` wired into ActivityRegistry and Activity Panel
+- WebSocket terminal bridge backed by Kubernetes exec
+
+Still intentionally **not** implemented yet:
+
 - port-forward runtime
 - worker execution engine
 - durable storage
