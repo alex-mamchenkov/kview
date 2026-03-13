@@ -12,3 +12,22 @@ export async function apiDelete(path: string, token: string): Promise<void> {
   });
 }
 
+type TerminalSessionRequest = {
+  namespace: string;
+  pod: string;
+  container?: string;
+  title?: string;
+  shell?: string;
+};
+
+type TerminalSessionResponse = {
+  item: {
+    id: string;
+  };
+};
+
+export async function createTerminalSession(req: TerminalSessionRequest, token: string): Promise<string> {
+  const res = await apiPost<TerminalSessionResponse>("/api/sessions/terminal", token, req);
+  return res.item.id;
+}
+

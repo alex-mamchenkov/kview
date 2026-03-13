@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -150,6 +151,9 @@ func (s *Server) Router() http.Handler {
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 			defer cancel()
 
+			// Best-effort fetch before stopping so we can log which session was terminated.
+			sess, _, _ := s.sessions.Get(ctx, id)
+
 			if err := s.sessions.Stop(ctx, id); err != nil {
 				if errors.Is(err, session.ErrNotFound) {
 					writeJSON(w, http.StatusNotFound, map[string]any{"error": "session not found"})
@@ -158,6 +162,12 @@ func (s *Server) Router() http.Handler {
 				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to stop session"})
 				return
 			}
+
+			// Log termination into runtime logs so it appears in the Activity Panel Logs tab.
+			if sess.ID != "" {
+				s.rt.Log(runtime.LogLevelInfo, "sessions", fmt.Sprintf("stopped session %s (%s)", sess.ID, sess.Title))
+			}
+
 			writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 		})
 
@@ -206,6 +216,71 @@ func (s *Server) Router() http.Handler {
 				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create session"})
 				return
 			}
+			writeJSON(w, http.StatusOK, map[string]any{"item": created})
+		})
+
+		api.Post("/sessions/terminal", func(w http.ResponseWriter, r *http.Request) {
+			ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+			defer cancel()
+
+			var body struct {
+				Namespace string `json:"namespace"`
+				Pod       string `json:"pod"`
+				Container string `json:"container"`
+				Title     string `json:"title"`
+				Shell     string `json:"shell"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid body"})
+				return
+			}
+			if strings.TrimSpace(body.Namespace) == "" || strings.TrimSpace(body.Pod) == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "namespace and pod are required"})
+				return
+			}
+
+			clusterName := s.mgr.ActiveContext()
+			title := strings.TrimSpace(body.Title)
+			if title == "" {
+				title = body.Pod
+			}
+
+			metadata := map[string]string{}
+			if shell := strings.TrimSpace(body.Shell); shell != "" {
+				metadata["shell"] = shell
+			}
+
+			sess := session.Session{
+				Type:            session.TypeTerminal,
+				Title:           title,
+				Status:          session.StatusPending,
+				CreatedAt:       time.Now().UTC(),
+				UpdatedAt:       time.Now().UTC(),
+				TargetCluster:   clusterName,
+				TargetNamespace: body.Namespace,
+				TargetResource:  body.Pod,
+				TargetContainer: body.Container,
+				ConnectionState: session.ConnectionDisconnected,
+				Metadata:        metadata,
+			}
+
+			created, err := s.sessions.Create(ctx, sess)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create terminal session"})
+				return
+			}
+			// Log session creation for visibility in runtime logs tab.
+			s.rt.Log(
+				runtime.LogLevelInfo,
+				"sessions",
+				fmt.Sprintf(
+					"created terminal session %s for pod %s/%s (container=%s)",
+					created.ID,
+					body.Namespace,
+					body.Pod,
+					body.Container,
+				),
+			)
 			writeJSON(w, http.StatusOK, map[string]any{"item": created})
 		})
 
@@ -991,6 +1066,7 @@ func (s *Server) Router() http.Handler {
 		})
 
 		api.Get("/namespaces/{ns}/pods/{name}/logs/ws", (&stream.LogsWS{Mgr: s.mgr}).ServeHTTP)
+		api.Get("/sessions/{id}/terminal/ws", (&stream.TerminalWS{Mgr: s.mgr, Sessions: s.sessions}).ServeHTTP)
 
 		api.Get("/namespaces/{ns}/deployments", func(w http.ResponseWriter, r *http.Request) {
 			ns := chi.URLParam(r, "ns")

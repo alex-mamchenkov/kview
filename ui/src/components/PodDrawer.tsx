@@ -24,6 +24,8 @@ import {
   TableHead,
   TableRow,
   Tooltip,
+  Button,
+  Menu,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -53,6 +55,8 @@ import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
 import ResourceLinkChip from "./shared/ResourceLinkChip";
 import WarningsSection, { type Warning } from "./shared/WarningsSection";
+import { createTerminalSession } from "../sessionsApi";
+import { emitOpenTerminalSession } from "../activityEvents";
 
 type PodDetails = {
   summary: PodSummary;
@@ -355,6 +359,9 @@ export default function PodDrawer(props: {
 
   const ns = props.namespace;
   const name = props.podName;
+  const [creatingTerminal, setCreatingTerminal] = useState(false);
+  const [terminalContainer, setTerminalContainer] = useState<string>("");
+  const [terminalMenuAnchor, setTerminalMenuAnchor] = useState<null | HTMLElement>(null);
 
   const logWsBase = useMemo(() => {
     if (!name) return "";
@@ -425,6 +432,31 @@ export default function PodDrawer(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.open, name]);
 
+  const openTerminalForContainer = async (containerName: string) => {
+    if (!name || !containerName) return;
+    try {
+      setCreatingTerminal(true);
+      const sessionId = await createTerminalSession(
+        {
+          namespace: ns,
+          pod: name,
+          container: containerName,
+          title: `${name} / ${containerName}`,
+        },
+        props.token
+      );
+      emitOpenTerminalSession({
+        sessionId,
+        source: "pod-drawer",
+        namespace: ns,
+        pod: name,
+        container: containerName,
+      });
+    } finally {
+      setCreatingTerminal(false);
+    }
+  };
+
   // Load pod details + events when opened
   useEffect(() => {
     if (!props.open || !name) return;
@@ -475,6 +507,7 @@ export default function PodDrawer(props: {
       const containers = item?.containers || [];
       const containerNames = containers.map((c) => c.name).filter((n): n is string => !!n);
       setContainer(containerNames[0] || "");
+      setTerminalContainer(containerNames[0] || "");
       setExpandedContainers(() => {
         const next: Record<string, boolean> = {};
         const unhealthy = containers
@@ -838,12 +871,48 @@ export default function PodDrawer(props: {
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
                   {name && (
                     <Section title="Actions" divider={false}>
-                      <PodActions
-                        token={props.token}
-                        namespace={ns}
-                        podName={name}
-                        onDeleted={props.onClose}
-                      />
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                        <PodActions
+                          token={props.token}
+                          namespace={ns}
+                          podName={name}
+                          onDeleted={props.onClose}
+                        />
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          disabled={creatingTerminal || !details || (details.containers || []).length === 0}
+                          onClick={(e) => {
+                            if (!details) return;
+                            setTerminalMenuAnchor(e.currentTarget);
+                          }}
+                        >
+                          Terminal
+                        </Button>
+                      </Box>
+                      <Menu
+                        anchorEl={terminalMenuAnchor}
+                        open={!!terminalMenuAnchor}
+                        onClose={() => setTerminalMenuAnchor(null)}
+                        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                        transformOrigin={{ vertical: "top", horizontal: "left" }}
+                      >
+                        {(details?.containers || [])
+                          .map((c) => c.name)
+                          .filter((n): n is string => !!n)
+                          .map((containerName) => (
+                            <MenuItem
+                              key={containerName}
+                              disabled={creatingTerminal}
+                              onClick={() => {
+                                setTerminalMenuAnchor(null);
+                                void openTerminalForContainer(containerName);
+                              }}
+                            >
+                              {containerName}
+                            </MenuItem>
+                          ))}
+                      </Menu>
                     </Section>
                   )}
 
@@ -972,6 +1041,19 @@ export default function PodDrawer(props: {
                               />
                               <Chip size="small" label={`Restarts: ${ctn.restartCount ?? 0}`} />
                               {unhealthy && <Chip size="small" color="error" label="Attention" />}
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                disabled={creatingTerminal || !ctn.name}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (!ctn.name) return;
+                                  void openTerminalForContainer(ctn.name);
+                                }}
+                              >
+                                Terminal
+                              </Button>
                             </Box>
                           </AccordionSummary>
                           <AccordionDetails>

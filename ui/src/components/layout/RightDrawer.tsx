@@ -4,12 +4,19 @@ import { Drawer, type DrawerProps } from "@mui/material";
 type Props = DrawerProps;
 
 export default function RightDrawer(props: Props) {
-  const { PaperProps, ...rest } = props;
+  const { PaperProps, ModalProps, ...rest } = props;
 
   return (
     <Drawer
       anchor="right"
       {...rest}
+      ModalProps={{
+        // Allow focus to move from an opened drawer to Activity Panel xterm.
+        disableEnforceFocus: true,
+        disableAutoFocus: true,
+        disableRestoreFocus: true,
+        ...ModalProps,
+      }}
       PaperProps={{
         sx: {
           // AppBar is 64px (mt: 8), keep drawer below it.

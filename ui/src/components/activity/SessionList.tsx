@@ -1,8 +1,8 @@
 import React from "react";
 import { Box, Table, TableBody, TableCell, TableHead, TableRow, Typography, Chip, CircularProgress, IconButton } from "@mui/material";
-import DeleteIcon from "@mui/icons-material/Delete";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import StopCircleOutlinedIcon from "@mui/icons-material/StopCircleOutlined";
 import EmptyState from "../shared/EmptyState";
-import { apiDelete } from "../../sessionsApi";
 
 type Session = {
   id: string;
@@ -13,14 +13,15 @@ type Session = {
   targetCluster?: string;
   targetNamespace?: string;
   targetResource?: string;
+  targetContainer?: string;
 };
 
 type Props = {
   items?: Session[];
   loading?: boolean;
   error?: string;
-  token: string;
-  onChange?: () => void;
+  onOpen?: (session: Session) => void;
+  onTerminate?: (session: Session) => void;
 };
 
 function statusChipColor(status: string):
@@ -48,7 +49,7 @@ function statusChipColor(status: string):
   }
 }
 
-export default function SessionList({ items, loading, error, token, onChange }: Props) {
+export default function SessionList({ items, loading, error, onOpen, onTerminate }: Props) {
   const list = (items || []).slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 
   if (loading) {
@@ -68,29 +69,28 @@ export default function SessionList({ items, loading, error, token, onChange }: 
   }
 
   return (
-    <Box sx={{ overflow: "auto" }}>
+    <Box sx={{ overflow: "auto", border: "1px solid var(--border-subtle)", borderRadius: 1 }}>
       <Table size="small">
         <TableHead>
           <TableRow>
             <TableCell>Title</TableCell>
-            <TableCell>Type</TableCell>
             <TableCell>Status</TableCell>
             <TableCell>Target</TableCell>
-            <TableCell>Created</TableCell>
+            <TableCell sx={{ width: 92 }}>Created</TableCell>
             <TableCell align="right">Actions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {list.map((s) => (
-            <TableRow key={s.id}>
+            <TableRow
+              key={s.id}
+              hover
+              sx={{ cursor: onOpen ? "pointer" : "default" }}
+              onClick={() => {
+                onOpen?.(s);
+              }}
+            >
               <TableCell>{s.title || s.id}</TableCell>
-              <TableCell>
-                <Chip
-                  size="small"
-                  label={s.type}
-                  sx={{ textTransform: "uppercase", fontSize: "0.65rem" }}
-                />
-              </TableCell>
               <TableCell>
                 <Chip
                   size="small"
@@ -100,25 +100,35 @@ export default function SessionList({ items, loading, error, token, onChange }: 
                 />
               </TableCell>
               <TableCell>
-                <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
-                  {s.targetCluster || "-"} / {s.targetNamespace || "-"} / {s.targetResource || "-"}
+                <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
+                  {s.targetNamespace || "-"} / {s.targetResource || "-"} / {s.targetContainer || "-"}
                 </Typography>
               </TableCell>
               <TableCell>
-                <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
+                <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
                   {new Date(s.createdAt).toLocaleTimeString()}
                 </Typography>
               </TableCell>
               <TableCell align="right">
                 <IconButton
                   size="small"
-                  aria-label="terminate session"
-                  onClick={async () => {
-                    await apiDelete(`/api/sessions/${encodeURIComponent(s.id)}`, token);
-                    onChange?.();
+                  aria-label="open session"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpen?.(s);
                   }}
                 >
-                  <DeleteIcon fontSize="small" />
+                  <OpenInNewIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  aria-label="terminate session"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTerminate?.(s);
+                  }}
+                >
+                  <StopCircleOutlinedIcon fontSize="small" />
                 </IconButton>
               </TableCell>
             </TableRow>

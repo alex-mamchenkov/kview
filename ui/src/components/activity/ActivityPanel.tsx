@@ -3,19 +3,71 @@ import { Box, Tabs, Tab, IconButton, Typography } from "@mui/material";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ActivityTabs from "./ActivityTabs";
+import {
+  OPEN_TERMINAL_SESSION_EVENT,
+  type OpenTerminalSessionEventDetail,
+} from "../../activityEvents";
 
 type Props = {
   token: string;
 };
 
+const MIN_PANEL_HEIGHT = 160;
+const MAX_PANEL_HEIGHT = 480;
+const HEADER_HEIGHT = 32; // approx header + tabs strip height
+
 export default function ActivityPanel({ token }: Props) {
   const [open, setOpen] = useState(true);
   const [tab, setTab] = useState(0);
+  const [height, setHeight] = useState(200);
+  const [dragging, setDragging] = useState(false);
+  const [requestedTerminalId, setRequestedTerminalId] = useState<string | null>(null);
+  const [requestKey, setRequestKey] = useState(0);
 
   useEffect(() => {
-    const offset = open ? "232px" : "32px";
+    const offset = open ? `${HEADER_HEIGHT + height}px` : "32px";
     document.documentElement.style.setProperty("--bottom-panel-offset", offset);
-  }, [open]);
+  }, [open, height]);
+
+  useEffect(() => {
+    if (!dragging) return;
+
+    const onMove = (e: MouseEvent) => {
+      const available = window.innerHeight - e.clientY;
+      const next = Math.min(
+        MAX_PANEL_HEIGHT,
+        Math.max(MIN_PANEL_HEIGHT, available - 0) // panel is anchored to bottom
+      );
+      setHeight(next);
+    };
+
+    const onUp = () => {
+      setDragging(false);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [dragging]);
+
+  useEffect(() => {
+    const onOpenTerminal = (event: Event) => {
+      const custom = event as CustomEvent<OpenTerminalSessionEventDetail>;
+      const sessionId = custom.detail?.sessionId;
+      if (!sessionId) return;
+      setRequestedTerminalId(sessionId);
+      setRequestKey((v) => v + 1);
+      setOpen(true);
+      setTab(1);
+    };
+    window.addEventListener(OPEN_TERMINAL_SESSION_EVENT, onOpenTerminal as EventListener);
+    return () => {
+      window.removeEventListener(OPEN_TERMINAL_SESSION_EVENT, onOpenTerminal as EventListener);
+    };
+  }, []);
 
   return (
     <Box
@@ -68,13 +120,30 @@ export default function ActivityPanel({ token }: Props) {
       {open && (
         <Box
           sx={{
-            height: 200,
+            height: 6,
+            cursor: "ns-resize",
+            "&:hover": { bgcolor: "rgba(255,255,255,0.04)" },
+          }}
+          onMouseDown={() => setDragging(true)}
+        />
+      )}
+      {open && (
+        <Box
+          sx={{
+            height,
             px: 1.5,
             py: 1,
-            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 0,
           }}
         >
-          <ActivityTabs tab={tab} token={token} />
+          <ActivityTabs
+            tab={tab}
+            token={token}
+            requestedTerminalId={requestedTerminalId}
+            requestedTerminalRequestKey={requestKey}
+          />
         </Box>
       )}
     </Box>

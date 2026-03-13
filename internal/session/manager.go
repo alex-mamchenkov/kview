@@ -16,6 +16,7 @@ type Manager interface {
 	Get(ctx context.Context, id string) (Session, bool, error)
 	Create(ctx context.Context, s Session) (Session, error)
 	Stop(ctx context.Context, id string) error
+	Update(ctx context.Context, s Session) error
 }
 
 type InMemoryManager struct {
@@ -23,6 +24,8 @@ type InMemoryManager struct {
 	sessions map[string]Session
 	reg      runtime.ActivityRegistry
 }
+
+const stoppedActivityTTL = 3 * time.Minute
 
 func NewInMemoryManager(reg runtime.ActivityRegistry) *InMemoryManager {
 	return &InMemoryManager{
@@ -98,15 +101,50 @@ func (m *InMemoryManager) Stop(_ context.Context, id string) error {
 		m.mu.Unlock()
 		return ErrNotFound
 	}
-	s.Status = StatusStopped
+	// Mark as stopped once, then remove from the in-memory list so the
+	// Sessions tab no longer shows the terminated session.
+	if s.Status != StatusFailed {
+		s.Status = StatusStopped
+	}
 	s.UpdatedAt = time.Now().UTC()
 	m.sessions[id] = s
+	delete(m.sessions, id)
 	m.mu.Unlock()
 
-	// Update corresponding Activity.
+	// Update corresponding Activity to stopped, but keep it visible for history.
 	if act, found, _ := m.reg.Get(context.Background(), id); found {
-		act.Status = runtime.ActivityStatusStopped
+		if s.Status == StatusFailed {
+			act.Status = runtime.ActivityStatusFailed
+		} else {
+			act.Status = runtime.ActivityStatusStopped
+		}
 		act.UpdatedAt = time.Now().UTC()
+		_ = m.reg.Update(context.Background(), act)
+		m.scheduleActivityCleanup(id, act.UpdatedAt)
+	}
+	return nil
+}
+
+func (m *InMemoryManager) Update(_ context.Context, s Session) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	existing, ok := m.sessions[s.ID]
+	if !ok {
+		return ErrNotFound
+	}
+	// Preserve CreatedAt if caller omitted it.
+	if s.CreatedAt.IsZero() {
+		s.CreatedAt = existing.CreatedAt
+	}
+	if s.UpdatedAt.IsZero() {
+		s.UpdatedAt = time.Now().UTC()
+	}
+	m.sessions[s.ID] = s
+
+	if act, found, _ := m.reg.Get(context.Background(), s.ID); found {
+		act.Status = runtime.ActivityStatus(s.Status)
+		act.UpdatedAt = s.UpdatedAt
 		_ = m.reg.Update(context.Background(), act)
 	}
 	return nil
@@ -116,3 +154,23 @@ func generateSessionID() string {
 	return "sess-" + time.Now().UTC().Format("20060102T150405.000000000Z07")
 }
 
+func (m *InMemoryManager) scheduleActivityCleanup(id string, marker time.Time) {
+	go func() {
+		timer := time.NewTimer(stoppedActivityTTL)
+		defer timer.Stop()
+		<-timer.C
+
+		act, found, err := m.reg.Get(context.Background(), id)
+		if err != nil || !found {
+			return
+		}
+		// Avoid removing activity that has been updated/reused after scheduling.
+		if !act.UpdatedAt.Equal(marker) {
+			return
+		}
+		if act.Status != runtime.ActivityStatusStopped && act.Status != runtime.ActivityStatusFailed {
+			return
+		}
+		_ = m.reg.Remove(context.Background(), id)
+	}()
+}
