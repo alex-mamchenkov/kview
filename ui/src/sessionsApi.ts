@@ -31,3 +31,28 @@ export async function createTerminalSession(req: TerminalSessionRequest, token: 
   return res.item.id;
 }
 
+type PortForwardSessionRequest = {
+  namespace: string;
+  pod: string;
+  remotePort: number;
+  localPort?: number;
+  localHost?: string;
+  title?: string;
+};
+
+type PortForwardSessionResponse = {
+  item: {
+    id: string;
+  };
+  localPort: number;
+  localHost: string;
+  remotePort: number;
+};
+
+export async function createPortForwardSession(
+  req: PortForwardSessionRequest,
+  token: string
+): Promise<PortForwardSessionResponse> {
+  return apiPost<PortForwardSessionResponse>("/api/sessions/portforward", token, req);
+}
+

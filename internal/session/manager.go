@@ -20,17 +20,19 @@ type Manager interface {
 }
 
 type InMemoryManager struct {
-	mu       sync.RWMutex
-	sessions map[string]Session
-	reg      runtime.ActivityRegistry
+	mu           sync.RWMutex
+	sessions     map[string]Session
+	reg          runtime.ActivityRegistry
+	portForwards map[string]func()
 }
 
 const stoppedActivityTTL = 3 * time.Minute
 
 func NewInMemoryManager(reg runtime.ActivityRegistry) *InMemoryManager {
 	return &InMemoryManager{
-		sessions: make(map[string]Session),
-		reg:      reg,
+		sessions:     make(map[string]Session),
+		reg:          reg,
+		portForwards: make(map[string]func()),
 	}
 }
 
@@ -89,6 +91,9 @@ func (m *InMemoryManager) Create(_ context.Context, s Session) (Session, error) 
 			"targetContainer": s.TargetContainer,
 		},
 	}
+	for k, v := range s.Metadata {
+		activity.Metadata[k] = v
+	}
 	_ = m.reg.Register(context.Background(), activity)
 
 	return s, nil
@@ -108,6 +113,11 @@ func (m *InMemoryManager) Stop(_ context.Context, id string) error {
 	}
 	s.UpdatedAt = time.Now().UTC()
 	m.sessions[id] = s
+	if cancel, ok := m.portForwards[id]; ok && cancel != nil {
+		// Stop the live port-forward bridge outside the critical section.
+		go cancel()
+		delete(m.portForwards, id)
+	}
 	delete(m.sessions, id)
 	m.mu.Unlock()
 
@@ -123,6 +133,18 @@ func (m *InMemoryManager) Stop(_ context.Context, id string) error {
 		m.scheduleActivityCleanup(id, act.UpdatedAt)
 	}
 	return nil
+}
+
+// RegisterPortForward associates a cleanup function with a session that owns a
+// live port-forward bridge. It is safe to call multiple times; the last
+// registration wins.
+func (m *InMemoryManager) RegisterPortForward(id string, stop func()) {
+	if id == "" || stop == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.portForwards[id] = stop
 }
 
 func (m *InMemoryManager) Update(_ context.Context, s Session) error {
@@ -143,6 +165,17 @@ func (m *InMemoryManager) Update(_ context.Context, s Session) error {
 	m.sessions[s.ID] = s
 
 	if act, found, _ := m.reg.Get(context.Background(), s.ID); found {
+		if act.Metadata == nil {
+			act.Metadata = map[string]string{}
+		}
+		act.Metadata["targetCluster"] = s.TargetCluster
+		act.Metadata["targetNamespace"] = s.TargetNamespace
+		act.Metadata["targetResource"] = s.TargetResource
+		act.Metadata["targetContainer"] = s.TargetContainer
+		for k, v := range s.Metadata {
+			act.Metadata[k] = v
+		}
+		act.Title = s.Title
 		act.Status = runtime.ActivityStatus(s.Status)
 		act.UpdatedAt = s.UpdatedAt
 		_ = m.reg.Update(context.Background(), act)

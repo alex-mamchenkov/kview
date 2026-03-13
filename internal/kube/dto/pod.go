@@ -1,13 +1,13 @@
 package dto
 
 type PodListItemDTO struct {
-	Name      string        `json:"name"`
-	Namespace string        `json:"namespace"`
-	Node      string        `json:"node,omitempty"`
-	Phase     string        `json:"phase"`
-	Ready     string        `json:"ready"`
-	Restarts  int32         `json:"restarts"`
-	AgeSec    int64         `json:"ageSec"`
+	Name      string         `json:"name"`
+	Namespace string         `json:"namespace"`
+	Node      string         `json:"node,omitempty"`
+	Phase     string         `json:"phase"`
+	Ready     string         `json:"ready"`
+	Restarts  int32          `json:"restarts"`
+	AgeSec    int64          `json:"ageSec"`
 	LastEvent *EventBriefDTO `json:"lastEvent,omitempty"`
 }
 
@@ -70,10 +70,17 @@ type PodContainerDTO struct {
 	LastTerminationMessage string                `json:"lastTerminationMessage,omitempty"`
 	LastTerminationAt      int64                 `json:"lastTerminationAt,omitempty"`
 	Resources              ContainerResourcesDTO `json:"resources"`
+	Ports                  []ContainerPortDTO    `json:"ports,omitempty"`
 	Env                    []EnvVarDTO           `json:"env"`
 	Mounts                 []MountDTO            `json:"mounts"`
 	Probes                 ContainerProbesDTO    `json:"probes"`
 	SecurityContext        ContainerSecurityDTO  `json:"securityContext"`
+}
+
+type ContainerPortDTO struct {
+	Name          string `json:"name,omitempty"`
+	ContainerPort int32  `json:"containerPort"`
+	Protocol      string `json:"protocol,omitempty"`
 }
 
 type EnvVarDTO struct {

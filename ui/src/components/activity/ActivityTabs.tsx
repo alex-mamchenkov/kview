@@ -3,6 +3,7 @@ import { Box, Chip, IconButton, Tabs, Tab, Typography } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ActivityList from "./ActivityList";
 import EmptyState from "../shared/EmptyState";
+import SessionList from "./SessionList";
 import { apiGet } from "../../api";
 import TerminalSessionView from "./TerminalSessionView";
 import { apiDelete } from "../../sessionsApi";
@@ -42,6 +43,7 @@ type Session = {
   targetNamespace?: string;
   targetResource?: string;
   targetContainer?: string;
+  metadata?: Record<string, string>;
 };
 
 export default function ActivityTabs({
@@ -138,6 +140,13 @@ export default function ActivityTabs({
     () => sessions.filter((s) => s.type === "terminal"),
     [sessions]
   );
+
+  const handleOpenSession = (session: Session) => {
+    if (session.type !== "terminal") return;
+    setOpenTerminalIds((prev) => (prev.includes(session.id) ? prev : [...prev, session.id]));
+    setActiveTerminalId(session.id);
+    setFocusNonce((n) => n + 1);
+  };
 
   const terminateSession = async (id: string) => {
     await apiDelete(`/api/sessions/${encodeURIComponent(id)}`, token);
@@ -241,7 +250,7 @@ export default function ActivityTabs({
 
         <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
           {openTerminalIds.length === 0 ? (
-            <EmptyState message="Open a terminal session from the list below." />
+            <EmptyState message="Open a terminal session from Sessions list." />
           ) : (
             openTerminalIds.map((id) => (
               <Box key={id} sx={{ display: id === activeTerminalId ? "block" : "none", height: "100%" }}>
@@ -259,21 +268,19 @@ export default function ActivityTabs({
             ))
           )}
         </Box>
+        <Box sx={{ flexShrink: 0, maxHeight: 220 }}>
+          <SessionList
+            items={sessions}
+            loading={sessionsLoading}
+            error={sessionsErr || undefined}
+            onOpen={handleOpenSession}
+            onTerminate={(session) => {
+              void terminateSession(session.id);
+            }}
+          />
+        </Box>
 
-        {sessionsLoading && (
-          <Box sx={{ flexShrink: 0 }}>
-            <Typography variant="caption" color="text.secondary">
-              Refreshing sessions...
-            </Typography>
-          </Box>
-        )}
-        {!sessionsLoading && sessionsErr && (
-          <Box sx={{ flexShrink: 0 }}>
-            <Typography variant="caption" color="error">
-              Unable to refresh sessions.
-            </Typography>
-          </Box>
-        )}
+        {!sessionsLoading && sessionsErr && <Typography variant="caption" color="error">Unable to refresh sessions.</Typography>}
       </Box>
       <Box sx={{ display: tab === 2 ? "block" : "none", flex: 1, minHeight: 0, overflow: "auto" }}>
         <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>

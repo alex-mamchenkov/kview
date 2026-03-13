@@ -14,6 +14,7 @@ type Session = {
   targetNamespace?: string;
   targetResource?: string;
   targetContainer?: string;
+  metadata?: Record<string, string>;
 };
 
 type Props = {
@@ -74,6 +75,7 @@ export default function SessionList({ items, loading, error, onOpen, onTerminate
         <TableHead>
           <TableRow>
             <TableCell>Title</TableCell>
+            <TableCell>Type</TableCell>
             <TableCell>Status</TableCell>
             <TableCell>Target</TableCell>
             <TableCell sx={{ width: 92 }}>Created</TableCell>
@@ -85,12 +87,22 @@ export default function SessionList({ items, loading, error, onOpen, onTerminate
             <TableRow
               key={s.id}
               hover
-              sx={{ cursor: onOpen ? "pointer" : "default" }}
+              sx={{ cursor: onOpen && s.type === "terminal" ? "pointer" : "default" }}
               onClick={() => {
-                onOpen?.(s);
+                if (s.type === "terminal") {
+                  onOpen?.(s);
+                }
               }}
             >
               <TableCell>{s.title || s.id}</TableCell>
+              <TableCell>
+                <Chip
+                  size="small"
+                  label={s.type || "-"}
+                  sx={{ textTransform: "uppercase", fontSize: "0.65rem" }}
+                  color={s.type === "portforward" ? "secondary" : s.type === "terminal" ? "primary" : "default"}
+                />
+              </TableCell>
               <TableCell>
                 <Chip
                   size="small"
@@ -101,7 +113,15 @@ export default function SessionList({ items, loading, error, onOpen, onTerminate
               </TableCell>
               <TableCell>
                 <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
-                  {s.targetNamespace || "-"} / {s.targetResource || "-"} / {s.targetContainer || "-"}
+                  {s.type === "portforward" && s.metadata && s.metadata.localPort && s.metadata.remotePort ? (
+                    <>
+                      {(s.metadata.localHost || "127.0.0.1") + ":" + s.metadata.localPort} {" → "} {s.metadata.remotePort}
+                      <br />
+                      {(s.targetNamespace || "-") + " / " + (s.targetResource || "-")}
+                    </>
+                  ) : (
+                    `${s.targetNamespace || "-"} / ${s.targetResource || "-"} / ${s.targetContainer || "-"}`
+                  )}
                 </Typography>
               </TableCell>
               <TableCell>
@@ -113,6 +133,7 @@ export default function SessionList({ items, loading, error, onOpen, onTerminate
                 <IconButton
                   size="small"
                   aria-label="open session"
+                  disabled={s.type !== "terminal"}
                   onClick={(e) => {
                     e.stopPropagation();
                     onOpen?.(s);

@@ -4,6 +4,7 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ActivityTabs from "./ActivityTabs";
 import {
+  FOCUS_SESSIONS_TAB_EVENT,
   OPEN_TERMINAL_SESSION_EVENT,
   type OpenTerminalSessionEventDetail,
 } from "../../activityEvents";
@@ -66,6 +67,17 @@ export default function ActivityPanel({ token }: Props) {
     window.addEventListener(OPEN_TERMINAL_SESSION_EVENT, onOpenTerminal as EventListener);
     return () => {
       window.removeEventListener(OPEN_TERMINAL_SESSION_EVENT, onOpenTerminal as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onFocusSessions = () => {
+      setOpen(true);
+      setTab(1);
+    };
+    window.addEventListener(FOCUS_SESSIONS_TAB_EVENT, onFocusSessions);
+    return () => {
+      window.removeEventListener(FOCUS_SESSIONS_TAB_EVENT, onFocusSessions);
     };
   }, []);
 

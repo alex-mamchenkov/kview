@@ -8,6 +8,7 @@ type Activity = {
   type: string;
   title: string;
   status: string;
+  metadata?: Record<string, string>;
 };
 
 type Props = {
@@ -69,6 +70,7 @@ export default function ActivityList({ items, loading, error }: Props) {
             <TableCell>Title</TableCell>
             <TableCell>Kind</TableCell>
             <TableCell>Type</TableCell>
+            <TableCell>Target</TableCell>
             <TableCell>Status</TableCell>
           </TableRow>
         </TableHead>
@@ -83,6 +85,13 @@ export default function ActivityList({ items, loading, error }: Props) {
               <TableCell>{a.title || "-"}</TableCell>
               <TableCell>{a.kind}</TableCell>
               <TableCell>{a.type}</TableCell>
+              <TableCell>
+                <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
+                  {a.type === "portforward" && a.metadata?.localPort && a.metadata?.remotePort
+                    ? `${a.metadata.localHost || "127.0.0.1"}:${a.metadata.localPort} -> ${a.metadata.remotePort}`
+                    : `${a.metadata?.targetNamespace || "-"} / ${a.metadata?.targetResource || "-"}`}
+                </Typography>
+              </TableCell>
               <TableCell>
                 <Chip
                   size="small"

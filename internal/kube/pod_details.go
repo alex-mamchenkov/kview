@@ -137,6 +137,7 @@ func GetPodDetails(ctx context.Context, c *cluster.Clients, namespace, name stri
 			LastTerminationMessage: lastMessage,
 			LastTerminationAt:      lastFinished,
 			Resources:              mapContainerResources(ctn.Resources),
+			Ports:                  mapContainerPorts(ctn.Ports),
 			Env:                    mapEnvVars(ctn.Env),
 			Mounts:                 mapMounts(ctn.VolumeMounts),
 			Probes:                 dto.ContainerProbesDTO{Liveness: mapProbe(ctn.LivenessProbe), Readiness: mapProbe(ctn.ReadinessProbe), Startup: mapProbe(ctn.StartupProbe)},
@@ -217,6 +218,21 @@ func mapTolerations(tols []corev1.Toleration) []dto.TolerationDTO {
 			Value:    t.Value,
 			Effect:   string(t.Effect),
 			Seconds:  sec,
+		})
+	}
+	return out
+}
+
+func mapContainerPorts(ports []corev1.ContainerPort) []dto.ContainerPortDTO {
+	if len(ports) == 0 {
+		return nil
+	}
+	out := make([]dto.ContainerPortDTO, 0, len(ports))
+	for _, p := range ports {
+		out = append(out, dto.ContainerPortDTO{
+			Name:          p.Name,
+			ContainerPort: p.ContainerPort,
+			Protocol:      string(p.Protocol),
 		})
 	}
 	return out

@@ -55,8 +55,10 @@ import EmptyState from "./shared/EmptyState";
 import ErrorState from "./shared/ErrorState";
 import ResourceLinkChip from "./shared/ResourceLinkChip";
 import WarningsSection, { type Warning } from "./shared/WarningsSection";
-import { createTerminalSession } from "../sessionsApi";
-import { emitOpenTerminalSession } from "../activityEvents";
+import PortForwardDialog, { type PortForwardOption } from "./shared/PortForwardDialog";
+import PortForwardCreatedSnackbar from "./shared/PortForwardCreatedSnackbar";
+import { createTerminalSession, createPortForwardSession } from "../sessionsApi";
+import { emitFocusSessionsTab, emitOpenTerminalSession } from "../activityEvents";
 
 type PodDetails = {
   summary: PodSummary;
@@ -138,6 +140,11 @@ type PodContainer = {
     memoryRequest?: string;
     memoryLimit?: string;
   };
+  ports?: {
+    name?: string;
+    containerPort: number;
+    protocol?: string;
+  }[];
   env: {
     name: string;
     value?: string;
@@ -360,8 +367,14 @@ export default function PodDrawer(props: {
   const ns = props.namespace;
   const name = props.podName;
   const [creatingTerminal, setCreatingTerminal] = useState(false);
+  const [creatingPortForward, setCreatingPortForward] = useState(false);
   const [terminalContainer, setTerminalContainer] = useState<string>("");
   const [terminalMenuAnchor, setTerminalMenuAnchor] = useState<null | HTMLElement>(null);
+  const [portForwardDialogOpen, setPortForwardDialogOpen] = useState(false);
+  const [portForwardRemotePort, setPortForwardRemotePort] = useState<string>("");
+  const [portForwardLocalPort, setPortForwardLocalPort] = useState<string>("");
+  const [portForwardError, setPortForwardError] = useState<string>("");
+  const [portForwardCreatedMsg, setPortForwardCreatedMsg] = useState("");
 
   const logWsBase = useMemo(() => {
     if (!name) return "";
@@ -454,6 +467,56 @@ export default function PodDrawer(props: {
       });
     } finally {
       setCreatingTerminal(false);
+    }
+  };
+
+  const handleOpenPortForwardDialog = () => {
+    setPortForwardError("");
+    if (knownPodPortOptions.length > 0) {
+      setPortForwardRemotePort(knownPodPortOptions[0].value);
+    } else {
+      setPortForwardRemotePort("");
+    }
+    setPortForwardLocalPort("");
+    setPortForwardDialogOpen(true);
+  };
+
+  const handleCreatePortForward = async () => {
+    if (!name) return;
+    const remote = Number(portForwardRemotePort);
+    if (!Number.isFinite(remote) || remote <= 0) {
+      setPortForwardError("Remote port must be a positive number.");
+      return;
+    }
+    let local: number | undefined;
+    if (portForwardLocalPort.trim() !== "") {
+      const lp = Number(portForwardLocalPort);
+      if (!Number.isFinite(lp) || lp <= 0) {
+        setPortForwardError("Local port must be a positive number.");
+        return;
+      }
+      local = lp;
+    }
+    setPortForwardError("");
+    try {
+      setCreatingPortForward(true);
+      const res = await createPortForwardSession(
+        {
+          namespace: ns,
+          pod: name,
+          remotePort: remote,
+          localPort: local,
+          title: `${name}:${remote}`,
+        },
+        props.token
+      );
+      setPortForwardCreatedMsg(`Port forward started: ${res.localHost}:${res.localPort} -> ${res.remotePort}`);
+      emitFocusSessionsTab();
+      setPortForwardDialogOpen(false);
+    } catch (e) {
+      setPortForwardError("Failed to create port-forward session.");
+    } finally {
+      setCreatingPortForward(false);
     }
   };
 
@@ -665,6 +728,26 @@ export default function PodDrawer(props: {
   }, [renderedLogs, following]);
 
   const summary = details?.summary;
+  const knownPodPortOptions = useMemo<PortForwardOption[]>(() => {
+    const opts: PortForwardOption[] = [];
+    const seen = new Set<string>();
+    (details?.containers || []).forEach((ctn) => {
+      (ctn.ports || []).forEach((p) => {
+        const port = Number(p.containerPort || 0);
+        if (!Number.isFinite(port) || port <= 0) return;
+        const proto = p.protocol || "TCP";
+        const key = `${port}/${proto}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        const left = `${port}${p.name ? ` (${p.name})` : ""}`;
+        opts.push({
+          value: String(port),
+          label: `${left} / ${proto} / ${ctn.name}`,
+        });
+      });
+    });
+    return opts.sort((a, b) => Number(a.value) - Number(b.value));
+  }, [details]);
   const hasUnhealthyConditions = (details?.conditions || []).some((c) => !isConditionHealthy(c));
   const eventContainers = (details?.containers || []).map((c) => c.name).filter((n): n is string => !!n);
   const filteredEvents = useMemo(() => {
@@ -888,6 +971,14 @@ export default function PodDrawer(props: {
                           }}
                         >
                           Terminal
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          disabled={creatingPortForward || !details}
+                          onClick={handleOpenPortForwardDialog}
+                        >
+                          Port forward
                         </Button>
                       </Box>
                       <Menu
@@ -1778,8 +1869,28 @@ export default function PodDrawer(props: {
                     </SyntaxHighlighter>
                   </Box>
                 </Box>
-              )}
-            </Box>
+        )}
+      </Box>
+      <PortForwardDialog
+        open={portForwardDialogOpen}
+        busy={creatingPortForward}
+        targetLabel={`Target Pod: ${ns}/${name}`}
+        remotePort={portForwardRemotePort}
+        localPort={portForwardLocalPort}
+        error={portForwardError}
+        remotePortOptions={knownPodPortOptions}
+        onChangeRemotePort={setPortForwardRemotePort}
+        onChangeLocalPort={setPortForwardLocalPort}
+        onClose={() => setPortForwardDialogOpen(false)}
+        onSubmit={() => {
+          void handleCreatePortForward();
+        }}
+      />
+      <PortForwardCreatedSnackbar
+        open={!!portForwardCreatedMsg}
+        message={portForwardCreatedMsg}
+        onClose={() => setPortForwardCreatedMsg("")}
+      />
             <ServiceDrawer
               open={!!drawerService}
               onClose={() => setDrawerService(null)}

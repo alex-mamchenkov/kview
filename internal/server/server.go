@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -25,20 +26,23 @@ import (
 var uiFS embed.FS
 
 type Server struct {
-	mgr     *cluster.Manager
-	token   string
-	actions *kube.ActionRegistry
-	rt      runtime.RuntimeManager
-	sessions session.Manager
+	mgr            *cluster.Manager
+	token          string
+	actions        *kube.ActionRegistry
+	rt             runtime.RuntimeManager
+	sessions       session.Manager
+	deniedLogMu    sync.Mutex
+	deniedLogUntil map[string]time.Time
 }
 
 func New(mgr *cluster.Manager, rt runtime.RuntimeManager, token string) *Server {
 	s := &Server{
-		mgr:     mgr,
-		token:   token,
-		actions: kube.NewActionRegistry(),
-		rt:      rt,
-		sessions: session.NewInMemoryManager(rt.Registry()),
+		mgr:            mgr,
+		token:          token,
+		actions:        kube.NewActionRegistry(),
+		rt:             rt,
+		sessions:       session.NewInMemoryManager(rt.Registry()),
+		deniedLogUntil: map[string]time.Time{},
 	}
 	// Best-effort runtime manager startup; failures are logged via regular logs.
 	_ = s.rt.Start(context.Background())
@@ -73,6 +77,7 @@ func (s *Server) Router() http.Handler {
 	// Protected API
 	r.Route("/api", func(api chi.Router) {
 		api.Use(s.authMiddleware)
+		api.Use(s.activityAccessDeniedLogMiddleware)
 
 		api.Get("/activity", func(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -282,6 +287,149 @@ func (s *Server) Router() http.Handler {
 				),
 			)
 			writeJSON(w, http.StatusOK, map[string]any{"item": created})
+		})
+
+		api.Post("/sessions/portforward", func(w http.ResponseWriter, r *http.Request) {
+			ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+			defer cancel()
+
+			var body struct {
+				Namespace  string `json:"namespace"`
+				Pod        string `json:"pod"`
+				RemotePort int    `json:"remotePort"`
+				LocalPort  int    `json:"localPort"`
+				LocalHost  string `json:"localHost"`
+				Title      string `json:"title"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid body"})
+				return
+			}
+			ns := strings.TrimSpace(body.Namespace)
+			pod := strings.TrimSpace(body.Pod)
+			if ns == "" || pod == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "namespace and pod are required"})
+				return
+			}
+			if body.RemotePort <= 0 {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "remotePort must be > 0"})
+				return
+			}
+
+			clusterName := s.mgr.ActiveContext()
+			title := strings.TrimSpace(body.Title)
+			if title == "" {
+				title = fmt.Sprintf("Port-forward %s/%s :%d", ns, pod, body.RemotePort)
+			}
+
+			baseMeta := map[string]string{
+				"targetKind": "pod",
+				"remotePort": fmt.Sprintf("%d", body.RemotePort),
+				"localHost":  strings.TrimSpace(body.LocalHost),
+				"localPort":  "",
+			}
+
+			sess := session.Session{
+				Type:            session.TypePortForward,
+				Title:           title,
+				Status:          session.StatusPending,
+				CreatedAt:       time.Now().UTC(),
+				UpdatedAt:       time.Now().UTC(),
+				TargetCluster:   clusterName,
+				TargetNamespace: ns,
+				TargetResource:  pod,
+				ConnectionState: session.ConnectionDisconnected,
+				Metadata:        baseMeta,
+			}
+
+			created, err := s.sessions.Create(ctx, sess)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create port-forward session"})
+				return
+			}
+
+			// Move to starting before initiating Kubernetes port-forward.
+			created.Status = session.StatusStarting
+			created.ConnectionState = session.ConnectionConnecting
+			created.UpdatedAt = time.Now().UTC()
+			if err := s.sessions.Update(ctx, created); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to update port-forward session"})
+				return
+			}
+
+			clients, active, err := s.mgr.GetClients(ctx)
+			if err != nil {
+				s.rt.Log(runtime.LogLevelError, "portforward", fmt.Sprintf("failed to get clients for port-forward session %s: %v", created.ID, err))
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			localPort := 0
+			if body.LocalPort > 0 {
+				localPort = body.LocalPort
+			} else if kube.IsTCPPortAvailable(strings.TrimSpace(body.LocalHost), body.RemotePort) {
+				// Prefer same local port as remote when available.
+				localPort = body.RemotePort
+			}
+
+			effectiveLocal, stopFn, err := kube.StartPodPortForward(ctx, clients, ns, pod, body.LocalHost, localPort, body.RemotePort)
+			if err != nil && body.LocalPort <= 0 && localPort == body.RemotePort {
+				// Preferred local=remote was unavailable by start time; retry with random local port.
+				effectiveLocal, stopFn, err = kube.StartPodPortForward(ctx, clients, ns, pod, body.LocalHost, 0, body.RemotePort)
+			}
+			if err != nil {
+				s.rt.Log(runtime.LogLevelError, "portforward", fmt.Sprintf("failed to start port-forward for session %s: %v", created.ID, err))
+				created.Status = session.StatusFailed
+				created.ConnectionState = session.ConnectionDisconnected
+				created.UpdatedAt = time.Now().UTC()
+				_ = s.sessions.Update(ctx, created)
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to start port-forward"})
+				return
+			}
+
+			// Update session metadata with the effective local endpoint.
+			created.Status = session.StatusRunning
+			created.ConnectionState = session.ConnectionConnected
+			if created.Metadata == nil {
+				created.Metadata = map[string]string{}
+			}
+			created.Metadata["localPort"] = fmt.Sprintf("%d", effectiveLocal)
+			if host := strings.TrimSpace(body.LocalHost); host != "" {
+				created.Metadata["localHost"] = host
+			} else {
+				created.Metadata["localHost"] = "127.0.0.1"
+			}
+			created.UpdatedAt = time.Now().UTC()
+			if err := s.sessions.Update(ctx, created); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to finalize port-forward session"})
+				return
+			}
+
+			// Ensure Stop() will tear down the live port-forward bridge.
+			if inMem, ok := s.sessions.(*session.InMemoryManager); ok {
+				inMem.RegisterPortForward(created.ID, stopFn)
+			}
+
+			s.rt.Log(
+				runtime.LogLevelInfo,
+				"portforward",
+				fmt.Sprintf(
+					"started port-forward session %s for pod %s/%s local %s:%d -> %d",
+					created.ID,
+					ns,
+					pod,
+					created.Metadata["localHost"],
+					effectiveLocal,
+					body.RemotePort,
+				),
+			)
+
+			writeJSON(w, http.StatusOK, map[string]any{
+				"item":       created,
+				"localPort":  effectiveLocal,
+				"localHost":  created.Metadata["localHost"],
+				"remotePort": body.RemotePort,
+			})
 		})
 
 		api.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -2764,6 +2912,40 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+type statusCapturingWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (w *statusCapturingWriter) WriteHeader(statusCode int) {
+	w.statusCode = statusCode
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (s *Server) activityAccessDeniedLogMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sw := &statusCapturingWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		next.ServeHTTP(sw, r)
+		if sw.statusCode != http.StatusForbidden {
+			return
+		}
+
+		// Avoid flooding runtime logs for periodic polling endpoints.
+		key := r.Method + " " + r.URL.Path
+		now := time.Now().UTC()
+		s.deniedLogMu.Lock()
+		until, exists := s.deniedLogUntil[key]
+		if exists && now.Before(until) {
+			s.deniedLogMu.Unlock()
+			return
+		}
+		s.deniedLogUntil[key] = now.Add(60 * time.Second)
+		s.deniedLogMu.Unlock()
+
+		s.rt.Log(runtime.LogLevelWarn, "rbac", fmt.Sprintf("access denied: %s", key))
+	})
+}
+
 func (s *Server) serveUI(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/")
 	if path == "" {
@@ -2811,6 +2993,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	if status >= http.StatusBadRequest {
 		if payload, ok := v.(map[string]any); ok {
 			if msg, ok := payload["error"].(string); ok && strings.TrimSpace(msg) != "" {
+				if status >= http.StatusInternalServerError && looksLikeForbiddenMessage(msg) {
+					status = http.StatusForbidden
+				}
 				payload["error"] = sanitizeErrorMessage(status)
 				v = payload
 			}
@@ -2819,6 +3004,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func looksLikeForbiddenMessage(msg string) bool {
+	lower := strings.ToLower(strings.TrimSpace(msg))
+	return strings.Contains(lower, "forbidden") ||
+		strings.Contains(lower, "not allowed") ||
+		strings.Contains(lower, "cannot list resource")
 }
 
 func sanitizeErrorMessage(status int) string {

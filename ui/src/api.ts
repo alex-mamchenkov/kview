@@ -106,6 +106,12 @@ function normalizeAccessDenied(shape: ApiErrorShape): ApiErrorShape {
   return shape;
 }
 
+function shouldNotifyFailure(shape: ApiErrorShape): boolean {
+  // RBAC / auth failures are expected in many read-only views and should not
+  // be treated as connection-health regressions.
+  return shape.status !== 401 && shape.status !== 403;
+}
+
 export function toApiError(error: unknown): ApiError {
   if (error && typeof error === "object") {
     const record = error as { status?: unknown; message?: unknown };
@@ -133,7 +139,9 @@ export async function apiGet<T>(path: string, token: string, opts?: { headers?: 
   }
   if (!res.ok) {
     const shape = await parseErrorResponse(res);
-    notifyApiFailure(classifyFailureKind(shape.status, shape.message), shape.message || res.statusText);
+    if (shouldNotifyFailure(shape)) {
+      notifyApiFailure(classifyFailureKind(shape.status, shape.message), shape.message || res.statusText);
+    }
     throw toError(shape);
   }
   try {
@@ -161,7 +169,9 @@ export async function apiPost<T>(path: string, token: string, body: any, opts?: 
   }
   if (!res.ok) {
     const shape = await parseErrorResponse(res);
-    notifyApiFailure(classifyFailureKind(shape.status, shape.message), shape.message || res.statusText);
+    if (shouldNotifyFailure(shape)) {
+      notifyApiFailure(classifyFailureKind(shape.status, shape.message), shape.message || res.statusText);
+    }
     throw toError(shape);
   }
   try {
