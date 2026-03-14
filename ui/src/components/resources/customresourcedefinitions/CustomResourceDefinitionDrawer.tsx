@@ -4,8 +4,6 @@ import {
   Typography,
   Tabs,
   Tab,
-  IconButton,
-  Divider,
   CircularProgress,
   Chip,
   Table,
@@ -14,7 +12,6 @@ import {
   TableCell,
   TableBody,
 } from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
 import { apiGet } from "../../../api";
 import { useConnectionState } from "../../../connectionState";
 import { fmtAge, fmtTs, valueOrDash } from "../../../utils/format";
@@ -28,6 +25,7 @@ import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import CRDActions from "./CRDActions";
 import RightDrawer from "../../layout/RightDrawer";
+import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 
 type CRDDetails = {
   summary: CRDSummary;
@@ -162,18 +160,7 @@ export default function CustomResourceDefinitionDrawer(props: {
 
   return (
     <RightDrawer open={props.open} onClose={props.onClose}>
-      <Box sx={{ width: 820, p: 2, display: "flex", flexDirection: "column", height: "100%" }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            CRD: {name || "-"}
-          </Typography>
-          <IconButton onClick={props.onClose}>
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
-        <Divider sx={{ my: 1 }} />
-
+      <ResourceDrawerShell title={<>CRD: {name || "-"}</>} onClose={props.onClose}>
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
             <CircularProgress />
@@ -274,7 +261,7 @@ export default function CustomResourceDefinitionDrawer(props: {
             </Box>
           </>
         )}
-      </Box>
+      </ResourceDrawerShell>
     </RightDrawer>
   );
 }

@@ -4,8 +4,6 @@ import {
   Typography,
   Tabs,
   Tab,
-  IconButton,
-  Divider,
   CircularProgress,
   FormControl,
   InputLabel,
@@ -27,7 +25,6 @@ import {
   Button,
   Menu,
 } from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet, toApiError, type ApiError } from "../../../api";
 import { useConnectionState } from "../../../connectionState";
@@ -46,6 +43,7 @@ import JobDrawer from "../jobs/JobDrawer";
 import NodeDrawer from "../nodes/NodeDrawer";
 import PodActions from "./PodActions";
 import RightDrawer from "../../layout/RightDrawer";
+import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 import ServiceAccountDrawer from "../serviceaccounts/ServiceAccountDrawer";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import Section from "../../shared/Section";
@@ -917,19 +915,15 @@ export default function PodDrawer(props: {
 
   return (
     <RightDrawer open={props.open} onClose={props.onClose}>
-      <Box sx={{ width: 820, p: 2, display: "flex", flexDirection: "column", height: "100%" }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+      <ResourceDrawerShell
+        title={
+          <>
             Pod: {name || "-"}{" "}
             <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} />
-          </Typography>
-          <IconButton onClick={props.onClose}>
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
-        <Divider sx={{ my: 1 }} />
-
+          </>
+        }
+        onClose={props.onClose}
+      >
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
             <CircularProgress />
@@ -1961,7 +1955,7 @@ export default function PodDrawer(props: {
             />
           </>
         )}
-      </Box>
+      </ResourceDrawerShell>
     </RightDrawer>
   );
 }

@@ -36,6 +36,7 @@ export default function HelmChartDrawer(props: {
       ]
     : [];
 
+  // Intentionally uses narrow width (620) and custom layout; does not use ResourceDrawerShell.
   return (
     <RightDrawer open={props.open} onClose={props.onClose} PaperProps={{ sx: { width: 620 } }}>
       <Box sx={{ width: 620, p: 2, display: "flex", flexDirection: "column", height: "100%" }}>

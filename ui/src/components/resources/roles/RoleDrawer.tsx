@@ -4,8 +4,6 @@ import {
   Typography,
   Tabs,
   Tab,
-  IconButton,
-  Divider,
   CircularProgress,
   Table,
   TableHead,
@@ -14,7 +12,6 @@ import {
   TableBody,
   Chip,
 } from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
 import { apiGet, toApiError, type ApiError } from "../../../api";
 import { useConnectionState } from "../../../connectionState";
 import { fmtAge, fmtTs, valueOrDash } from "../../../utils/format";
@@ -27,6 +24,7 @@ import CodeBlock from "../../shared/CodeBlock";
 import Section from "../../shared/Section";
 import RoleActions from "./RoleActions";
 import RightDrawer from "../../layout/RightDrawer";
+import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 
 type RoleDetails = {
   summary: RoleSummary;
@@ -125,21 +123,17 @@ export default function RoleDrawer(props: {
 
   return (
     <RightDrawer open={props.open} onClose={props.onClose}>
-      <Box sx={{ width: 820, p: 2, display: "flex", flexDirection: "column", height: "100%" }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+      <ResourceDrawerShell
+        title={
+          <>
             Role: {name || "-"}{" "}
             <Typography component="span" variant="body2">
               ({ns})
             </Typography>
-          </Typography>
-          <IconButton onClick={props.onClose}>
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
-        <Divider sx={{ my: 1 }} />
-
+          </>
+        }
+        onClose={props.onClose}
+      >
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
             <CircularProgress />
@@ -224,7 +218,7 @@ export default function RoleDrawer(props: {
             </Box>
           </>
         )}
-      </Box>
+      </ResourceDrawerShell>
     </RightDrawer>
   );
 }

@@ -4,8 +4,6 @@ import {
   Typography,
   Tabs,
   Tab,
-  IconButton,
-  Divider,
   CircularProgress,
   Chip,
   Accordion,
@@ -17,7 +15,6 @@ import {
   TableCell,
   TableBody,
 } from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../../../api";
 import { useConnectionState } from "../../../connectionState";
@@ -35,6 +32,7 @@ import ConditionsTable from "../../shared/ConditionsTable";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import RightDrawer from "../../layout/RightDrawer";
+import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 
 type JobDetails = {
   summary: JobSummary;
@@ -201,18 +199,14 @@ export default function JobDrawer(props: {
 
   return (
     <RightDrawer open={props.open} onClose={props.onClose}>
-      <Box sx={{ width: 820, p: 2, display: "flex", flexDirection: "column", height: "100%" }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+      <ResourceDrawerShell
+        title={
+          <>
             Job: {name || "-"} <Typography component="span" variant="body2">({ns})</Typography>
-          </Typography>
-          <IconButton onClick={props.onClose}>
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
-        <Divider sx={{ my: 1 }} />
-
+          </>
+        }
+        onClose={props.onClose}
+      >
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
             <CircularProgress />
@@ -348,7 +342,7 @@ export default function JobDrawer(props: {
             />
           </>
         )}
-      </Box>
+      </ResourceDrawerShell>
     </RightDrawer>
   );
 }

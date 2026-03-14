@@ -4,8 +4,6 @@ import {
   Typography,
   Tabs,
   Tab,
-  IconButton,
-  Divider,
   CircularProgress,
   Chip,
   Accordion,
@@ -17,7 +15,6 @@ import {
   TableCell,
   TableBody,
 } from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGet } from "../../../api";
 import { useConnectionState } from "../../../connectionState";
@@ -33,6 +30,7 @@ import ErrorState from "../../shared/ErrorState";
 import Section from "../../shared/Section";
 import NodeActions from "./NodeActions";
 import RightDrawer from "../../layout/RightDrawer";
+import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 
 type NodeDetails = {
   summary: NodeSummary;
@@ -194,18 +192,7 @@ export default function NodeDrawer(props: {
 
   return (
     <RightDrawer open={props.open} onClose={props.onClose}>
-      <Box sx={{ width: 820, p: 2, display: "flex", flexDirection: "column", height: "100%" }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            Node: {name || "-"}
-          </Typography>
-          <IconButton onClick={props.onClose}>
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
-        <Divider sx={{ my: 1 }} />
-
+      <ResourceDrawerShell title={<>Node: {name || "-"}</>} onClose={props.onClose}>
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
             <CircularProgress />
@@ -375,7 +362,7 @@ export default function NodeDrawer(props: {
             />
           </>
         )}
-      </Box>
+      </ResourceDrawerShell>
     </RightDrawer>
   );
 }

@@ -4,8 +4,6 @@ import {
   Typography,
   Tabs,
   Tab,
-  IconButton,
-  Divider,
   CircularProgress,
   Chip,
   Tooltip,
@@ -21,7 +19,6 @@ import {
   MenuItem,
   TextField,
 } from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
 import { apiGet, toApiError, type ApiError } from "../../../api";
 import { useConnectionState } from "../../../connectionState";
 import IngressDrawer from "../ingresses/IngressDrawer";
@@ -38,6 +35,7 @@ import CodeBlock from "../../shared/CodeBlock";
 import ServiceActions from "./ServiceActions";
 import { createPortForwardSession } from "../../../sessionsApi";
 import RightDrawer from "../../layout/RightDrawer";
+import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 import PortForwardDialog, { type PortForwardOption } from "../../shared/PortForwardDialog";
 import PortForwardCreatedSnackbar from "../../shared/PortForwardCreatedSnackbar";
 import { emitFocusPortForwardsTab } from "../../../activityEvents";
@@ -342,18 +340,14 @@ export default function ServiceDrawer(props: {
 
   return (
     <RightDrawer open={props.open} onClose={props.onClose}>
-      <Box sx={{ width: 820, p: 2, display: "flex", flexDirection: "column", height: "100%" }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+      <ResourceDrawerShell
+        title={
+          <>
             Service: {name || "-"} <Typography component="span" variant="body2">({ns})</Typography>
-          </Typography>
-          <IconButton onClick={props.onClose}>
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
-        <Divider sx={{ my: 1 }} />
-
+          </>
+        }
+        onClose={props.onClose}
+      >
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
             <CircularProgress />
@@ -601,7 +595,7 @@ export default function ServiceDrawer(props: {
             />
           </>
         )}
-      </Box>
+      </ResourceDrawerShell>
       <PortForwardDialog
         open={portForwardDialogOpen}
         busy={creatingPortForward}

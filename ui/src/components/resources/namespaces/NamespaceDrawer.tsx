@@ -4,8 +4,6 @@ import {
   Typography,
   Tabs,
   Tab,
-  IconButton,
-  Divider,
   CircularProgress,
   Chip,
   Table,
@@ -15,7 +13,6 @@ import {
   TableBody,
   LinearProgress,
 } from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
 import { apiGet } from "../../../api";
 import { useConnectionState } from "../../../connectionState";
 import { fmtAge, fmtTs, valueOrDash } from "../../../utils/format";
@@ -36,6 +33,7 @@ import JobDrawer from "../jobs/JobDrawer";
 import HelmReleaseDrawer from "../helm/HelmReleaseDrawer";
 import NamespaceActions from "./NamespaceActions";
 import RightDrawer from "../../layout/RightDrawer";
+import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 
 type NamespaceDetails = {
   summary: NamespaceSummary;
@@ -307,18 +305,7 @@ export default function NamespaceDrawer(props: {
 
   return (
     <RightDrawer open={props.open} onClose={props.onClose}>
-      <Box sx={{ width: 820, p: 2, display: "flex", flexDirection: "column", height: "100%" }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            Namespace: {name || "-"}
-          </Typography>
-          <IconButton onClick={props.onClose}>
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
-        <Divider sx={{ my: 1 }} />
-
+      <ResourceDrawerShell title={<>Namespace: {name || "-"}</>} onClose={props.onClose}>
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
             <CircularProgress />
@@ -622,7 +609,7 @@ export default function NamespaceDrawer(props: {
             />
           </>
         )}
-      </Box>
+      </ResourceDrawerShell>
     </RightDrawer>
   );
 }
