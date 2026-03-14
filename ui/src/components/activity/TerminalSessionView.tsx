@@ -70,6 +70,7 @@ export default function TerminalSessionView({
       });
     }
 
+    // WebSocket: token in query only (browser WS API cannot set Authorization header).
     const loc = window.location;
     const protocol = loc.protocol === "https:" ? "wss:" : "ws:";
     const url =

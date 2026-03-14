@@ -128,9 +128,10 @@ export function toApiError(error: unknown): ApiError {
 
 export async function apiGet<T>(path: string, token: string, opts?: { headers?: Record<string, string> }): Promise<T> {
   let res: Response;
-  const mergedHeaders = { ...(opts?.headers || {}) };
+  // Prefer Authorization header; do not put token in query string (see WebSocket paths for query fallback).
+  const mergedHeaders = { Authorization: `Bearer ${token}`, ...(opts?.headers || {}) };
   try {
-    res = await fetch(path + (path.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token), {
+    res = await fetch(path, {
       headers: mergedHeaders,
     });
   } catch (err) {
@@ -156,9 +157,13 @@ export async function apiGet<T>(path: string, token: string, opts?: { headers?: 
 
 export async function apiPost<T>(path: string, token: string, body: unknown, opts?: { headers?: Record<string, string> }): Promise<T> {
   let res: Response;
-  const mergedHeaders = { "Content-Type": "application/json", ...(opts?.headers || {}) };
+  const mergedHeaders = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    ...(opts?.headers || {}),
+  };
   try {
-    res = await fetch(path + (path.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token), {
+    res = await fetch(path, {
       method: "POST",
       headers: mergedHeaders,
       body: JSON.stringify(body),

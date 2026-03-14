@@ -2950,6 +2950,8 @@ func (s *Server) Router() http.Handler {
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Prefer Authorization: Bearer. Query "token" is fallback only for WebSocket
+		// endpoints, where the browser WebSocket API cannot set custom headers.
 		token := r.Header.Get("Authorization")
 		if strings.HasPrefix(token, "Bearer ") {
 			token = strings.TrimPrefix(token, "Bearer ")

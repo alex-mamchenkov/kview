@@ -240,6 +240,7 @@ type PodNetworkingIngress = {
   addresses?: string[];
 };
 
+// WebSocket URLs use query token: browser WebSocket API cannot set Authorization header.
 function wsURL(path: string, token: string) {
   const u = new URL(window.location.href);
   const proto = u.protocol === "https:" ? "wss:" : "ws:";

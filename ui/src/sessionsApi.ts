@@ -1,9 +1,9 @@
 import { apiPost } from "./api";
 
 export async function apiDelete(path: string, token: string): Promise<void> {
-  const url = path + (path.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token);
-  const res = await fetch(url, {
+  const res = await fetch(path, {
     method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
     let msg = res.statusText || "Request failed";
