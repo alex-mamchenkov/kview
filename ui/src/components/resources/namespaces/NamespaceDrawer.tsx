@@ -13,7 +13,8 @@ import {
   TableBody,
   LinearProgress,
 } from "@mui/material";
-import { apiGet } from "../../../api";
+import { apiGet, toApiError } from "../../../api";
+import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
 import { useConnectionState } from "../../../connectionState";
 import { fmtAge, fmtTs, valueOrDash } from "../../../utils/format";
 import { namespacePhaseChipColor, helmStatusChipColor } from "../../../utils/k8sUi";
@@ -218,7 +219,7 @@ export default function NamespaceDrawer(props: {
     const encodedName = encodeURIComponent(name);
 
     (async () => {
-      const det = await apiGet<any>(`/api/namespaces/${encodedName}`, props.token);
+      const det = await apiGet<ApiItemResponse<NamespaceDetails>>(`/api/namespaces/${encodedName}`, props.token);
       const item: NamespaceDetails | null = det?.item ?? null;
       setDetails(item);
     })()
@@ -226,7 +227,7 @@ export default function NamespaceDrawer(props: {
       .finally(() => setLoading(false));
 
     (async () => {
-      const res = await apiGet<any>(`/api/namespaces/${encodedName}/summary`, props.token);
+      const res = await apiGet<ApiItemResponse<NamespaceSummaryResources>>(`/api/namespaces/${encodedName}/summary`, props.token);
       const item: NamespaceSummaryResources | null = res?.item ?? null;
       setSummaryRes(item);
     })()
@@ -234,15 +235,15 @@ export default function NamespaceDrawer(props: {
       .finally(() => setSummaryLoading(false));
 
     (async () => {
-      const res = await apiGet<any>(`/api/namespaces/${encodedName}/resourcequotas`, props.token);
+      const res = await apiGet<ApiListResponse<ResourceQuota>>(`/api/namespaces/${encodedName}/resourcequotas`, props.token);
       setQuotas(res?.items ?? []);
     })()
-      .catch((e: any) => {
-        const status = e?.status;
-        if (status === 403 || status === 401) {
+      .catch((e: unknown) => {
+        const err = toApiError(e);
+        if (err.status === 403 || err.status === 401) {
           setQuotasForbidden(true);
         } else {
-          setQuotasErr(String(e));
+          setQuotasErr(err.message);
         }
       })
       .finally(() => setQuotasLoading(false));

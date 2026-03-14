@@ -26,6 +26,7 @@ import ClusterRoleDrawer from "../clusterroles/ClusterRoleDrawer";
 import ClusterRoleBindingActions from "./ClusterRoleBindingActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
 import { panelBoxSx, drawerBodySx, drawerTabContentSx, loadingCenterSx } from "../../../theme/sxTokens";
 
 type ClusterRoleBindingDetails = {
@@ -89,11 +90,11 @@ export default function ClusterRoleBindingDrawer(props: {
     setLoading(true);
 
     (async () => {
-      const det = await apiGet<any>(`/api/clusterrolebindings/${encodeURIComponent(name)}`, props.token);
+      const det = await apiGet<ApiItemResponse<ClusterRoleBindingDetails>>(`/api/clusterrolebindings/${encodeURIComponent(name)}`, props.token);
       const item: ClusterRoleBindingDetails | null = det?.item ?? null;
       setDetails(item);
 
-      const ev = await apiGet<any>(`/api/clusterrolebindings/${encodeURIComponent(name)}/events`, props.token);
+      const ev = await apiGet<ApiListResponse<EventDTO>>(`/api/clusterrolebindings/${encodeURIComponent(name)}/events`, props.token);
       setEvents(ev?.items || []);
     })()
       .catch((e) => setErr(toApiError(e)))

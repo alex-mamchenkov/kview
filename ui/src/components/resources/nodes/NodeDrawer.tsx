@@ -31,6 +31,7 @@ import Section from "../../shared/Section";
 import NodeActions from "./NodeActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import type { ApiItemResponse } from "../../../types/api";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -157,7 +158,7 @@ export default function NodeDrawer(props: {
     setLoading(true);
 
     (async () => {
-      const det = await apiGet<any>(`/api/nodes/${encodeURIComponent(name)}`, props.token);
+      const det = await apiGet<ApiItemResponse<NodeDetails>>(`/api/nodes/${encodeURIComponent(name)}`, props.token);
       const item: NodeDetails | null = det?.item ?? null;
       setDetails(item);
     })()

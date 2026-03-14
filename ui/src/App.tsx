@@ -28,6 +28,7 @@ import HelmReleasesTable from "./components/resources/helm/HelmReleasesTable";
 import HelmChartsTable from "./components/resources/helm/HelmChartsTable";
 import CustomResourceDefinitionsTable from "./components/resources/customresourcedefinitions/CustomResourceDefinitionsTable";
 import { apiGet, apiPost, toApiError } from "./api";
+import type { ApiContextsResponse, ApiNamespacesListResponse } from "./types/api";
 import { loadState, saveState, toggleFavouriteNamespace, type Section } from "./state";
 import { useConnectionState } from "./connectionState";
 import ConnectionBanner from "./components/shared/ConnectionBanner";
@@ -47,7 +48,7 @@ function AppInner() {
   const { lastRecoveryShownAt } = useConnectionState();
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [lastRecoverySeenAt, setLastRecoverySeenAt] = useState<number | null>(null);
-  const [contexts, setContexts] = useState<any[]>([]);
+  const [contexts, setContexts] = useState<Array<{ name: string }>>([]);
   const [activeContext, setActiveContext] = useState<string>("");
 
   const [namespaces, setNamespaces] = useState<string[]>([]);
@@ -77,12 +78,12 @@ function AppInner() {
   useEffect(() => {
     (async () => {
       // 1) contexts
-      const ctxRes = await apiGet<any>("/api/contexts", token);
+      const ctxRes = await apiGet<ApiContextsResponse>("/api/contexts", token);
       const ctxs = ctxRes.contexts || [];
       setContexts(ctxs);
 
       const stateCtx = appState.activeContext;
-      const ctxExists = stateCtx && ctxs.some((c: any) => c.name === stateCtx);
+      const ctxExists = stateCtx && ctxs.some((c) => c.name === stateCtx);
       const chosenCtx = ctxExists ? stateCtx : (ctxs[0]?.name || "");
 
       if (chosenCtx) {
@@ -127,10 +128,10 @@ function AppInner() {
 
   async function fetchNamespaces(currentToken: string): Promise<{ limited: boolean; items: string[] }> {
     try {
-      const nsRes = await apiGet<any>("/api/namespaces", currentToken);
+      const nsRes = await apiGet<ApiNamespacesListResponse>("/api/namespaces", currentToken);
       return {
         limited: !!nsRes.limited,
-        items: (nsRes.items || []).map((x: any) => x.name),
+        items: (nsRes.items || []).map((x) => x.name),
       };
     } catch (err) {
       const apiErr = toApiError(err);

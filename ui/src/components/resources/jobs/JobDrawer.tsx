@@ -33,6 +33,7 @@ import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -144,14 +145,14 @@ export default function JobDrawer(props: {
     setLoading(true);
 
     (async () => {
-      const det = await apiGet<any>(
+      const det = await apiGet<ApiItemResponse<JobDetails>>(
         `/api/namespaces/${encodeURIComponent(ns)}/jobs/${encodeURIComponent(name)}`,
         props.token
       );
       const item: JobDetails | null = det?.item ?? null;
       setDetails(item);
 
-      const ev = await apiGet<any>(
+      const ev = await apiGet<ApiListResponse<EventDTO>>(
         `/api/namespaces/${encodeURIComponent(ns)}/jobs/${encodeURIComponent(name)}/events`,
         props.token
       );

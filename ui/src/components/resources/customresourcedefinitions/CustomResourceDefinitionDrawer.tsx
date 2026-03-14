@@ -26,6 +26,7 @@ import CodeBlock from "../../shared/CodeBlock";
 import CRDActions from "./CRDActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -111,11 +112,11 @@ export default function CustomResourceDefinitionDrawer(props: {
     setLoading(true);
 
     (async () => {
-      const det = await apiGet<any>(`/api/customresourcedefinitions/${encodeURIComponent(name)}`, props.token);
+      const det = await apiGet<ApiItemResponse<CRDDetails>>(`/api/customresourcedefinitions/${encodeURIComponent(name)}`, props.token);
       const item: CRDDetails | null = det?.item ?? null;
       setDetails(item);
 
-      const ev = await apiGet<any>(`/api/customresourcedefinitions/${encodeURIComponent(name)}/events`, props.token);
+      const ev = await apiGet<ApiListResponse<EventDTO>>(`/api/customresourcedefinitions/${encodeURIComponent(name)}/events`, props.token);
       setEvents(ev?.items || []);
     })()
       .catch((e) => setErr(String(e)))

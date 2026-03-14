@@ -154,7 +154,7 @@ export async function apiGet<T>(path: string, token: string, opts?: { headers?: 
   }
 }
 
-export async function apiPost<T>(path: string, token: string, body: any, opts?: { headers?: Record<string, string> }): Promise<T> {
+export async function apiPost<T>(path: string, token: string, body: unknown, opts?: { headers?: Record<string, string> }): Promise<T> {
   let res: Response;
   const mergedHeaders = { "Content-Type": "application/json", ...(opts?.headers || {}) };
   try {
@@ -189,7 +189,7 @@ export async function apiGetWithContext<T>(path: string, token: string, contextN
   return apiGet<T>(path, token, { headers: { "X-Kview-Context": contextName } });
 }
 
-export async function apiPostWithContext<T>(path: string, token: string, contextName: string, body: any): Promise<T> {
+export async function apiPostWithContext<T>(path: string, token: string, contextName: string, body: unknown): Promise<T> {
   if (!contextName) throw new Error("Missing active context");
   return apiPost<T>(path, token, body, { headers: { "X-Kview-Context": contextName } });
 }

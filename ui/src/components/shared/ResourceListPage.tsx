@@ -6,7 +6,7 @@ import useEmptyListAccessCheck from "../../utils/useEmptyListAccessCheck";
 import useListFilters from "../../utils/useListFilters";
 import type { AccessReviewResource } from "../../utils/k8sResources";
 import ListStateOverlay from "./ListStateOverlay";
-import ResourceTableToolbar from "./ResourceTableToolbar";
+import ResourceTableToolbar, { type ResourceTableToolbarProps } from "./ResourceTableToolbar";
 
 export type ResourceListPageDrawerProps<TRow extends { id: string } = { id: string }> = {
   selectedId: string | null;
@@ -135,7 +135,7 @@ export default function ResourceListPage<TRow extends { id: string }>({
           hideFooterSelectedRowCount
           rowSelectionModel={selectionModel}
           onRowSelectionModelChange={(m) => setSelectionModel(m)}
-          onRowDoubleClick={(params) => handleRowDoubleClick(params.row as TRow)}
+          onRowDoubleClick={(params) => handleRowDoubleClick(params.row)}
           initialState={{
             sorting: { sortModel },
           }}
@@ -153,7 +153,7 @@ export default function ResourceListPage<TRow extends { id: string }>({
               refreshSec,
               onRefreshChange: setRefreshSec,
               quickFilters,
-            },
+            } as ResourceTableToolbarProps,
             noRowsOverlay: {
               error,
               accessDenied,

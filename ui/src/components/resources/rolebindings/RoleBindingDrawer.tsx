@@ -28,6 +28,7 @@ import ClusterRoleDrawer from "../clusterroles/ClusterRoleDrawer";
 import RoleBindingActions from "./RoleBindingActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
 import { drawerBodySx, drawerTabContentSx, panelBoxSx } from "../../../theme/sxTokens";
 
 type RoleBindingDetails = {
@@ -96,14 +97,14 @@ export default function RoleBindingDrawer(props: {
     setLoading(true);
 
     (async () => {
-      const det = await apiGet<any>(
+      const det = await apiGet<ApiItemResponse<RoleBindingDetails>>(
         `/api/namespaces/${encodeURIComponent(ns)}/rolebindings/${encodeURIComponent(name)}`,
         props.token
       );
       const item: RoleBindingDetails | null = det?.item ?? null;
       setDetails(item);
 
-      const ev = await apiGet<any>(
+      const ev = await apiGet<ApiListResponse<EventDTO>>(
         `/api/namespaces/${encodeURIComponent(ns)}/rolebindings/${encodeURIComponent(name)}/events`,
         props.token
       );

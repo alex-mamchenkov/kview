@@ -26,7 +26,7 @@ export default function useListFilters<T>({
   rows,
   lastRefresh,
   filterPredicate,
-  getQuickFilterKey = (row: any) => String(row?.name ?? ""),
+  getQuickFilterKey = (row: T) => String((row as { name?: string })?.name ?? ""),
   quickFilterPatterns = defaultQuickFilterPatterns,
   minQuickFilterCount = 3,
 }: UseListFiltersOptions<T>): UseListFiltersResult<T> {

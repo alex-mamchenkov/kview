@@ -41,6 +41,7 @@ import CustomResourceDefinitionDrawer from "../customresourcedefinitions/CustomR
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import type { ApiItemResponse } from "../../../types/api";
 import { panelBoxSx, drawerBodySx, loadingCenterSx } from "../../../theme/sxTokens";
 
 type HelmHook = {
@@ -120,7 +121,7 @@ export default function HelmReleaseDrawer(props: {
     setDrawerNamespace(null);
 
     (async () => {
-      const det = await apiGet<any>(
+      const det = await apiGet<ApiItemResponse<HelmReleaseDetails>>(
         `/api/namespaces/${encodeURIComponent(ns)}/helmreleases/${encodeURIComponent(name)}`,
         props.token,
       );

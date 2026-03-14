@@ -40,7 +40,7 @@ const columns: GridColDef<Row>[] = [
     headerName: "Roles",
     width: 200,
     renderCell: (p) => {
-      const roles = (p.row?.roles || []) as string[];
+      const roles = p.row?.roles ?? [];
       return roles.length ? roles.join(", ") : "-";
     },
     sortable: false,

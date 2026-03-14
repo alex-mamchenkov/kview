@@ -44,6 +44,7 @@ import NodeDrawer from "../nodes/NodeDrawer";
 import PodActions from "./PodActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
 import {
   panelBoxSx,
   panelBoxCompactSx,
@@ -565,7 +566,7 @@ export default function PodDrawer(props: {
     setLoading(true);
 
     (async () => {
-      const det = await apiGet<any>(
+      const det = await apiGet<ApiItemResponse<PodDetails>>(
         `/api/namespaces/${encodeURIComponent(ns)}/pods/${encodeURIComponent(name)}`,
         props.token
       );
@@ -596,7 +597,7 @@ export default function PodDrawer(props: {
       setEnvShowRawByContainer({});
       setEventsContainerFilter("");
 
-      const ev = await apiGet<any>(
+      const ev = await apiGet<ApiListResponse<EventDTO>>(
         `/api/namespaces/${encodeURIComponent(ns)}/pods/${encodeURIComponent(name)}/events`,
         props.token
       );
@@ -614,7 +615,7 @@ export default function PodDrawer(props: {
     setNetworkingServicesLoading(true);
     setNetworkingServicesErr(null);
 
-    apiGet<any>(`/api/namespaces/${encodeURIComponent(ns)}/pods/${encodeURIComponent(name)}/services`, props.token)
+    apiGet<ApiListResponse<PodNetworkingService>>(`/api/namespaces/${encodeURIComponent(ns)}/pods/${encodeURIComponent(name)}/services`, props.token)
       .then((res) => {
         const items: PodNetworkingService[] = res?.items || [];
         setNetworkingServices(items);
@@ -648,7 +649,7 @@ export default function PodDrawer(props: {
     (async () => {
       const results = await Promise.allSettled(
         networkingServices.map((svc) =>
-          apiGet<any>(
+          apiGet<ApiListResponse<PodNetworkingIngress>>(
             `/api/namespaces/${encodeURIComponent(svc.namespace)}/services/${encodeURIComponent(svc.name)}/ingresses`,
             props.token
           )

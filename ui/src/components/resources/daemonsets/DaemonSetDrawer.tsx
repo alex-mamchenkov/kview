@@ -32,6 +32,7 @@ import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -167,14 +168,14 @@ export default function DaemonSetDrawer(props: {
     setLoading(true);
 
     (async () => {
-      const det = await apiGet<any>(
+      const det = await apiGet<ApiItemResponse<DaemonSetDetails>>(
         `/api/namespaces/${encodeURIComponent(ns)}/daemonsets/${encodeURIComponent(name)}`,
         props.token
       );
       const item: DaemonSetDetails | null = det?.item ?? null;
       setDetails(item);
 
-      const ev = await apiGet<any>(
+      const ev = await apiGet<ApiListResponse<EventDTO>>(
         `/api/namespaces/${encodeURIComponent(ns)}/daemonsets/${encodeURIComponent(name)}/events`,
         props.token
       );

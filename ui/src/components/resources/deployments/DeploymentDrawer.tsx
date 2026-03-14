@@ -36,6 +36,7 @@ import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -198,14 +199,14 @@ export default function DeploymentDrawer(props: {
     setLoading(true);
 
     (async () => {
-      const det = await apiGet<any>(
+      const det = await apiGet<ApiItemResponse<DeploymentDetails>>(
         `/api/namespaces/${encodeURIComponent(ns)}/deployments/${encodeURIComponent(name)}`,
         props.token
       );
       const item: DeploymentDetails | null = det?.item ?? null;
       setDetails(item);
 
-      const ev = await apiGet<any>(
+      const ev = await apiGet<ApiListResponse<EventDTO>>(
         `/api/namespaces/${encodeURIComponent(ns)}/deployments/${encodeURIComponent(name)}/events`,
         props.token
       );

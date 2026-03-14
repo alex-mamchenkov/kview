@@ -26,6 +26,7 @@ import ErrorState from "../../shared/ErrorState";
 import ServiceAccountActions from "./ServiceAccountActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -118,14 +119,14 @@ export default function ServiceAccountDrawer(props: {
     setLoading(true);
 
     (async () => {
-      const det = await apiGet<any>(
+      const det = await apiGet<ApiItemResponse<ServiceAccountDetails>>(
         `/api/namespaces/${encodeURIComponent(ns)}/serviceaccounts/${encodeURIComponent(name)}`,
         props.token
       );
       const item: ServiceAccountDetails | null = det?.item ?? null;
       setDetails(item);
 
-      const ev = await apiGet<any>(
+      const ev = await apiGet<ApiListResponse<EventDTO>>(
         `/api/namespaces/${encodeURIComponent(ns)}/serviceaccounts/${encodeURIComponent(name)}/events`,
         props.token
       );
@@ -142,7 +143,7 @@ export default function ServiceAccountDrawer(props: {
     setRoleBindingsLoading(true);
     setRoleBindingsErr(null);
 
-    apiGet<any>(
+    apiGet<ApiListResponse<RoleBindingListItem>>(
       `/api/namespaces/${encodeURIComponent(ns)}/serviceaccounts/${encodeURIComponent(name)}/rolebindings`,
       props.token
     )

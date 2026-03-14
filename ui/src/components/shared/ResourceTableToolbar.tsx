@@ -16,7 +16,7 @@ import type { QuickFilter } from "../../utils/listFilters";
 import { refreshOptions } from "../../utils/listFilters";
 import { actionRowSx } from "../../theme/sxTokens";
 
-type ResourceTableToolbarProps = {
+export type ResourceTableToolbarProps = {
   filterLabel: string;
   filter: string;
   onFilterChange: (value: string) => void;

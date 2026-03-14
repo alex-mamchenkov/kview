@@ -21,7 +21,7 @@ import type { Section } from "../state";
 import { getResourceLabel, isClusterScopedSection, sidebarGroups } from "../utils/k8sResources";
 
 type Props = {
-  contexts: any[];
+  contexts: Array<{ name: string }>;
   activeContext: string;
   onSelectContext: (name: string) => void;
 

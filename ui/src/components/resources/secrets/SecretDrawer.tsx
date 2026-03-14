@@ -25,6 +25,7 @@ import CodeBlock from "../../shared/CodeBlock";
 import SecretActions from "./SecretActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -113,14 +114,14 @@ export default function SecretDrawer(props: {
     setLoading(true);
 
     (async () => {
-      const det = await apiGet<any>(
+      const det = await apiGet<ApiItemResponse<SecretDetails>>(
         `/api/namespaces/${encodeURIComponent(ns)}/secrets/${encodeURIComponent(name)}`,
         props.token
       );
       const item: SecretDetails | null = det?.item ?? null;
       setDetails(item);
 
-      const ev = await apiGet<any>(
+      const ev = await apiGet<ApiListResponse<EventDTO>>(
         `/api/namespaces/${encodeURIComponent(ns)}/secrets/${encodeURIComponent(name)}/events`,
         props.token
       );

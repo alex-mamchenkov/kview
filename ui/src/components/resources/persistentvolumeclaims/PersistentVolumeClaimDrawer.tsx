@@ -24,6 +24,7 @@ import PersistentVolumeDrawer from "../persistentvolumes/PersistentVolumeDrawer"
 import PVCActions from "./PVCActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -157,14 +158,14 @@ export default function PersistentVolumeClaimDrawer(props: {
     setLoading(true);
 
     (async () => {
-      const det = await apiGet<any>(
+      const det = await apiGet<ApiItemResponse<PersistentVolumeClaimDetails>>(
         `/api/namespaces/${encodeURIComponent(ns)}/persistentvolumeclaims/${encodeURIComponent(name)}`,
         props.token
       );
       const item: PersistentVolumeClaimDetails | null = det?.item ?? null;
       setDetails(item);
 
-      const ev = await apiGet<any>(
+      const ev = await apiGet<ApiListResponse<EventDTO>>(
         `/api/namespaces/${encodeURIComponent(ns)}/persistentvolumeclaims/${encodeURIComponent(name)}/events`,
         props.token
       );

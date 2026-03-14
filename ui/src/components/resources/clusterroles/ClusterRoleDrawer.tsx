@@ -25,6 +25,7 @@ import Section from "../../shared/Section";
 import ClusterRoleActions from "./ClusterRoleActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -92,11 +93,11 @@ export default function ClusterRoleDrawer(props: {
     setLoading(true);
 
     (async () => {
-      const det = await apiGet<any>(`/api/clusterroles/${encodeURIComponent(name)}`, props.token);
+      const det = await apiGet<ApiItemResponse<ClusterRoleDetails>>(`/api/clusterroles/${encodeURIComponent(name)}`, props.token);
       const item: ClusterRoleDetails | null = det?.item ?? null;
       setDetails(item);
 
-      const ev = await apiGet<any>(`/api/clusterroles/${encodeURIComponent(name)}/events`, props.token);
+      const ev = await apiGet<ApiListResponse<EventDTO>>(`/api/clusterroles/${encodeURIComponent(name)}/events`, props.token);
       setEvents(ev?.items || []);
     })()
       .catch((e) => setErr(toApiError(e)))
