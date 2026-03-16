@@ -74,6 +74,7 @@ type NamespaceSummaryResources = {
   deploymentHealth: DeploymentHealth;
   problematic: ProblematicResource[];
   helmReleases?: NamespaceHelmRelease[];
+  meta?: NamespaceSummaryMeta;
 };
 
 type ResourceCounts = {
@@ -115,6 +116,14 @@ type NamespaceHelmRelease = {
   name: string;
   status: string;
   revision: number;
+};
+
+type NamespaceSummaryMeta = {
+  freshness: string;
+  coverage: string;
+  degradation: string;
+  completeness: string;
+  state: string;
 };
 
 type ResourceQuotaEntry = {

@@ -40,6 +40,7 @@ type NamespaceSummaryResourcesDTO struct {
 	DeployHealth NamespaceDeploymentHealth `json:"deploymentHealth"`
 	Problematic  []ProblematicResource     `json:"problematic"`
 	HelmReleases []NamespaceHelmRelease    `json:"helmReleases,omitempty"`
+	Meta         *NamespaceSummaryMetaDTO  `json:"meta,omitempty"`
 }
 
 type NamespaceResourceCounts struct {
@@ -81,4 +82,15 @@ type NamespaceHelmRelease struct {
 	Name     string `json:"name"`
 	Status   string `json:"status"`
 	Revision int    `json:"revision"`
+}
+
+// NamespaceSummaryMetaDTO describes projection metadata for the namespace summary.
+type NamespaceSummaryMetaDTO struct {
+	Freshness   string `json:"freshness"`
+	Coverage    string `json:"coverage"`
+	Degradation string `json:"degradation"`
+	Completeness string `json:"completeness"`
+	// State is a coarse overall state such as:
+	// "pending", "denied", "empty", "partial_proxy", "partial_access", "degraded", "complete".
+	State string `json:"state"`
 }

@@ -572,13 +572,12 @@ func (s *Server) Router() http.Handler {
 			ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 			defer cancel()
 
-			clients, active, err := s.mgr.GetClients(ctx)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
-				return
-			}
+			active := s.mgr.ActiveContext()
 
-			summary, err := kube.GetNamespaceSummary(ctx, clients, name)
+			// The dataplane manager is constructed by this package, so the concrete type is known.
+			proj, err := s.dp.(interface {
+				NamespaceSummaryProjection(ctx context.Context, clusterName, namespace string) (dataplane.NamespaceSummaryProjection, error)
+			}).NamespaceSummaryProjection(ctx, active, name)
 			if err != nil {
 				status := http.StatusInternalServerError
 				if apierrors.IsForbidden(err) {
@@ -588,7 +587,10 @@ func (s *Server) Router() http.Handler {
 				return
 			}
 
-			writeJSON(w, http.StatusOK, map[string]any{"active": active, "item": summary})
+			writeJSON(w, http.StatusOK, map[string]any{
+				"active": active,
+				"item":   proj.Resources,
+			})
 		})
 
 		api.Get("/namespaces/{name}/resourcequotas", func(w http.ResponseWriter, r *http.Request) {
