@@ -281,6 +281,7 @@ export default function NamespaceDrawer(props: {
   const deployHealth = summaryRes?.deploymentHealth;
   const problematic = summaryRes?.problematic || [];
   const helmReleases = summaryRes?.helmReleases || [];
+  const summaryMeta = summaryRes?.meta;
 
   function navigateTo(sectionKey: string) {
     if (props.onNavigate && name) {
@@ -355,6 +356,15 @@ export default function NamespaceDrawer(props: {
                   </Box>
 
                   <MetadataSection labels={metadata?.labels} annotations={metadata?.annotations} />
+
+                  {summaryMeta && (
+                    <Section title="Summary status">
+                      <Typography variant="body2" color="text.secondary">
+                        State: {summaryMeta.state || "unknown"} · Freshness: {summaryMeta.freshness || "unknown"} · Coverage:{" "}
+                        {summaryMeta.coverage || "unknown"}
+                      </Typography>
+                    </Section>
+                  )}
 
                   {/* RESOURCE COUNTS */}
                   {summaryLoading ? (

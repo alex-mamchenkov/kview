@@ -188,6 +188,13 @@ type clusterPlane struct {
 	nodesMu sync.RWMutex
 	nodes   NodesSnapshot
 
+	// Namespace-scoped snapshots for first-wave resources.
+	podsMu sync.RWMutex
+	pods   map[string]PodsSnapshot
+
+	depsMu sync.RWMutex
+	deps   map[string]DeploymentsSnapshot
+
 	// Observers state for this cluster.
 	obsMu     sync.Mutex
 	observers *clusterObservers
@@ -201,6 +208,8 @@ func newClusterPlane(name string, profile Profile, mode DiscoveryMode, scope Obs
 		scope:       scope,
 		health:      PlaneHealthUnknown,
 		capRegistry: NewCapabilityRegistry(),
+		pods:        make(map[string]PodsSnapshot),
+		deps:        make(map[string]DeploymentsSnapshot),
 	}
 }
 
@@ -236,6 +245,20 @@ type NamespaceSnapshot struct {
 // NodesSnapshot is a raw snapshot of nodes plus metadata and any normalized error.
 type NodesSnapshot struct {
 	Items []dto.NodeListItemDTO
+	Meta  SnapshotMetadata
+	Err   *NormalizedError
+}
+
+// PodsSnapshot is a raw snapshot of pods in a namespace plus metadata and any normalized error.
+type PodsSnapshot struct {
+	Items []dto.PodListItemDTO
+	Meta  SnapshotMetadata
+	Err   *NormalizedError
+}
+
+// DeploymentsSnapshot is a raw snapshot of deployments in a namespace plus metadata and any normalized error.
+type DeploymentsSnapshot struct {
+	Items []dto.DeploymentListItemDTO
 	Meta  SnapshotMetadata
 	Err   *NormalizedError
 }
@@ -394,6 +417,164 @@ func (p *clusterPlane) NodesSnapshot(ctx context.Context, sched *simpleScheduler
 	p.nodesMu.Lock()
 	p.nodes = out
 	p.nodesMu.Unlock()
+
+	return out, runErr
+}
+
+// PodsSnapshot returns a raw snapshot for pods in the given namespace plus metadata and any normalized error.
+func (p *clusterPlane) PodsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (PodsSnapshot, error) {
+	key := workKey{
+		Cluster:   p.name,
+		Class:     WorkClassSnapshot,
+		Kind:      ResourceKindPods,
+		Namespace: namespace,
+	}
+
+	p.podsMu.RLock()
+	if snap, ok := p.pods[namespace]; ok && !snap.Meta.ObservedAt.IsZero() &&
+		time.Since(snap.Meta.ObservedAt) < 15*time.Second {
+		p.podsMu.RUnlock()
+		return snap, nil
+	}
+	p.podsMu.RUnlock()
+
+	var out PodsSnapshot
+	runErr := sched.Run(ctx, key, func(runCtx context.Context) error {
+		if clients == nil {
+			out.Meta = SnapshotMetadata{
+				ObservedAt:  time.Now().UTC(),
+				Freshness:   FreshnessClassUnknown,
+				Coverage:    CoverageClassUnknown,
+				Degradation: DegradationClassSevere,
+				Completeness: CompletenessClassUnknown,
+			}
+			return nil
+		}
+
+		c, _, err := clients.GetClientsForContext(runCtx, p.name)
+		if err != nil {
+			n := NormalizeError(err)
+			out.Err = &n
+			out.Meta = SnapshotMetadata{
+				ObservedAt:  time.Now().UTC(),
+				Freshness:   FreshnessClassUnknown,
+				Coverage:    CoverageClassUnknown,
+				Degradation: DegradationClassSevere,
+				Completeness: CompletenessClassUnknown,
+			}
+			return err
+		}
+
+		items, err := kube.ListPods(runCtx, c, namespace)
+		if err != nil {
+			n := NormalizeError(err)
+			out.Err = &n
+			p.capRegistry.LearnReadResult(p.name, "", "pods", namespace, "list", CapabilityScopeNamespace, err)
+			out.Meta = SnapshotMetadata{
+				ObservedAt:  time.Now().UTC(),
+				Freshness:   FreshnessClassCold,
+				Coverage:    CoverageClassUnknown,
+				Degradation: DegradationClassMinor,
+				Completeness: CompletenessClassUnknown,
+			}
+			return err
+		}
+
+		p.capRegistry.LearnReadResult(p.name, "", "pods", namespace, "list", CapabilityScopeNamespace, nil)
+
+		out.Items = items
+		out.Meta = SnapshotMetadata{
+			ObservedAt:  time.Now().UTC(),
+			Freshness:   FreshnessClassHot,
+			Coverage:    CoverageClassFull,
+			Degradation: DegradationClassNone,
+			Completeness: CompletenessClassComplete,
+		}
+		return nil
+	})
+
+	p.podsMu.Lock()
+	p.pods[namespace] = out
+	p.podsMu.Unlock()
+
+	return out, runErr
+}
+
+// DeploymentsSnapshot returns a raw snapshot for deployments in the given namespace plus metadata and any normalized error.
+func (p *clusterPlane) DeploymentsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (DeploymentsSnapshot, error) {
+	key := workKey{
+		Cluster:   p.name,
+		Class:     WorkClassSnapshot,
+		Kind:      ResourceKindDeployments,
+		Namespace: namespace,
+	}
+
+	p.depsMu.RLock()
+	if snap, ok := p.deps[namespace]; ok && !snap.Meta.ObservedAt.IsZero() &&
+		time.Since(snap.Meta.ObservedAt) < 15*time.Second {
+		p.depsMu.RUnlock()
+		return snap, nil
+	}
+	p.depsMu.RUnlock()
+
+	var out DeploymentsSnapshot
+	runErr := sched.Run(ctx, key, func(runCtx context.Context) error {
+		if clients == nil {
+			out.Meta = SnapshotMetadata{
+				ObservedAt:  time.Now().UTC(),
+				Freshness:   FreshnessClassUnknown,
+				Coverage:    CoverageClassUnknown,
+				Degradation: DegradationClassSevere,
+				Completeness: CompletenessClassUnknown,
+			}
+			return nil
+		}
+
+		c, _, err := clients.GetClientsForContext(runCtx, p.name)
+		if err != nil {
+			n := NormalizeError(err)
+			out.Err = &n
+			out.Meta = SnapshotMetadata{
+				ObservedAt:  time.Now().UTC(),
+				Freshness:   FreshnessClassUnknown,
+				Coverage:    CoverageClassUnknown,
+				Degradation: DegradationClassSevere,
+				Completeness: CompletenessClassUnknown,
+			}
+			return err
+		}
+
+		items, err := kube.ListDeployments(runCtx, c, namespace)
+		if err != nil {
+			n := NormalizeError(err)
+			out.Err = &n
+			p.capRegistry.LearnReadResult(p.name, "", "deployments", namespace, "list", CapabilityScopeNamespace, err)
+			out.Meta = SnapshotMetadata{
+				ObservedAt:  time.Now().UTC(),
+				Freshness:   FreshnessClassCold,
+				Coverage:    CoverageClassUnknown,
+				Degradation: DegradationClassMinor,
+				Completeness: CompletenessClassUnknown,
+			}
+			return err
+		}
+
+		p.capRegistry.LearnReadResult(p.name, "", "deployments", namespace, "list", CapabilityScopeNamespace, nil)
+
+		out.Items = items
+		out.Meta = SnapshotMetadata{
+			ObservedAt:  time.Now().UTC(),
+			Freshness:   FreshnessClassHot,
+			Coverage:    CoverageClassFull,
+			Degradation: DegradationClassNone,
+			Completeness: CompletenessClassComplete,
+		}
+		return nil
+	})
+
+	p.depsMu.Lock()
+	p.deps[namespace] = out
+	p.depsMu.Unlock()
 
 	return out, runErr
 }
