@@ -66,6 +66,9 @@ type DataPlaneManager interface {
 
 	// EnsureObservers makes sure observers are running for the given cluster.
 	EnsureObservers(ctx context.Context, clusterName string)
+
+	// DashboardSummary returns a minimal cluster dashboard backed by dataplane snapshots.
+	DashboardSummary(ctx context.Context, clusterName string) ClusterDashboardSummary
 }
 
 // ManagerConfig describes construction-time parameters for the data plane manager.

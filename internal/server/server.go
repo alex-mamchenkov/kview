@@ -487,6 +487,22 @@ func (s *Server) Router() http.Handler {
 			})
 		})
 
+		api.Get("/dashboard/cluster", func(w http.ResponseWriter, r *http.Request) {
+			ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+			defer cancel()
+
+			active := s.mgr.ActiveContext()
+
+			// Ensure observers are running for the active cluster so snapshots stay reasonably fresh.
+			s.dp.EnsureObservers(ctx, active)
+
+			summary := s.dp.DashboardSummary(ctx, active)
+			writeJSON(w, http.StatusOK, map[string]any{
+				"active":  active,
+				"item":    summary,
+			})
+		})
+
 		api.Get("/contexts", func(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{
 				"active":   s.mgr.ActiveContext(),
