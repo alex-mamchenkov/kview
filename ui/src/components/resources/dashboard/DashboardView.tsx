@@ -14,6 +14,10 @@ export default function DashboardView(props: Props) {
         <Typography variant="body2" color="text.secondary">
           Shows current dataplane state for the active context, including snapshot freshness and observer status.
         </Typography>
+        <Typography variant="caption" color="text.secondary">
+          Stage 5A actively runs the focused profile with targeted discovery; broader profiles and discovery modes remain
+          documented contracts for later stages.
+        </Typography>
       </Box>
       <DataplaneStatus token={props.token} />
     </Box>

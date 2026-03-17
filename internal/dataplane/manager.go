@@ -20,8 +20,9 @@ const (
 	SchedulerWorkTypeProjections  SchedulerWorkType = "projections"
 )
 
-// Scheduler defines the minimal contract for a future work scheduler.
-// Stage 5B only defines the interface without starting background work.
+// Scheduler defines the minimal contract for future dataplane work scheduling.
+// Stage 5A uses the concrete simple scheduler below for snapshot work and keeps
+// this interface as an architectural boundary rather than an actively injected policy.
 type Scheduler interface {
 	// Enqueue signals that work of the given type should be performed for the provided scope.
 	Enqueue(ctx context.Context, workType SchedulerWorkType, scope ObservationScope) error
@@ -97,7 +98,8 @@ func (mc managerClients) GetClientsForContext(ctx context.Context, name string) 
 }
 
 // manager is the foundational implementation of DataPlaneManager.
-// Stage 5B keeps this intentionally narrow and synchronous.
+// Stage 5A keeps it intentionally narrow: per-cluster planes, scheduler-mediated
+// snapshot reads, namespace summary projection, and observer lifecycle tracking.
 type manager struct {
 	rt runtime.RuntimeManager
 

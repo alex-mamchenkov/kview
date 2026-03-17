@@ -2,44 +2,48 @@ package dataplane
 
 import "time"
 
-// Profile represents a high-level data plane behavior profile.
-// Only ProfileFocused is active today; other profiles are reserved for future
-// stages and documented here to reflect the intended architecture.
+// Profile represents a high-level data plane behavior profile contract.
+// Only ProfileFocused is active runtime behavior in Stage 5A; the remaining
+// values are documented placeholders for later stages and must not be
+// interpreted as selectable behavior yet.
 type Profile string
 
 const (
-	// ProfileManual disables background observation; reads happen on demand only.
+	// ProfileManual is reserved for future "reads only on demand" behavior.
 	ProfileManual Profile = "manual"
 	// ProfileFocused prioritizes a small, operator-selected scope (current namespace,
 	// pinned namespaces, first-wave resources). This is the current default.
 	ProfileFocused Profile = "focused"
-	// ProfileBalanced is intended to balance breadth of observation with resource use.
+	// ProfileBalanced is a reserved future profile for wider observation with bounds.
 	ProfileBalanced Profile = "balanced"
-	// ProfileWide is intended for broader observation across many namespaces/resources.
+	// ProfileWide is a reserved future profile for broader observation.
 	ProfileWide Profile = "wide"
-	// ProfileDiagnostic is intended for short-lived, more intensive observation
-	// during troubleshooting. Not yet implemented.
+	// ProfileDiagnostic is reserved for future short-lived intensive observation.
 	ProfileDiagnostic Profile = "diagnostic"
 )
 
-// DiscoveryMode represents how the data plane discovers clusters and scopes.
-// Only DiscoveryModeTargeted is active today; other modes are reserved for
-// future stages and documented here to reflect the intended architecture.
+// DiscoveryMode represents the dataplane discovery contract.
+// Only DiscoveryModeTargeted is active runtime behavior in Stage 5A; the other
+// values are placeholders for later stages.
 type DiscoveryMode string
 
 const (
-	// DiscoveryModePassive does not perform its own discovery; it reacts only to
-	// explicit UI-driven scopes. Not yet implemented.
+	// DiscoveryModePassive is reserved for future UI-driven-only discovery.
 	DiscoveryModePassive DiscoveryMode = "passive"
 	// DiscoveryModeTargeted focuses discovery on the current cluster/context and
 	// first-wave resources. This is the current default.
 	DiscoveryModeTargeted DiscoveryMode = "targeted"
-	// DiscoveryModeAdaptive is intended to expand or contract observation based on
-	// recent activity or signals. Not yet implemented.
+	// DiscoveryModeAdaptive is reserved for future activity-aware expansion.
 	DiscoveryModeAdaptive DiscoveryMode = "adaptive"
 )
 
-// ObservationScope is a first-class structure describing what a plane should observe.
+// ObservationScope describes the intended plane scope contract.
+// Stage 5A stores the scope explicitly, but only the default empty scope is
+// exercised in runtime behavior:
+//   - empty Namespaces means cluster-wide namespace and node snapshots
+//   - empty ResourceKinds means the built-in first-wave kinds owned today
+//   - namespace-scoped pods/deployments are still fetched on demand by
+//     projection-backed views rather than by a configurable observer policy
 type ObservationScope struct {
 	// ClusterName is the logical identifier of the cluster context.
 	ClusterName string

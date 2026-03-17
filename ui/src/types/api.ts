@@ -14,7 +14,9 @@ export type ApiContextsResponse = { contexts?: Array<{ name: string }> };
 
 /** /api/namespaces list response (list of namespace objects with name) */
 export type ApiNamespacesListResponse = {
+  active?: string;
   limited?: boolean;
+  observed?: string;
   meta?: {
     freshness: string;
     coverage: string;
@@ -22,13 +24,29 @@ export type ApiNamespacesListResponse = {
     completeness: string;
     state: string;
   };
-  items?: Array<{ name: string }>;
+  items?: Array<{
+    name: string;
+    phase: string;
+    ageSec: number;
+    hasUnhealthyConditions: boolean;
+  }>;
 };
 
 /** /api/dashboard/cluster response */
 export type ApiDashboardClusterResponse = {
   active?: string;
   item?: {
+    plane: {
+      profile: string;
+      discoveryMode: string;
+      activationMode: string;
+      profilesImplemented: string[];
+      discoveryImplemented: string[];
+      scope: {
+        namespaces: string;
+        resourceKinds: string;
+      };
+    };
     namespaces: {
       total: number;
       unhealthy: number;

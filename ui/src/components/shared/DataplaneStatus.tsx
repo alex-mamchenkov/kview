@@ -71,6 +71,7 @@ export default function DataplaneStatus(props: Props) {
 
   const ns = data.item.namespaces;
   const nodes = data.item.nodes;
+  const plane = data.item.plane;
 
   return (
     <Box sx={{ mb: 1, px: 2, display: "flex", flexWrap: "wrap", rowGap: 0.5, columnGap: 1 }}>
@@ -98,6 +99,10 @@ export default function DataplaneStatus(props: Props) {
         label={`Node observer: ${nodes.observerState || "not_loaded"}`}
         variant="outlined"
       />
+      <Chip size="small" label={`Profile: ${plane.profile || "unknown"}`} variant="outlined" />
+      <Chip size="small" label={`Discovery: ${plane.discoveryMode || "unknown"}`} variant="outlined" />
+      <Chip size="small" label={`Activation: ${plane.activationMode || "unknown"}`} variant="outlined" />
+      <Chip size="small" label={`Scope: ${plane.scope.namespaces} / ${plane.scope.resourceKinds}`} variant="outlined" />
     </Box>
   );
 }

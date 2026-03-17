@@ -78,10 +78,28 @@ func (p *clusterPlane) EnsureObservers(ctx context.Context, sched *simpleSchedul
 	go p.runNodeObserver(ctx, sched, clients, rt)
 }
 
+func (p *clusterPlane) namespaceObserverTick(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
+	// Run one refresh cycle immediately so observer state becomes truthful as soon
+	// as a dataplane-backed endpoint activates the plane.
+	snap, err := p.NamespacesSnapshot(ctx, sched, clients)
+	if err != nil {
+		if snap.Err != nil {
+			state := observerStateForError(*snap.Err)
+			p.setObserverState(observerKindNamespaces, state, rt)
+		} else {
+			p.setObserverState(observerKindNamespaces, ObserverStateUncertain, rt)
+		}
+		return
+	}
+
+	p.setObserverState(observerKindNamespaces, ObserverStateActive, rt)
+}
+
 func (p *clusterPlane) runNamespaceObserver(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
 	interval := 30 * time.Second
 
 	p.setObserverState(observerKindNamespaces, ObserverStateStarting, rt)
+	p.namespaceObserverTick(ctx, sched, clients, rt)
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -92,22 +110,39 @@ func (p *clusterPlane) runNamespaceObserver(ctx context.Context, sched *simpleSc
 			p.setObserverState(observerKindNamespaces, ObserverStateStopped, rt)
 			return
 		case <-ticker.C:
-			// Drive snapshot refresh via scheduler-mediated read.
-			snap, err := p.NamespacesSnapshot(ctx, sched, clients)
-			if err != nil {
-				if snap.Err != nil {
-					state := observerStateForError(*snap.Err)
-					p.setObserverState(observerKindNamespaces, state, rt)
-				} else {
-					p.setObserverState(observerKindNamespaces, ObserverStateUncertain, rt)
-				}
-				continue
-			}
-
-			_ = snap
-			p.setObserverState(observerKindNamespaces, ObserverStateActive, rt)
+			p.namespaceObserverTick(ctx, sched, clients, rt)
 		}
 	}
+}
+
+func (p *clusterPlane) nodeObserverTick(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, rt runtime.RuntimeManager, interval *time.Duration, ticker *time.Ticker) {
+	snap, err := p.NodesSnapshot(ctx, sched, clients)
+	if err != nil {
+		if snap.Err != nil {
+			state := observerStateForError(*snap.Err)
+			p.setObserverState(observerKindNodes, state, rt)
+
+			// Simple backoff when access is blocked or upstream is degraded.
+			switch state {
+			case ObserverStateBlockedByAccess, ObserverStateBackoff:
+				if *interval < 5*60*time.Second {
+					*interval *= 2
+					ticker.Reset(*interval)
+					if rt != nil {
+						rt.Log(runtime.LogLevelInfo, "dataplane",
+							fmt.Sprintf("node observer for cluster %s entering backoff (%s)", p.name, *interval))
+					}
+				}
+			}
+		} else {
+			p.setObserverState(observerKindNodes, ObserverStateUncertain, rt)
+		}
+		return
+	}
+
+	*interval = 60 * time.Second
+	ticker.Reset(*interval)
+	p.setObserverState(observerKindNodes, ObserverStateActive, rt)
 }
 
 func (p *clusterPlane) runNodeObserver(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
@@ -118,6 +153,7 @@ func (p *clusterPlane) runNodeObserver(ctx context.Context, sched *simpleSchedul
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	p.nodeObserverTick(ctx, sched, clients, rt, &interval, ticker)
 
 	for {
 		select {
@@ -125,34 +161,7 @@ func (p *clusterPlane) runNodeObserver(ctx context.Context, sched *simpleSchedul
 			p.setObserverState(observerKindNodes, ObserverStateStopped, rt)
 			return
 		case <-ticker.C:
-			snap, err := p.NodesSnapshot(ctx, sched, clients)
-			if err != nil {
-				if snap.Err != nil {
-					state := observerStateForError(*snap.Err)
-					p.setObserverState(observerKindNodes, state, rt)
-
-					// Simple backoff when access is blocked or upstream is degraded.
-					switch state {
-					case ObserverStateBlockedByAccess, ObserverStateBackoff:
-						if interval < 5*baseInterval {
-							interval *= 2
-							ticker.Reset(interval)
-							if rt != nil {
-								rt.Log(runtime.LogLevelInfo, "dataplane",
-									fmt.Sprintf("node observer for cluster %s entering backoff (%s)", p.name, interval))
-							}
-						}
-					}
-				} else {
-					p.setObserverState(observerKindNodes, ObserverStateUncertain, rt)
-				}
-				continue
-			}
-
-			_ = snap
-			interval = baseInterval
-			ticker.Reset(interval)
-			p.setObserverState(observerKindNodes, ObserverStateActive, rt)
+			p.nodeObserverTick(ctx, sched, clients, rt, &interval, ticker)
 		}
 	}
 }

@@ -1,7 +1,8 @@
-import React, { useCallback } from "react";
-import { Box, Chip } from "@mui/material";
+import React, { useCallback, useMemo, useState } from "react";
+import { Box, Chip, Typography } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
 import { apiGet } from "../../../api";
+import type { ApiNamespacesListResponse } from "../../../types/api";
 import NamespaceDrawer from "./NamespaceDrawer";
 import { fmtAge } from "../../../utils/format";
 import { namespacePhaseChipColor } from "../../../utils/k8sUi";
@@ -54,8 +55,11 @@ export default function NamespacesTable({
   token: string;
   onNavigate?: (section: string, namespace: string) => void;
 }) {
+  const [listMeta, setListMeta] = useState<ApiNamespacesListResponse["meta"] | null>(null);
+
   const fetchRows = useCallback(async (): Promise<Row[]> => {
-    const res = await apiGet<{ items: Namespace[] }>("/api/namespaces", token);
+    const res = await apiGet<ApiNamespacesListResponse>("/api/namespaces", token);
+    setListMeta(res.meta ?? null);
     const items = res.items || [];
     return items.map((n) => ({ ...n, id: n.name }));
   }, [token]);
@@ -66,10 +70,32 @@ export default function NamespacesTable({
     [],
   );
 
+  const title = useMemo(
+    () => (
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+        <span>{resourceLabel}</span>
+        {listMeta && (
+          <>
+            <Chip
+              size="small"
+              label={`State: ${listMeta.state || "unknown"}`}
+              color={listMeta.state === "ok" ? "success" : listMeta.state === "empty" ? "default" : "warning"}
+            />
+            <Typography variant="caption" color="text.secondary">
+              Freshness {listMeta.freshness || "unknown"} · Coverage {listMeta.coverage || "unknown"} · Degradation{" "}
+              {listMeta.degradation || "unknown"}
+            </Typography>
+          </>
+        )}
+      </Box>
+    ),
+    [listMeta]
+  );
+
   return (
     <ResourceListPage<Row>
       token={token}
-      title={resourceLabel}
+      title={title}
       columns={columns}
       fetchRows={fetchRows}
       filterPredicate={filterPredicate}

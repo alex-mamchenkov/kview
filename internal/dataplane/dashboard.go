@@ -1,12 +1,30 @@
 package dataplane
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
 // ClusterDashboardSummary is a minimal, operator-focused dashboard view.
 // It is intentionally small and derived from existing snapshots.
 type ClusterDashboardSummary struct {
+	Plane      ClusterDashboardPlane      `json:"plane"`
 	Namespaces ClusterDashboardNamespaces `json:"namespaces"`
 	Nodes      ClusterDashboardNodes      `json:"nodes"`
+}
+
+type ClusterDashboardPlane struct {
+	Profile             string                     `json:"profile"`
+	DiscoveryMode       string                     `json:"discoveryMode"`
+	ActivationMode      string                     `json:"activationMode"`
+	ProfilesImplemented []string                   `json:"profilesImplemented"`
+	DiscoveryImplemented []string                  `json:"discoveryImplemented"`
+	Scope               ClusterDashboardPlaneScope `json:"scope"`
+}
+
+type ClusterDashboardPlaneScope struct {
+	Namespaces    string `json:"namespaces"`
+	ResourceKinds string `json:"resourceKinds"`
 }
 
 type ClusterDashboardNamespaces struct {
@@ -97,7 +115,28 @@ func (m *manager) DashboardSummary(ctx context.Context, clusterName string) Clus
 		nodeState = "ok"
 	}
 
+	scope := plane.Scope()
+	namespaceScope := "all_namespaces"
+	if len(scope.Namespaces) > 0 {
+		namespaceScope = strings.Join(scope.Namespaces, ",")
+	}
+	resourceScope := "first_wave_defaults"
+	if len(scope.ResourceKinds) > 0 {
+		resourceScope = strings.Join(scope.ResourceKinds, ",")
+	}
+
 	return ClusterDashboardSummary{
+		Plane: ClusterDashboardPlane{
+			Profile:             string(plane.Profile()),
+			DiscoveryMode:       string(plane.DiscoveryMode()),
+			ActivationMode:      "lazy_endpoint_driven",
+			ProfilesImplemented: []string{string(ProfileFocused)},
+			DiscoveryImplemented: []string{string(DiscoveryModeTargeted)},
+			Scope: ClusterDashboardPlaneScope{
+				Namespaces:    namespaceScope,
+				ResourceKinds: resourceScope,
+			},
+		},
 		Namespaces: ClusterDashboardNamespaces{
 			Total:        nsTotal,
 			Unhealthy:    nsUnhealthy,

@@ -90,7 +90,8 @@ type NamespaceSummaryMetaDTO struct {
 	Coverage    string `json:"coverage"`
 	Degradation string `json:"degradation"`
 	Completeness string `json:"completeness"`
-	// State is a coarse overall state such as:
-	// "pending", "denied", "empty", "partial_proxy", "partial_access", "degraded", "complete".
+	// State is a coarse overall state for the current summary contract.
+	// Stage 5A currently returns values like:
+	// "ok", "empty", "denied", "partial_proxy", or "degraded".
 	State string `json:"state"`
 }

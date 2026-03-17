@@ -359,10 +359,18 @@ export default function NamespaceDrawer(props: {
 
                   {summaryMeta && (
                     <Section title="Summary status">
-                      <Typography variant="body2" color="text.secondary">
-                        State: {summaryMeta.state || "unknown"} · Freshness: {summaryMeta.freshness || "unknown"} · Coverage:{" "}
-                        {summaryMeta.coverage || "unknown"}
-                      </Typography>
+                      <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          State: {summaryMeta.state || "unknown"} · Freshness: {summaryMeta.freshness || "unknown"} ·
+                          Coverage: {summaryMeta.coverage || "unknown"} · Degradation:{" "}
+                          {summaryMeta.degradation || "unknown"} · Completeness:{" "}
+                          {summaryMeta.completeness || "unknown"}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Pods and deployments are dataplane-backed in this summary. Other sections remain legacy direct
+                          reads in Stage 5A.
+                        </Typography>
+                      </Box>
                     </Section>
                   )}
 
