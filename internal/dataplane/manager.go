@@ -200,33 +200,17 @@ type clusterPlane struct {
 	capRegistry *CapabilityRegistry
 
 	// First-wave raw snapshots.
-	nsMu sync.RWMutex
-	ns   NamespaceSnapshot
-
-	nodesMu sync.RWMutex
-	nodes   NodesSnapshot
+	nsStore    snapshotStore[NamespaceSnapshot]
+	nodesStore snapshotStore[NodesSnapshot]
 
 	// Namespace-scoped snapshots for first-wave resources.
-	podsMu sync.RWMutex
-	pods   map[string]PodsSnapshot
-
-	depsMu sync.RWMutex
-	deps   map[string]DeploymentsSnapshot
-
-	svcsMu sync.RWMutex
-	svcs   map[string]ServicesSnapshot
-
-	ingMu sync.RWMutex
-	ing   map[string]IngressesSnapshot
-
-	pvcsMu sync.RWMutex
-	pvcs   map[string]PVCsSnapshot
-
-	cmsMu sync.RWMutex
-	cms   map[string]ConfigMapsSnapshot
-
-	secMu sync.RWMutex
-	secs  map[string]SecretsSnapshot
+	podsStore namespacedSnapshotStore[PodsSnapshot]
+	depsStore namespacedSnapshotStore[DeploymentsSnapshot]
+	svcsStore namespacedSnapshotStore[ServicesSnapshot]
+	ingStore  namespacedSnapshotStore[IngressesSnapshot]
+	pvcsStore namespacedSnapshotStore[PVCsSnapshot]
+	cmsStore  namespacedSnapshotStore[ConfigMapsSnapshot]
+	secsStore namespacedSnapshotStore[SecretsSnapshot]
 
 	// Observers state for this cluster.
 	obsMu     sync.Mutex
@@ -241,13 +225,13 @@ func newClusterPlane(name string, profile Profile, mode DiscoveryMode, scope Obs
 		scope:         scope,
 		health:        PlaneHealthUnknown,
 		capRegistry:   NewCapabilityRegistry(),
-		pods:          make(map[string]PodsSnapshot),
-		deps:          make(map[string]DeploymentsSnapshot),
-		svcs:          make(map[string]ServicesSnapshot),
-		ing:           make(map[string]IngressesSnapshot),
-		pvcs:          make(map[string]PVCsSnapshot),
-		cms:           make(map[string]ConfigMapsSnapshot),
-		secs:          make(map[string]SecretsSnapshot),
+		podsStore:     newNamespacedSnapshotStore[PodsSnapshot](),
+		depsStore:     newNamespacedSnapshotStore[DeploymentsSnapshot](),
+		svcsStore:     newNamespacedSnapshotStore[ServicesSnapshot](),
+		ingStore:      newNamespacedSnapshotStore[IngressesSnapshot](),
+		pvcsStore:     newNamespacedSnapshotStore[PVCsSnapshot](),
+		cmsStore:      newNamespacedSnapshotStore[ConfigMapsSnapshot](),
+		secsStore:     newNamespacedSnapshotStore[SecretsSnapshot](),
 	}
 }
 
@@ -273,598 +257,141 @@ func (p *clusterPlane) Health() PlaneHealth {
 	return p.health
 }
 
-// NamespaceSnapshot is a raw snapshot of namespaces plus metadata and any normalized error.
-type NamespaceSnapshot struct {
-	Items []dto.NamespaceListItemDTO
+// Snapshot is the shared raw snapshot container across dataplane-owned resources.
+// It keeps items, truthful metadata, and an optional normalized error.
+type Snapshot[I any] struct {
+	Items []I
 	Meta  SnapshotMetadata
 	Err   *NormalizedError
 }
 
-// NodesSnapshot is a raw snapshot of nodes plus metadata and any normalized error.
-type NodesSnapshot struct {
-	Items []dto.NodeListItemDTO
-	Meta  SnapshotMetadata
-	Err   *NormalizedError
-}
+func (s Snapshot[I]) ObservedAt() time.Time { return s.Meta.ObservedAt }
 
-// PodsSnapshot is a raw snapshot of pods in a namespace plus metadata and any normalized error.
-type PodsSnapshot struct {
-	Items []dto.PodListItemDTO
-	Meta  SnapshotMetadata
-	Err   *NormalizedError
-}
-
-// DeploymentsSnapshot is a raw snapshot of deployments in a namespace plus metadata and any normalized error.
-type DeploymentsSnapshot struct {
-	Items []dto.DeploymentListItemDTO
-	Meta  SnapshotMetadata
-	Err   *NormalizedError
-}
-
-// ServicesSnapshot is a raw snapshot of services in a namespace plus metadata and any normalized error.
-type ServicesSnapshot struct {
-	Items []dto.ServiceListItemDTO
-	Meta  SnapshotMetadata
-	Err   *NormalizedError
-}
-
-// IngressesSnapshot is a raw snapshot of ingresses in a namespace plus metadata and any normalized error.
-type IngressesSnapshot struct {
-	Items []dto.IngressListItemDTO
-	Meta  SnapshotMetadata
-	Err   *NormalizedError
-}
-
-// PVCsSnapshot is a raw snapshot of persistent volume claims in a namespace plus metadata and any normalized error.
-type PVCsSnapshot struct {
-	Items []dto.PersistentVolumeClaimDTO
-	Meta  SnapshotMetadata
-	Err   *NormalizedError
-}
-
-// ConfigMapsSnapshot is a raw snapshot of configmaps in a namespace plus metadata and any normalized error.
-type ConfigMapsSnapshot struct {
-	Items []dto.ConfigMapDTO
-	Meta  SnapshotMetadata
-	Err   *NormalizedError
-}
-
-// SecretsSnapshot is a raw snapshot of secrets in a namespace plus metadata and any normalized error.
-type SecretsSnapshot struct {
-	Items []dto.SecretDTO
-	Meta  SnapshotMetadata
-	Err   *NormalizedError
-}
+type NamespaceSnapshot = Snapshot[dto.NamespaceListItemDTO]
+type NodesSnapshot = Snapshot[dto.NodeListItemDTO]
+type PodsSnapshot = Snapshot[dto.PodListItemDTO]
+type DeploymentsSnapshot = Snapshot[dto.DeploymentListItemDTO]
+type ServicesSnapshot = Snapshot[dto.ServiceListItemDTO]
+type IngressesSnapshot = Snapshot[dto.IngressListItemDTO]
+type PVCsSnapshot = Snapshot[dto.PersistentVolumeClaimDTO]
+type ConfigMapsSnapshot = Snapshot[dto.ConfigMapDTO]
+type SecretsSnapshot = Snapshot[dto.SecretDTO]
 
 // NamespacesSnapshot returns a raw snapshot for namespaces plus metadata and any normalized error.
 func (p *clusterPlane) NamespacesSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider) (NamespaceSnapshot, error) {
-	key := workKey{
-		Cluster:   p.name,
-		Class:     WorkClassSnapshot,
-		Kind:      ResourceKindNamespaces,
-		Namespace: "",
+	desc := clusterSnapshotDescriptor[dto.NamespaceListItemDTO]{
+		kind:        ResourceKindNamespaces,
+		ttl:         15 * time.Second,
+		capGroup:    "",
+		capResource: "namespaces",
+		capScope:    CapabilityScopeCluster,
+		fetch:       kube.ListNamespaces,
 	}
-
-	p.nsMu.RLock()
-	if time.Since(p.ns.Meta.ObservedAt) < 15*time.Second && !p.ns.Meta.ObservedAt.IsZero() {
-		snap := p.ns
-		p.nsMu.RUnlock()
-		return snap, nil
-	}
-	p.nsMu.RUnlock()
-
-	var out NamespaceSnapshot
-	runErr := sched.Run(ctx, key, func(runCtx context.Context) error {
-		if clients == nil {
-			out.Meta = SnapshotMetadata{
-				ObservedAt:   time.Now().UTC(),
-				Freshness:    FreshnessClassUnknown,
-				Coverage:     CoverageClassUnknown,
-				Degradation:  DegradationClassSevere,
-				Completeness: CompletenessClassUnknown,
-			}
-			return nil
-		}
-
-		c, _, err := clients.GetClientsForContext(runCtx, p.name)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			out.Meta = SnapshotMetadata{
-				ObservedAt:   time.Now().UTC(),
-				Freshness:    FreshnessClassUnknown,
-				Coverage:     CoverageClassUnknown,
-				Degradation:  DegradationClassSevere,
-				Completeness: CompletenessClassUnknown,
-			}
-			return err
-		}
-
-		items, err := kube.ListNamespaces(runCtx, c)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			p.capRegistry.LearnReadResult(p.name, "", "namespaces", "", "list", CapabilityScopeCluster, err)
-			out.Meta = SnapshotMetadata{
-				ObservedAt:   time.Now().UTC(),
-				Freshness:    FreshnessClassCold,
-				Coverage:     CoverageClassUnknown,
-				Degradation:  DegradationClassMinor,
-				Completeness: CompletenessClassUnknown,
-			}
-			return err
-		}
-
-		p.capRegistry.LearnReadResult(p.name, "", "namespaces", "", "list", CapabilityScopeCluster, nil)
-
-		out.Items = items
-		out.Meta = SnapshotMetadata{
-			ObservedAt:   time.Now().UTC(),
-			Freshness:    FreshnessClassHot,
-			Coverage:     CoverageClassFull,
-			Degradation:  DegradationClassNone,
-			Completeness: CompletenessClassComplete,
-		}
-		return nil
-	})
-
-	p.nsMu.Lock()
-	p.ns = out
-	p.nsMu.Unlock()
-
-	return out, runErr
+	return executeClusterSnapshot(p, ctx, sched, clients, &p.nsStore, desc)
 }
 
 // NodesSnapshot returns a raw snapshot for nodes plus metadata and any normalized error.
 func (p *clusterPlane) NodesSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider) (NodesSnapshot, error) {
-	key := workKey{
-		Cluster:   p.name,
-		Class:     WorkClassSnapshot,
-		Kind:      ResourceKindNodes,
-		Namespace: "",
+	desc := clusterSnapshotDescriptor[dto.NodeListItemDTO]{
+		kind:        ResourceKindNodes,
+		ttl:         30 * time.Second,
+		capGroup:    "",
+		capResource: "nodes",
+		capScope:    CapabilityScopeCluster,
+		fetch:       kube.ListNodes,
 	}
-
-	p.nodesMu.RLock()
-	if time.Since(p.nodes.Meta.ObservedAt) < 30*time.Second && !p.nodes.Meta.ObservedAt.IsZero() {
-		snap := p.nodes
-		p.nodesMu.RUnlock()
-		return snap, nil
-	}
-	p.nodesMu.RUnlock()
-
-	var out NodesSnapshot
-	runErr := sched.Run(ctx, key, func(runCtx context.Context) error {
-		if clients == nil {
-			out.Meta = SnapshotMetadata{
-				ObservedAt:   time.Now().UTC(),
-				Freshness:    FreshnessClassUnknown,
-				Coverage:     CoverageClassUnknown,
-				Degradation:  DegradationClassSevere,
-				Completeness: CompletenessClassUnknown,
-			}
-			return nil
-		}
-
-		c, _, err := clients.GetClientsForContext(runCtx, p.name)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			out.Meta = SnapshotMetadata{
-				ObservedAt:   time.Now().UTC(),
-				Freshness:    FreshnessClassUnknown,
-				Coverage:     CoverageClassUnknown,
-				Degradation:  DegradationClassSevere,
-				Completeness: CompletenessClassUnknown,
-			}
-			return err
-		}
-
-		items, err := kube.ListNodes(runCtx, c)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			p.capRegistry.LearnReadResult(p.name, "", "nodes", "", "list", CapabilityScopeCluster, err)
-			out.Meta = SnapshotMetadata{
-				ObservedAt:   time.Now().UTC(),
-				Freshness:    FreshnessClassCold,
-				Coverage:     CoverageClassUnknown,
-				Degradation:  DegradationClassMinor,
-				Completeness: CompletenessClassUnknown,
-			}
-			return err
-		}
-
-		p.capRegistry.LearnReadResult(p.name, "", "nodes", "", "list", CapabilityScopeCluster, nil)
-
-		out.Items = items
-		out.Meta = SnapshotMetadata{
-			ObservedAt:   time.Now().UTC(),
-			Freshness:    FreshnessClassHot,
-			Coverage:     CoverageClassFull,
-			Degradation:  DegradationClassNone,
-			Completeness: CompletenessClassComplete,
-		}
-		return nil
-	})
-
-	p.nodesMu.Lock()
-	p.nodes = out
-	p.nodesMu.Unlock()
-
-	return out, runErr
+	return executeClusterSnapshot(p, ctx, sched, clients, &p.nodesStore, desc)
 }
 
 // PodsSnapshot returns a raw snapshot for pods in the given namespace plus metadata and any normalized error.
 func (p *clusterPlane) PodsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (PodsSnapshot, error) {
-	key := workKey{
-		Cluster:   p.name,
-		Class:     WorkClassSnapshot,
-		Kind:      ResourceKindPods,
-		Namespace: namespace,
+	desc := namespacedSnapshotDescriptor[dto.PodListItemDTO]{
+		kind:        ResourceKindPods,
+		ttl:         15 * time.Second,
+		capGroup:    "",
+		capResource: "pods",
+		capScope:    CapabilityScopeNamespace,
+		fetch:       kube.ListPods,
 	}
-
-	p.podsMu.RLock()
-	if snap, ok := p.pods[namespace]; ok && !snap.Meta.ObservedAt.IsZero() &&
-		time.Since(snap.Meta.ObservedAt) < 15*time.Second {
-		p.podsMu.RUnlock()
-		return snap, nil
-	}
-	p.podsMu.RUnlock()
-
-	var out PodsSnapshot
-	runErr := sched.Run(ctx, key, func(runCtx context.Context) error {
-		if clients == nil {
-			out.Meta = SnapshotMetadata{
-				ObservedAt:   time.Now().UTC(),
-				Freshness:    FreshnessClassUnknown,
-				Coverage:     CoverageClassUnknown,
-				Degradation:  DegradationClassSevere,
-				Completeness: CompletenessClassUnknown,
-			}
-			return nil
-		}
-
-		c, _, err := clients.GetClientsForContext(runCtx, p.name)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			out.Meta = SnapshotMetadata{
-				ObservedAt:   time.Now().UTC(),
-				Freshness:    FreshnessClassUnknown,
-				Coverage:     CoverageClassUnknown,
-				Degradation:  DegradationClassSevere,
-				Completeness: CompletenessClassUnknown,
-			}
-			return err
-		}
-
-		items, err := kube.ListPods(runCtx, c, namespace)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			p.capRegistry.LearnReadResult(p.name, "", "pods", namespace, "list", CapabilityScopeNamespace, err)
-			out.Meta = SnapshotMetadata{
-				ObservedAt:   time.Now().UTC(),
-				Freshness:    FreshnessClassCold,
-				Coverage:     CoverageClassUnknown,
-				Degradation:  DegradationClassMinor,
-				Completeness: CompletenessClassUnknown,
-			}
-			return err
-		}
-
-		p.capRegistry.LearnReadResult(p.name, "", "pods", namespace, "list", CapabilityScopeNamespace, nil)
-
-		out.Items = items
-		out.Meta = SnapshotMetadata{
-			ObservedAt:   time.Now().UTC(),
-			Freshness:    FreshnessClassHot,
-			Coverage:     CoverageClassFull,
-			Degradation:  DegradationClassNone,
-			Completeness: CompletenessClassComplete,
-		}
-		return nil
-	})
-
-	p.podsMu.Lock()
-	p.pods[namespace] = out
-	p.podsMu.Unlock()
-
-	return out, runErr
+	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.podsStore, desc)
 }
 
 // DeploymentsSnapshot returns a raw snapshot for deployments in the given namespace plus metadata and any normalized error.
 func (p *clusterPlane) DeploymentsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (DeploymentsSnapshot, error) {
-	key := workKey{
-		Cluster:   p.name,
-		Class:     WorkClassSnapshot,
-		Kind:      ResourceKindDeployments,
-		Namespace: namespace,
+	desc := namespacedSnapshotDescriptor[dto.DeploymentListItemDTO]{
+		kind:        ResourceKindDeployments,
+		ttl:         15 * time.Second,
+		capGroup:    "",
+		capResource: "deployments",
+		capScope:    CapabilityScopeNamespace,
+		fetch:       kube.ListDeployments,
 	}
-
-	p.depsMu.RLock()
-	if snap, ok := p.deps[namespace]; ok && !snap.Meta.ObservedAt.IsZero() &&
-		time.Since(snap.Meta.ObservedAt) < 15*time.Second {
-		p.depsMu.RUnlock()
-		return snap, nil
-	}
-	p.depsMu.RUnlock()
-
-	var out DeploymentsSnapshot
-	runErr := sched.Run(ctx, key, func(runCtx context.Context) error {
-		if clients == nil {
-			out.Meta = SnapshotMetadata{
-				ObservedAt:   time.Now().UTC(),
-				Freshness:    FreshnessClassUnknown,
-				Coverage:     CoverageClassUnknown,
-				Degradation:  DegradationClassSevere,
-				Completeness: CompletenessClassUnknown,
-			}
-			return nil
-		}
-
-		c, _, err := clients.GetClientsForContext(runCtx, p.name)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			out.Meta = SnapshotMetadata{
-				ObservedAt:   time.Now().UTC(),
-				Freshness:    FreshnessClassUnknown,
-				Coverage:     CoverageClassUnknown,
-				Degradation:  DegradationClassSevere,
-				Completeness: CompletenessClassUnknown,
-			}
-			return err
-		}
-
-		items, err := kube.ListDeployments(runCtx, c, namespace)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			p.capRegistry.LearnReadResult(p.name, "", "deployments", namespace, "list", CapabilityScopeNamespace, err)
-			out.Meta = SnapshotMetadata{
-				ObservedAt:   time.Now().UTC(),
-				Freshness:    FreshnessClassCold,
-				Coverage:     CoverageClassUnknown,
-				Degradation:  DegradationClassMinor,
-				Completeness: CompletenessClassUnknown,
-			}
-			return err
-		}
-
-		p.capRegistry.LearnReadResult(p.name, "", "deployments", namespace, "list", CapabilityScopeNamespace, nil)
-
-		out.Items = items
-		out.Meta = SnapshotMetadata{
-			ObservedAt:   time.Now().UTC(),
-			Freshness:    FreshnessClassHot,
-			Coverage:     CoverageClassFull,
-			Degradation:  DegradationClassNone,
-			Completeness: CompletenessClassComplete,
-		}
-		return nil
-	})
-
-	p.depsMu.Lock()
-	p.deps[namespace] = out
-	p.depsMu.Unlock()
-
-	return out, runErr
+	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.depsStore, desc)
 }
 
 // ServicesSnapshot returns a raw snapshot for services in the given namespace plus metadata and any normalized error.
 func (p *clusterPlane) ServicesSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (ServicesSnapshot, error) {
-	key := workKey{Cluster: p.name, Class: WorkClassSnapshot, Kind: ResourceKindServices, Namespace: namespace}
-	p.svcsMu.RLock()
-	if snap, ok := p.svcs[namespace]; ok && !snap.Meta.ObservedAt.IsZero() && time.Since(snap.Meta.ObservedAt) < 15*time.Second {
-		p.svcsMu.RUnlock()
-		return snap, nil
+	desc := namespacedSnapshotDescriptor[dto.ServiceListItemDTO]{
+		kind:        ResourceKindServices,
+		ttl:         15 * time.Second,
+		capGroup:    "",
+		capResource: "services",
+		capScope:    CapabilityScopeNamespace,
+		fetch:       kube.ListServices,
 	}
-	p.svcsMu.RUnlock()
-
-	var out ServicesSnapshot
-	runErr := sched.Run(ctx, key, func(runCtx context.Context) error {
-		if clients == nil {
-			out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassUnknown, Coverage: CoverageClassUnknown, Degradation: DegradationClassSevere, Completeness: CompletenessClassUnknown}
-			return nil
-		}
-		c, _, err := clients.GetClientsForContext(runCtx, p.name)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassUnknown, Coverage: CoverageClassUnknown, Degradation: DegradationClassSevere, Completeness: CompletenessClassUnknown}
-			return err
-		}
-		items, err := kube.ListServices(runCtx, c, namespace)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			p.capRegistry.LearnReadResult(p.name, "", "services", namespace, "list", CapabilityScopeNamespace, err)
-			out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassCold, Coverage: CoverageClassUnknown, Degradation: DegradationClassMinor, Completeness: CompletenessClassUnknown}
-			return err
-		}
-		p.capRegistry.LearnReadResult(p.name, "", "services", namespace, "list", CapabilityScopeNamespace, nil)
-		out.Items = items
-		out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassHot, Coverage: CoverageClassFull, Degradation: DegradationClassNone, Completeness: CompletenessClassComplete}
-		return nil
-	})
-
-	p.svcsMu.Lock()
-	p.svcs[namespace] = out
-	p.svcsMu.Unlock()
-	return out, runErr
+	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.svcsStore, desc)
 }
 
 // IngressesSnapshot returns a raw snapshot for ingresses in the given namespace plus metadata and any normalized error.
 func (p *clusterPlane) IngressesSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (IngressesSnapshot, error) {
-	key := workKey{Cluster: p.name, Class: WorkClassSnapshot, Kind: ResourceKindIngresses, Namespace: namespace}
-	p.ingMu.RLock()
-	if snap, ok := p.ing[namespace]; ok && !snap.Meta.ObservedAt.IsZero() && time.Since(snap.Meta.ObservedAt) < 15*time.Second {
-		p.ingMu.RUnlock()
-		return snap, nil
+	desc := namespacedSnapshotDescriptor[dto.IngressListItemDTO]{
+		kind:        ResourceKindIngresses,
+		ttl:         15 * time.Second,
+		capGroup:    "networking.k8s.io",
+		capResource: "ingresses",
+		capScope:    CapabilityScopeNamespace,
+		fetch:       kube.ListIngresses,
 	}
-	p.ingMu.RUnlock()
-
-	var out IngressesSnapshot
-	runErr := sched.Run(ctx, key, func(runCtx context.Context) error {
-		if clients == nil {
-			out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassUnknown, Coverage: CoverageClassUnknown, Degradation: DegradationClassSevere, Completeness: CompletenessClassUnknown}
-			return nil
-		}
-		c, _, err := clients.GetClientsForContext(runCtx, p.name)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassUnknown, Coverage: CoverageClassUnknown, Degradation: DegradationClassSevere, Completeness: CompletenessClassUnknown}
-			return err
-		}
-		items, err := kube.ListIngresses(runCtx, c, namespace)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			p.capRegistry.LearnReadResult(p.name, "networking.k8s.io", "ingresses", namespace, "list", CapabilityScopeNamespace, err)
-			out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassCold, Coverage: CoverageClassUnknown, Degradation: DegradationClassMinor, Completeness: CompletenessClassUnknown}
-			return err
-		}
-		p.capRegistry.LearnReadResult(p.name, "networking.k8s.io", "ingresses", namespace, "list", CapabilityScopeNamespace, nil)
-		out.Items = items
-		out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassHot, Coverage: CoverageClassFull, Degradation: DegradationClassNone, Completeness: CompletenessClassComplete}
-		return nil
-	})
-
-	p.ingMu.Lock()
-	p.ing[namespace] = out
-	p.ingMu.Unlock()
-	return out, runErr
+	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.ingStore, desc)
 }
 
 // PVCsSnapshot returns a raw snapshot for PVCs in the given namespace plus metadata and any normalized error.
 func (p *clusterPlane) PVCsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (PVCsSnapshot, error) {
-	key := workKey{Cluster: p.name, Class: WorkClassSnapshot, Kind: ResourceKindPVCs, Namespace: namespace}
-	p.pvcsMu.RLock()
-	if snap, ok := p.pvcs[namespace]; ok && !snap.Meta.ObservedAt.IsZero() && time.Since(snap.Meta.ObservedAt) < 15*time.Second {
-		p.pvcsMu.RUnlock()
-		return snap, nil
+	desc := namespacedSnapshotDescriptor[dto.PersistentVolumeClaimDTO]{
+		kind:        ResourceKindPVCs,
+		ttl:         15 * time.Second,
+		capGroup:    "",
+		capResource: "persistentvolumeclaims",
+		capScope:    CapabilityScopeNamespace,
+		fetch:       kube.ListPersistentVolumeClaims,
 	}
-	p.pvcsMu.RUnlock()
-
-	var out PVCsSnapshot
-	runErr := sched.Run(ctx, key, func(runCtx context.Context) error {
-		if clients == nil {
-			out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassUnknown, Coverage: CoverageClassUnknown, Degradation: DegradationClassSevere, Completeness: CompletenessClassUnknown}
-			return nil
-		}
-		c, _, err := clients.GetClientsForContext(runCtx, p.name)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassUnknown, Coverage: CoverageClassUnknown, Degradation: DegradationClassSevere, Completeness: CompletenessClassUnknown}
-			return err
-		}
-		items, err := kube.ListPersistentVolumeClaims(runCtx, c, namespace)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			p.capRegistry.LearnReadResult(p.name, "", "persistentvolumeclaims", namespace, "list", CapabilityScopeNamespace, err)
-			out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassCold, Coverage: CoverageClassUnknown, Degradation: DegradationClassMinor, Completeness: CompletenessClassUnknown}
-			return err
-		}
-		p.capRegistry.LearnReadResult(p.name, "", "persistentvolumeclaims", namespace, "list", CapabilityScopeNamespace, nil)
-		out.Items = items
-		out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassHot, Coverage: CoverageClassFull, Degradation: DegradationClassNone, Completeness: CompletenessClassComplete}
-		return nil
-	})
-
-	p.pvcsMu.Lock()
-	p.pvcs[namespace] = out
-	p.pvcsMu.Unlock()
-	return out, runErr
+	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.pvcsStore, desc)
 }
 
 // ConfigMapsSnapshot returns a raw snapshot for configmaps in the given namespace plus metadata and any normalized error.
 func (p *clusterPlane) ConfigMapsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (ConfigMapsSnapshot, error) {
-	key := workKey{Cluster: p.name, Class: WorkClassSnapshot, Kind: ResourceKindConfigMaps, Namespace: namespace}
-	p.cmsMu.RLock()
-	if snap, ok := p.cms[namespace]; ok && !snap.Meta.ObservedAt.IsZero() && time.Since(snap.Meta.ObservedAt) < 15*time.Second {
-		p.cmsMu.RUnlock()
-		return snap, nil
+	desc := namespacedSnapshotDescriptor[dto.ConfigMapDTO]{
+		kind:        ResourceKindConfigMaps,
+		ttl:         15 * time.Second,
+		capGroup:    "",
+		capResource: "configmaps",
+		capScope:    CapabilityScopeNamespace,
+		fetch:       kube.ListConfigMaps,
 	}
-	p.cmsMu.RUnlock()
-
-	var out ConfigMapsSnapshot
-	runErr := sched.Run(ctx, key, func(runCtx context.Context) error {
-		if clients == nil {
-			out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassUnknown, Coverage: CoverageClassUnknown, Degradation: DegradationClassSevere, Completeness: CompletenessClassUnknown}
-			return nil
-		}
-		c, _, err := clients.GetClientsForContext(runCtx, p.name)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassUnknown, Coverage: CoverageClassUnknown, Degradation: DegradationClassSevere, Completeness: CompletenessClassUnknown}
-			return err
-		}
-		items, err := kube.ListConfigMaps(runCtx, c, namespace)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			p.capRegistry.LearnReadResult(p.name, "", "configmaps", namespace, "list", CapabilityScopeNamespace, err)
-			out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassCold, Coverage: CoverageClassUnknown, Degradation: DegradationClassMinor, Completeness: CompletenessClassUnknown}
-			return err
-		}
-		p.capRegistry.LearnReadResult(p.name, "", "configmaps", namespace, "list", CapabilityScopeNamespace, nil)
-		out.Items = items
-		out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassHot, Coverage: CoverageClassFull, Degradation: DegradationClassNone, Completeness: CompletenessClassComplete}
-		return nil
-	})
-
-	p.cmsMu.Lock()
-	p.cms[namespace] = out
-	p.cmsMu.Unlock()
-	return out, runErr
+	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.cmsStore, desc)
 }
 
 // SecretsSnapshot returns a raw snapshot for secrets in the given namespace plus metadata and any normalized error.
 func (p *clusterPlane) SecretsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (SecretsSnapshot, error) {
-	key := workKey{Cluster: p.name, Class: WorkClassSnapshot, Kind: ResourceKindSecrets, Namespace: namespace}
-	p.secMu.RLock()
-	if snap, ok := p.secs[namespace]; ok && !snap.Meta.ObservedAt.IsZero() && time.Since(snap.Meta.ObservedAt) < 15*time.Second {
-		p.secMu.RUnlock()
-		return snap, nil
+	desc := namespacedSnapshotDescriptor[dto.SecretDTO]{
+		kind:        ResourceKindSecrets,
+		ttl:         15 * time.Second,
+		capGroup:    "",
+		capResource: "secrets",
+		capScope:    CapabilityScopeNamespace,
+		fetch:       kube.ListSecrets,
 	}
-	p.secMu.RUnlock()
-
-	var out SecretsSnapshot
-	runErr := sched.Run(ctx, key, func(runCtx context.Context) error {
-		if clients == nil {
-			out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassUnknown, Coverage: CoverageClassUnknown, Degradation: DegradationClassSevere, Completeness: CompletenessClassUnknown}
-			return nil
-		}
-		c, _, err := clients.GetClientsForContext(runCtx, p.name)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassUnknown, Coverage: CoverageClassUnknown, Degradation: DegradationClassSevere, Completeness: CompletenessClassUnknown}
-			return err
-		}
-		items, err := kube.ListSecrets(runCtx, c, namespace)
-		if err != nil {
-			n := NormalizeError(err)
-			out.Err = &n
-			p.capRegistry.LearnReadResult(p.name, "", "secrets", namespace, "list", CapabilityScopeNamespace, err)
-			out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassCold, Coverage: CoverageClassUnknown, Degradation: DegradationClassMinor, Completeness: CompletenessClassUnknown}
-			return err
-		}
-		p.capRegistry.LearnReadResult(p.name, "", "secrets", namespace, "list", CapabilityScopeNamespace, nil)
-		out.Items = items
-		out.Meta = SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassHot, Coverage: CoverageClassFull, Degradation: DegradationClassNone, Completeness: CompletenessClassComplete}
-		return nil
-	})
-
-	p.secMu.Lock()
-	p.secs[namespace] = out
-	p.secMu.Unlock()
-	return out, runErr
+	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.secsStore, desc)
 }
 
 func (m *manager) NamespacesSnapshot(ctx context.Context, clusterName string) (NamespaceSnapshot, error) {
