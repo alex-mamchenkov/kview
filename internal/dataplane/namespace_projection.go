@@ -224,17 +224,19 @@ func (m *manager) NamespaceSummaryProjection(ctx context.Context, clusterName, n
 	res.Problematic = newProblems
 
 	// Combine metadata. Namespace summary remains mixed, so coverage/completeness stay partial/inexact.
-	meta := SnapshotMetadata{
-		ObservedAt:   mostRecentAll(podsSnap.Meta.ObservedAt, depsSnap.Meta.ObservedAt, svcsSnap.Meta.ObservedAt, ingSnap.Meta.ObservedAt, pvcsSnap.Meta.ObservedAt, cmsSnap.Meta.ObservedAt, secsSnap.Meta.ObservedAt),
-		Freshness:    minFreshnessAll(podsSnap.Meta.Freshness, depsSnap.Meta.Freshness, svcsSnap.Meta.Freshness, ingSnap.Meta.Freshness, pvcsSnap.Meta.Freshness, cmsSnap.Meta.Freshness, secsSnap.Meta.Freshness),
-		Coverage:     CoverageClassPartial,
-		Degradation:  maxDegradationAll(podsSnap.Meta.Degradation, depsSnap.Meta.Degradation, svcsSnap.Meta.Degradation, ingSnap.Meta.Degradation, pvcsSnap.Meta.Degradation, cmsSnap.Meta.Degradation, secsSnap.Meta.Degradation),
-		Completeness: CompletenessClassInexact,
-	}
+	meta := composeNamespaceSummaryProjectionMeta(
+		podsSnap.Meta,
+		depsSnap.Meta,
+		svcsSnap.Meta,
+		ingSnap.Meta,
+		pvcsSnap.Meta,
+		cmsSnap.Meta,
+		secsSnap.Meta,
+	)
 	out.Meta = meta
 
-	firstErr := firstNonNilNormalized(podsSnap.Err, depsSnap.Err, svcsSnap.Err, ingSnap.Err, pvcsSnap.Err, cmsSnap.Err, secsSnap.Err)
-	state := CoarseState(firstErr, res.Counts.Pods+res.Counts.Deployments+res.Counts.Services+res.Counts.Ingresses+res.Counts.PVCs+res.Counts.ConfigMaps+res.Counts.Secrets)
+	firstErr := FirstNonNilNormalizedError(podsSnap.Err, depsSnap.Err, svcsSnap.Err, ingSnap.Err, pvcsSnap.Err, cmsSnap.Err, secsSnap.Err)
+	state := ProjectionCoarseState(firstErr, res.Counts.Pods+res.Counts.Deployments+res.Counts.Services+res.Counts.Ingresses+res.Counts.PVCs+res.Counts.ConfigMaps+res.Counts.Secrets)
 
 	res.Meta = &dto.NamespaceSummaryMetaDTO{
 		Freshness:    string(meta.Freshness),
@@ -246,90 +248,5 @@ func (m *manager) NamespaceSummaryProjection(ctx context.Context, clusterName, n
 
 	out.Resources = res
 	out.Err = firstErr
-	return out, firstError(podsErr, depsErr, svcsErr, ingErr, pvcsErr, cmsErr, secsErr)
-}
-
-func mostRecent(a, b time.Time) time.Time {
-	if a.IsZero() {
-		return b
-	}
-	if b.IsZero() {
-		return a
-	}
-	if a.After(b) {
-		return a
-	}
-	return b
-}
-
-func mostRecentAll(items ...time.Time) time.Time {
-	var out time.Time
-	for _, t := range items {
-		out = mostRecent(out, t)
-	}
-	return out
-}
-
-func minFreshness(a, b FreshnessClass) FreshnessClass {
-	// Simple ordering: hot < warm < cold < stale < unknown (worst).
-	order := map[FreshnessClass]int{
-		FreshnessClassHot:     0,
-		FreshnessClassWarm:    1,
-		FreshnessClassCold:    2,
-		FreshnessClassStale:   3,
-		FreshnessClassUnknown: 4,
-	}
-	if order[a] >= order[b] {
-		return a
-	}
-	return b
-}
-
-func minFreshnessAll(items ...FreshnessClass) FreshnessClass {
-	if len(items) == 0 {
-		return FreshnessClassUnknown
-	}
-	out := items[0]
-	for _, f := range items[1:] {
-		out = minFreshness(out, f)
-	}
-	return out
-}
-
-func maxDegradation(a, b DegradationClass) DegradationClass {
-	order := map[DegradationClass]int{
-		DegradationClassNone:   0,
-		DegradationClassMinor:  1,
-		DegradationClassSevere: 2,
-	}
-	if order[a] >= order[b] {
-		return a
-	}
-	return b
-}
-
-func maxDegradationAll(items ...DegradationClass) DegradationClass {
-	out := DegradationClassNone
-	for _, d := range items {
-		out = maxDegradation(out, d)
-	}
-	return out
-}
-
-func firstNonNilNormalized(items ...*NormalizedError) *NormalizedError {
-	for _, n := range items {
-		if n != nil {
-			return n
-		}
-	}
-	return nil
-}
-
-func firstError(items ...error) error {
-	for _, err := range items {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return out, FirstError(podsErr, depsErr, svcsErr, ingErr, pvcsErr, cmsErr, secsErr)
 }

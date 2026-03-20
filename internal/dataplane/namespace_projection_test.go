@@ -24,25 +24,28 @@ func TestNamespaceSummaryProjection_DeniedSetsStateDenied(t *testing.T) {
 func TestProjectionMetadataCombiners(t *testing.T) {
 	now := time.Now().UTC()
 	old := now.Add(-time.Minute)
-	if got := mostRecentAll(old, now); !got.Equal(now) {
+	if got := ObservedAtFromSnapshots(
+		SnapshotMetadata{ObservedAt: old},
+		SnapshotMetadata{ObservedAt: now},
+	); !got.Equal(now) {
 		t.Fatalf("mostRecentAll: expected latest timestamp")
 	}
-	if got := minFreshnessAll(FreshnessClassHot, FreshnessClassWarm, FreshnessClassCold); got != FreshnessClassCold {
-		t.Fatalf("minFreshnessAll: expected cold, got %q", got)
+	if got := WorstFreshness(FreshnessClassHot, FreshnessClassWarm, FreshnessClassCold); got != FreshnessClassCold {
+		t.Fatalf("WorstFreshness: expected cold, got %q", got)
 	}
-	if got := maxDegradationAll(DegradationClassNone, DegradationClassMinor, DegradationClassSevere); got != DegradationClassSevere {
-		t.Fatalf("maxDegradationAll: expected severe, got %q", got)
+	if got := WorstDegradation(DegradationClassNone, DegradationClassMinor, DegradationClassSevere); got != DegradationClassSevere {
+		t.Fatalf("WorstDegradation: expected severe, got %q", got)
 	}
 }
 
 func TestFirstHelpers(t *testing.T) {
 	n := &NormalizedError{Class: NormalizedErrorClassProxyFailure}
-	if got := firstNonNilNormalized(nil, n); got != n {
+	if got := FirstNonNilNormalizedError(nil, n); got != n {
 		t.Fatalf("expected first non-nil normalized error")
 	}
 	errA := errors.New("a")
 	errB := errors.New("b")
-	if got := firstError(nil, errA, errB); got != errA {
+	if got := FirstError(nil, errA, errB); got != errA {
 		t.Fatalf("expected first error")
 	}
 }
