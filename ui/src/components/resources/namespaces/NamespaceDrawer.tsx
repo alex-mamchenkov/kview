@@ -68,12 +68,40 @@ type NamespaceCondition = {
   lastTransitionTime?: number;
 };
 
+type WorkloadKindHealthRollup = {
+  total: number;
+  healthy: number;
+  progressing: number;
+  degraded: number;
+};
+
+type NamespaceWorkloadHealthRollup = {
+  deployments: WorkloadKindHealthRollup;
+  daemonSets: WorkloadKindHealthRollup;
+  statefulSets: WorkloadKindHealthRollup;
+  jobs: WorkloadKindHealthRollup;
+  cronJobs: WorkloadKindHealthRollup;
+  replicaSets: WorkloadKindHealthRollup;
+};
+
+type PodRestartHotspot = {
+  namespace: string;
+  name: string;
+  restarts: number;
+  phase: string;
+  node?: string;
+  lastEventReason?: string;
+  severity: string;
+};
+
 type NamespaceSummaryResources = {
   counts: ResourceCounts;
   podHealth: PodHealth;
   deploymentHealth: DeploymentHealth;
   problematic: ProblematicResource[];
   helmReleases?: NamespaceHelmRelease[];
+  workloadByKind?: NamespaceWorkloadHealthRollup;
+  restartHotspots?: PodRestartHotspot[];
   meta?: NamespaceSummaryMeta;
 };
 
@@ -282,6 +310,8 @@ export default function NamespaceDrawer(props: {
   const problematic = summaryRes?.problematic || [];
   const helmReleases = summaryRes?.helmReleases || [];
   const summaryMeta = summaryRes?.meta;
+  const workloadByKind = summaryRes?.workloadByKind;
+  const restartHotspots = summaryRes?.restartHotspots || [];
 
   function navigateTo(sectionKey: string) {
     if (props.onNavigate && name) {
@@ -301,7 +331,28 @@ export default function NamespaceDrawer(props: {
       case "Job":
         setDrawerJob(r.name);
         return;
+      case "DaemonSet":
+        if (props.onNavigate && name) props.onNavigate("daemonsets", name);
+        return;
+      case "StatefulSet":
+        if (props.onNavigate && name) props.onNavigate("statefulsets", name);
+        return;
+      case "CronJob":
+        if (props.onNavigate && name) props.onNavigate("cronjobs", name);
+        return;
+      case "ReplicaSet":
+        if (props.onNavigate && name) props.onNavigate("replicasets", name);
+        return;
     }
+  }
+
+  function workloadRollupLine(label: string, w?: WorkloadKindHealthRollup) {
+    if (!w || w.total === 0) return null;
+    return (
+      <Typography variant="body2" color="text.secondary" sx={{ fontFamily: "monospace", fontSize: 12 }}>
+        {label}: {w.healthy} ok · {w.progressing} prog · {w.degraded} deg ({w.total} total)
+      </Typography>
+    );
   }
 
   function countChip(label: string, count: number, sectionKey: string) {
@@ -358,19 +409,71 @@ export default function NamespaceDrawer(props: {
                   <MetadataSection labels={metadata?.labels} annotations={metadata?.annotations} />
 
                   {summaryMeta && (
-                    <Section title="Summary status">
-                      <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-                        <Typography variant="body2" color="text.secondary">
-                          State: {summaryMeta.state || "unknown"} · Freshness: {summaryMeta.freshness || "unknown"} ·
-                          Coverage: {summaryMeta.coverage || "unknown"} · Degradation:{" "}
-                          {summaryMeta.degradation || "unknown"} · Completeness:{" "}
-                          {summaryMeta.completeness || "unknown"}
-                        </Typography>
+                    <Section title="Summary status (dataplane)">
+                      <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
+                          <Chip size="small" label={`state: ${summaryMeta.state || "unknown"}`} color="default" />
+                          <Chip size="small" label={`freshness: ${summaryMeta.freshness || "?"}`} variant="outlined" />
+                          <Chip size="small" label={`coverage: ${summaryMeta.coverage || "?"}`} variant="outlined" />
+                          <Chip size="small" label={`degradation: ${summaryMeta.degradation || "?"}`} variant="outlined" />
+                          <Chip size="small" label={`completeness: ${summaryMeta.completeness || "?"}`} variant="outlined" />
+                        </Box>
                         <Typography variant="caption" color="text.secondary">
-                          Pods and deployments are dataplane-backed in this summary. Other sections remain legacy direct
-                          reads in Stage 5A.
+                          Built from dataplane snapshots. Coverage is partial and completeness inexact while Helm (and
+                          other non-snapshot slices) are omitted here — use the Helm list for releases.
                         </Typography>
                       </Box>
+                    </Section>
+                  )}
+
+                  {workloadByKind && (
+                    <Section title="Workload signals (by kind)">
+                      <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25, mt: 0.5 }}>
+                        {workloadRollupLine("Deployments", workloadByKind.deployments)}
+                        {workloadRollupLine("DaemonSets", workloadByKind.daemonSets)}
+                        {workloadRollupLine("StatefulSets", workloadByKind.statefulSets)}
+                        {workloadRollupLine("Jobs", workloadByKind.jobs)}
+                        {workloadRollupLine("CronJobs", workloadByKind.cronJobs)}
+                        {workloadRollupLine("ReplicaSets", workloadByKind.replicaSets)}
+                      </Box>
+                    </Section>
+                  )}
+
+                  {restartHotspots.length > 0 && (
+                    <Section title="Restart hotspots (pods)">
+                      <Table size="small" sx={{ mt: 1 }}>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Pod</TableCell>
+                            <TableCell>Restarts</TableCell>
+                            <TableCell>Phase</TableCell>
+                            <TableCell>Severity</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {restartHotspots.slice(0, 8).map((h) => (
+                            <TableRow
+                              key={`${h.namespace}/${h.name}`}
+                              hover
+                              sx={{ cursor: "pointer" }}
+                              onClick={() => setDrawerPod(h.name)}
+                            >
+                              <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>{h.name}</TableCell>
+                              <TableCell>{h.restarts}</TableCell>
+                              <TableCell>{h.phase}</TableCell>
+                              <TableCell>
+                                <Chip
+                                  size="small"
+                                  label={h.severity}
+                                  color={
+                                    h.severity === "high" ? "error" : h.severity === "medium" ? "warning" : "default"
+                                  }
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </Section>
                   )}
 

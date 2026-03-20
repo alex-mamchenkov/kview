@@ -72,12 +72,23 @@ export default function DataplaneStatus(props: Props) {
   const ns = data.item.namespaces;
   const nodes = data.item.nodes;
   const plane = data.item.plane;
+  const wh = data.item.workloadHints;
 
   return (
     <Box sx={{ mb: 1, px: 2, display: "flex", flexWrap: "wrap", rowGap: 0.5, columnGap: 1 }}>
       <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
         Dataplane · context {data.active || "-"}
       </Typography>
+
+      {wh && wh.namespacesPodSampled > 0 && (
+        <Chip
+          size="small"
+          variant="outlined"
+          color={wh.highSeverityHotspotsInTopN > 0 ? "warning" : "default"}
+          label={`Pod sample: ${wh.namespacesPodSampled}/${wh.totalNamespacesVisible} ns · elevated restarts: ${wh.podsWithElevatedRestarts}`}
+          title={wh.sampleCoverageNote || ""}
+        />
+      )}
 
       <Chip
         size="small"

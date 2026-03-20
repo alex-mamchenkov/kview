@@ -49,6 +49,34 @@ export function statusChipColor(status?: string | null): ChipColor {
   }
 }
 
+/** Pod list API enrichment: ok | attention | problem */
+export function listHealthHintColor(hint?: string | null): ChipColor {
+  switch (hint) {
+    case "problem":
+      return "error";
+    case "attention":
+      return "warning";
+    case "ok":
+      return "success";
+    default:
+      return "default";
+  }
+}
+
+/** Deployment list API enrichment: healthy | progressing | degraded | unknown */
+export function deploymentHealthBucketColor(bucket?: string | null): ChipColor {
+  switch (bucket) {
+    case "healthy":
+      return "success";
+    case "progressing":
+      return "warning";
+    case "degraded":
+      return "error";
+    default:
+      return "default";
+  }
+}
+
 export function jobStatusChipColor(status?: string | null): ChipColor {
   switch (status) {
     case "Complete":

@@ -66,6 +66,24 @@ export type ApiDashboardClusterResponse = {
       state: string;
       observerState: string;
     };
+    workloadHints?: {
+      totalNamespacesVisible: number;
+      namespacesPodSampled: number;
+      topPodRestartHotspots?: Array<{
+        namespace: string;
+        name: string;
+        restarts: number;
+        phase: string;
+        node?: string;
+        lastEventReason?: string;
+        severity: string;
+      }>;
+      podsWithElevatedRestarts: number;
+      highSeverityHotspotsInTopN: number;
+      sampleCoverageNote?: string;
+      sampleFreshness?: string;
+      sampleDegradation?: string;
+    };
   };
 };
 

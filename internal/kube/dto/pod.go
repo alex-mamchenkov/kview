@@ -9,6 +9,9 @@ type PodListItemDTO struct {
 	Restarts  int32          `json:"restarts"`
 	AgeSec    int64          `json:"ageSec"`
 	LastEvent *EventBriefDTO `json:"lastEvent,omitempty"`
+	// List enrichment (Stage 5C): derived from snapshot row only, no extra kube reads.
+	RestartSeverity string `json:"restartSeverity,omitempty"` // none | low | medium | high
+	ListHealthHint  string `json:"listHealthHint,omitempty"`  // ok | attention | problem
 }
 
 type PodDetailsDTO struct {

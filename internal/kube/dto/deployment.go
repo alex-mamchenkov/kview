@@ -1,15 +1,18 @@
 package dto
 
 type DeploymentListItemDTO struct {
-	Name      string        `json:"name"`
-	Namespace string        `json:"namespace"`
-	Ready     string        `json:"ready"`
-	UpToDate  int32         `json:"upToDate"`
-	Available int32         `json:"available"`
-	Strategy  string        `json:"strategy"`
-	AgeSec    int64         `json:"ageSec"`
+	Name      string         `json:"name"`
+	Namespace string         `json:"namespace"`
+	Ready     string         `json:"ready"`
+	UpToDate  int32          `json:"upToDate"`
+	Available int32          `json:"available"`
+	Strategy  string         `json:"strategy"`
+	AgeSec    int64          `json:"ageSec"`
 	LastEvent *EventBriefDTO `json:"lastEvent,omitempty"`
-	Status    string        `json:"status"`
+	Status    string         `json:"status"`
+	// List enrichment (Stage 5C): derived from snapshot row only.
+	HealthBucket          string `json:"healthBucket,omitempty"` // healthy | progressing | degraded | unknown
+	RolloutNeedsAttention bool   `json:"rolloutNeedsAttention,omitempty"`
 }
 
 type DeploymentDetailsDTO struct {

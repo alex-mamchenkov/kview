@@ -4,7 +4,7 @@ import { GridColDef } from "@mui/x-data-grid";
 import { apiGet } from "../../../api";
 import PodDrawer from "./PodDrawer";
 import { fmtAge } from "../../../utils/format";
-import { eventChipColor, phaseChipColor } from "../../../utils/k8sUi";
+import { eventChipColor, listHealthHintColor, phaseChipColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 
@@ -21,6 +21,9 @@ type Pod = {
     reason: string;
     lastSeen: number;
   };
+  /** Snapshot-derived (optional for older backends) */
+  restartSeverity?: string;
+  listHealthHint?: string;
 };
 
 type Row = Pod & { id: string };
@@ -39,6 +42,28 @@ const columns: GridColDef<Row>[] = [
     },
   },
   { field: "ready", headerName: "Ready", width: 110 },
+  {
+    field: "listHealthHint",
+    headerName: "Signal",
+    width: 120,
+    renderCell: (p) => {
+      const hint = p.row.listHealthHint;
+      if (!hint) return "-";
+      return <Chip size="small" label={hint} color={listHealthHintColor(hint)} />;
+    },
+    sortable: false,
+  },
+  {
+    field: "restartSeverity",
+    headerName: "Restart Δ",
+    width: 110,
+    renderCell: (p) => {
+      const sev = p.row.restartSeverity;
+      if (!sev || sev === "none") return "—";
+      return <Chip size="small" label={sev} variant="outlined" />;
+    },
+    sortable: false,
+  },
   { field: "restarts", headerName: "Restarts", width: 120, type: "number" },
   { field: "node", headerName: "Node", flex: 1, minWidth: 180 },
   {
@@ -75,7 +100,9 @@ export default function PodsTable({ token, namespace }: { token: string; namespa
     return (
       row.name.toLowerCase().includes(q) ||
       (row.node || "").toLowerCase().includes(q) ||
-      (row.phase || "").toLowerCase().includes(q)
+      (row.phase || "").toLowerCase().includes(q) ||
+      (row.listHealthHint || "").toLowerCase().includes(q) ||
+      (row.restartSeverity || "").toLowerCase().includes(q)
     );
   }, []);
 

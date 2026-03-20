@@ -1203,7 +1203,8 @@ func (s *Server) Router() http.Handler {
 				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
 				return
 			}
-			writeDataplaneListResponse(w, active, snap.Items, snap.Meta, snap.Err)
+			items := dataplane.EnrichPodListItemsForAPI(snap.Items)
+			writeDataplaneListResponse(w, active, items, snap.Meta, snap.Err)
 		})
 
 		api.Get("/namespaces/{ns}/pods/{name}", func(w http.ResponseWriter, r *http.Request) {
@@ -1308,7 +1309,8 @@ func (s *Server) Router() http.Handler {
 				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
 				return
 			}
-			writeDataplaneListResponse(w, active, snap.Items, snap.Meta, snap.Err)
+			items := dataplane.EnrichDeploymentListItemsForAPI(snap.Items)
+			writeDataplaneListResponse(w, active, items, snap.Meta, snap.Err)
 		})
 
 		api.Get("/namespaces/{ns}/deployments/{name}", func(w http.ResponseWriter, r *http.Request) {

@@ -4,7 +4,7 @@ import { GridColDef } from "@mui/x-data-grid";
 import { apiGet } from "../../../api";
 import DeploymentDrawer from "./DeploymentDrawer";
 import { fmtAge } from "../../../utils/format";
-import { eventChipColor, statusChipColor } from "../../../utils/k8sUi";
+import { deploymentHealthBucketColor, eventChipColor, statusChipColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 
@@ -22,6 +22,8 @@ type Deployment = {
     reason: string;
     lastSeen: number;
   };
+  healthBucket?: string;
+  rolloutNeedsAttention?: boolean;
 };
 
 type Row = Deployment & { id: string };
@@ -38,6 +40,20 @@ const columns: GridColDef<Row>[] = [
       const status = String(p.value || "");
       return <Chip size="small" label={status || "-"} color={statusChipColor(status)} />;
     },
+  },
+  {
+    field: "healthBucket",
+    headerName: "Rollout",
+    width: 130,
+    renderCell: (p) => {
+      const b = p.row.healthBucket;
+      if (!b) return "-";
+      const attention = p.row.rolloutNeedsAttention ? " · !" : "";
+      return (
+        <Chip size="small" label={`${b}${attention}`} color={deploymentHealthBucketColor(b)} />
+      );
+    },
+    sortable: false,
   },
   { field: "ready", headerName: "Ready", width: 130 },
   { field: "upToDate", headerName: "Up-to-date", width: 130, type: "number" },
