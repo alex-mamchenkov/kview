@@ -16,6 +16,11 @@ This document describes what the Stage 5 dataplane currently owns in code, what 
     - Cluster-wide nodes
     - Namespaced pods
     - Namespaced deployments
+    - Namespaced daemonsets
+    - Namespaced statefulsets
+    - Namespaced replicasets
+    - Namespaced jobs
+    - Namespaced cronjobs
     - Namespaced services
     - Namespaced ingresses
     - Namespaced persistentvolumeclaims
@@ -36,7 +41,7 @@ All of this is keyed by **context name**, using `cluster.Manager.GetClientsForCo
   - Bounded retry/backoff for transient/proxy errors.
 - Snapshots are cached on the plane, with TTLs:
   - Namespaces: ~15s
-  - Namespace-scoped reads (pods/deployments/services/ingresses/pvcs/configmaps/secrets): ~15s
+  - Namespace-scoped reads (workloads, services, networking, storage, config): ~15s
   - Nodes: ~30s
 
 ### Namespace summary projection
@@ -66,17 +71,17 @@ All of this is keyed by **context name**, using `cluster.Manager.GetClientsForCo
 
 ## Still direct-read
 
-The following remain direct `kube` reads today and are **not yet** backed by dataplane snapshots:
+The following remain direct `kube` reads today and are **not yet** fully behind dataplane:
 
-- Most detail handlers remain direct reads.
-- Parts of namespace summary beyond pods/deployments:
-  - Jobs
-  - StatefulSets
-  - DaemonSets
-  - CronJobs
-  - Helm summary internals
+- Most detail / events / YAML handlers remain direct reads.
+- Namespace-scoped **list** handlers that are still direct reads:
+  - serviceaccounts
+  - roles
+  - rolebindings
+  - helmreleases
+- `kube.GetNamespaceSummary` (legacy base for `/api/namespaces/{name}/summary`) still performs its own direct lists for workload counts (daemonsets, statefulsets, jobs, cronjobs, etc.); those counts are **not** yet overlaid from dataplane snapshots in that projection.
 
-These are still correct but do not yet benefit from scheduler-mediated caching/normalization.
+These paths are still correct but may not yet benefit from scheduler-mediated list caching where noted above.
 
 ---
 
@@ -202,4 +207,16 @@ Dataplane-backed list endpoints now include:
 - `/api/namespaces/{ns}/secrets`
 
 These list endpoints now return dataplane metadata (`observed`, `meta.freshness`, `meta.coverage`, `meta.degradation`, `meta.completeness`, `meta.state`) and no longer call direct kube list reads in handlers.
+
+## Stage 5C wave 2 (workload list migration)
+
+Additional dataplane-backed **namespaced list** endpoints:
+
+- `/api/namespaces/{ns}/daemonsets`
+- `/api/namespaces/{ns}/statefulsets`
+- `/api/namespaces/{ns}/jobs`
+- `/api/namespaces/{ns}/cronjobs`
+- `/api/namespaces/{ns}/replicasets` (included in this wave: DTO/list helpers align with existing patterns)
+
+Handlers use the same `writeDataplaneListResponse` envelope as Stage 5B list surfaces. Raw list acquisition remains `kube.List*` functions executed inside `executeNamespacedSnapshot`.
 

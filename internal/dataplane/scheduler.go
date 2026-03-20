@@ -13,19 +13,24 @@ const (
 	WorkClassSnapshot WorkClass = "snapshot"
 )
 
-// ResourceKind identifies first-wave covered resources.
+// ResourceKind identifies scheduler work keys for dataplane snapshots.
 type ResourceKind string
 
 const (
-	ResourceKindNamespaces  ResourceKind = "namespaces"
-	ResourceKindPods        ResourceKind = "pods"
-	ResourceKindDeployments ResourceKind = "deployments"
-	ResourceKindNodes       ResourceKind = "nodes"
-	ResourceKindServices    ResourceKind = "services"
-	ResourceKindIngresses   ResourceKind = "ingresses"
-	ResourceKindPVCs        ResourceKind = "persistentvolumeclaims"
-	ResourceKindConfigMaps  ResourceKind = "configmaps"
-	ResourceKindSecrets     ResourceKind = "secrets"
+	ResourceKindNamespaces   ResourceKind = "namespaces"
+	ResourceKindPods         ResourceKind = "pods"
+	ResourceKindDeployments  ResourceKind = "deployments"
+	ResourceKindNodes        ResourceKind = "nodes"
+	ResourceKindServices     ResourceKind = "services"
+	ResourceKindIngresses    ResourceKind = "ingresses"
+	ResourceKindPVCs         ResourceKind = "persistentvolumeclaims"
+	ResourceKindConfigMaps   ResourceKind = "configmaps"
+	ResourceKindSecrets      ResourceKind = "secrets"
+	ResourceKindDaemonSets   ResourceKind = "daemonsets"
+	ResourceKindStatefulSets ResourceKind = "statefulsets"
+	ResourceKindReplicaSets  ResourceKind = "replicasets"
+	ResourceKindJobs         ResourceKind = "jobs"
+	ResourceKindCronJobs     ResourceKind = "cronjobs"
 )
 
 type workKey struct {

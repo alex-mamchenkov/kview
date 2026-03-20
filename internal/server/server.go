@@ -1373,13 +1373,9 @@ func (s *Server) Router() http.Handler {
 			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 			defer cancel()
 
-			clients, active, err := s.mgr.GetClients(ctx)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
-				return
-			}
-
-			items, err := kube.ListDaemonSets(ctx, clients, ns)
+			active := s.mgr.ActiveContext()
+			s.dp.EnsureObservers(ctx, active)
+			snap, err := s.dp.DaemonSetsSnapshot(ctx, active, ns)
 			if err != nil {
 				status := http.StatusInternalServerError
 				if apierrors.IsForbidden(err) {
@@ -1388,8 +1384,7 @@ func (s *Server) Router() http.Handler {
 				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
 				return
 			}
-
-			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": items})
+			writeDataplaneListResponse(w, active, snap.Items, snap.Meta, snap.Err)
 		})
 
 		api.Get("/namespaces/{ns}/daemonsets/{name}", func(w http.ResponseWriter, r *http.Request) {
@@ -1480,13 +1475,9 @@ func (s *Server) Router() http.Handler {
 			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 			defer cancel()
 
-			clients, active, err := s.mgr.GetClients(ctx)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
-				return
-			}
-
-			items, err := kube.ListStatefulSets(ctx, clients, ns)
+			active := s.mgr.ActiveContext()
+			s.dp.EnsureObservers(ctx, active)
+			snap, err := s.dp.StatefulSetsSnapshot(ctx, active, ns)
 			if err != nil {
 				status := http.StatusInternalServerError
 				if apierrors.IsForbidden(err) {
@@ -1495,8 +1486,7 @@ func (s *Server) Router() http.Handler {
 				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
 				return
 			}
-
-			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": items})
+			writeDataplaneListResponse(w, active, snap.Items, snap.Meta, snap.Err)
 		})
 
 		api.Get("/namespaces/{ns}/statefulsets/{name}", func(w http.ResponseWriter, r *http.Request) {
@@ -1587,13 +1577,9 @@ func (s *Server) Router() http.Handler {
 			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 			defer cancel()
 
-			clients, active, err := s.mgr.GetClients(ctx)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
-				return
-			}
-
-			items, err := kube.ListReplicaSets(ctx, clients, ns)
+			active := s.mgr.ActiveContext()
+			s.dp.EnsureObservers(ctx, active)
+			snap, err := s.dp.ReplicaSetsSnapshot(ctx, active, ns)
 			if err != nil {
 				status := http.StatusInternalServerError
 				if apierrors.IsForbidden(err) {
@@ -1602,8 +1588,7 @@ func (s *Server) Router() http.Handler {
 				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
 				return
 			}
-
-			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": items})
+			writeDataplaneListResponse(w, active, snap.Items, snap.Meta, snap.Err)
 		})
 
 		api.Get("/namespaces/{ns}/replicasets/{name}", func(w http.ResponseWriter, r *http.Request) {
@@ -1668,13 +1653,9 @@ func (s *Server) Router() http.Handler {
 			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 			defer cancel()
 
-			clients, active, err := s.mgr.GetClients(ctx)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
-				return
-			}
-
-			items, err := kube.ListJobs(ctx, clients, ns)
+			active := s.mgr.ActiveContext()
+			s.dp.EnsureObservers(ctx, active)
+			snap, err := s.dp.JobsSnapshot(ctx, active, ns)
 			if err != nil {
 				status := http.StatusInternalServerError
 				if apierrors.IsForbidden(err) {
@@ -1683,8 +1664,7 @@ func (s *Server) Router() http.Handler {
 				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
 				return
 			}
-
-			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": items})
+			writeDataplaneListResponse(w, active, snap.Items, snap.Meta, snap.Err)
 		})
 
 		api.Get("/namespaces/{ns}/jobs/{name}", func(w http.ResponseWriter, r *http.Request) {
@@ -1749,13 +1729,9 @@ func (s *Server) Router() http.Handler {
 			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 			defer cancel()
 
-			clients, active, err := s.mgr.GetClients(ctx)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
-				return
-			}
-
-			items, err := kube.ListCronJobs(ctx, clients, ns)
+			active := s.mgr.ActiveContext()
+			s.dp.EnsureObservers(ctx, active)
+			snap, err := s.dp.CronJobsSnapshot(ctx, active, ns)
 			if err != nil {
 				status := http.StatusInternalServerError
 				if apierrors.IsForbidden(err) {
@@ -1764,8 +1740,7 @@ func (s *Server) Router() http.Handler {
 				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
 				return
 			}
-
-			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": items})
+			writeDataplaneListResponse(w, active, snap.Items, snap.Meta, snap.Err)
 		})
 
 		api.Get("/namespaces/{ns}/cronjobs/{name}", func(w http.ResponseWriter, r *http.Request) {

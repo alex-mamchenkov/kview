@@ -14,13 +14,15 @@ Notes:
 
 ## migrate_now
 
+**Done (Stage 5C wave 2):** workload list handlers below use `s.dp.*Snapshot` + `writeDataplaneListResponse`; acquisition is still `kube.List*` inside the dataplane snapshot executor.
+
 | Endpoint group (route pattern) | Current source | Why 5C now | Likely owner wave |
 |---|---|---|---|
-| `GET /api/namespaces/{ns}/daemonsets` | `kube.ListDaemonSets` (direct read) | Matches the “list surface” pattern already being dataplane-backed for pods/deployments; enables consistent list-level metadata (`observed`, freshness, coverage, degradation, completeness, state`) in the namespace drawer. | 5C Wave 1 |
-| `GET /api/namespaces/{ns}/statefulsets` | `kube.ListStatefulSets` (direct read) | Same UI anchor value and consistent list pagination/metadata expectations as other first-wave kinds. | 5C Wave 1 |
-| `GET /api/namespaces/{ns}/jobs` | `kube.ListJobs` (direct read) | Jobs are a common “workload health” surface; list-level metadata is more valuable than detail-level reads for deciding whether to expand. | 5C Wave 1 |
-| `GET /api/namespaces/{ns}/cronjobs` | `kube.ListCronJobs` (direct read) | CronJobs are a frequent operational surface; list-level metadata reduces “unknown freshness” UX. | 5C Wave 1 |
-| `GET /api/namespaces/{ns}/replicasets` (maybe) | `kube.ListReplicaSets` (direct read) | Similar to Deployments/Pods list behavior; consider after daemonsets/statefulsets/jobs/cronjobs to avoid expanding too many kinds at once. | 5C Wave 2+ (conditional) |
+| `GET /api/namespaces/{ns}/daemonsets` | dataplane `DaemonSetsSnapshot` → `kube.ListDaemonSets` | Matches the “list surface” pattern already being dataplane-backed for pods/deployments; enables consistent list-level metadata (`observed`, freshness, coverage, degradation, completeness, state`) in the namespace drawer. | 5C Wave 2 ✓ |
+| `GET /api/namespaces/{ns}/statefulsets` | dataplane `StatefulSetsSnapshot` → `kube.ListStatefulSets` | Same UI anchor value and consistent list pagination/metadata expectations as other first-wave kinds. | 5C Wave 2 ✓ |
+| `GET /api/namespaces/{ns}/jobs` | dataplane `JobsSnapshot` → `kube.ListJobs` | Jobs are a common “workload health” surface; list-level metadata is more valuable than detail-level reads for deciding whether to expand. | 5C Wave 2 ✓ |
+| `GET /api/namespaces/{ns}/cronjobs` | dataplane `CronJobsSnapshot` → `kube.ListCronJobs` | CronJobs are a frequent operational surface; list-level metadata reduces “unknown freshness” UX. | 5C Wave 2 ✓ |
+| `GET /api/namespaces/{ns}/replicasets` | dataplane `ReplicaSetsSnapshot` → `kube.ListReplicaSets` | DTO and list helper are straightforward; useful for deployment-related drill-down and future projections. | 5C Wave 2 ✓ |
 
 ---
 

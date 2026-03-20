@@ -86,29 +86,22 @@ Frontend surfaces currently showing dataplane state:
 
 `/api/namespaces/{name}/summary` is intentionally mixed in Stage 5A.
 
-Dataplane-derived today:
+Dataplane-derived today (via projection overlays on top of `kube.GetNamespaceSummary`):
 
 - pod counts
 - deployment counts
+- services, ingresses, PVCs, configmaps, secrets counts
 - pod health
 - deployment health
 - problematic pod entries
 - problematic deployment entries
 - summary metadata describing freshness, coverage, degradation, completeness, and coarse state
 
-Still legacy direct-read today:
+Still legacy direct-read today (within the mixed summary contract):
 
-- jobs
-- statefulsets
-- daemonsets
-- cronjobs
-- services
-- ingresses
-- PVCs
-- configmaps
-- secrets
+- daemonset, statefulset, job, and cronjob counts (not yet overlaid from dataplane workload snapshots)
 - Helm summary internals
-- non-pod and non-deployment problematic entries
+- non-pod and non-deployment problematic entries (from the legacy base pass)
 
 This mixed ownership is accepted for Stage 5A. The API and UI must remain explicit about it rather than implying that the whole summary is snapshot-backed.
 
@@ -191,7 +184,12 @@ Still intentionally deferred:
 
 - broad watch coverage for all kinds
 - full detail endpoint migration
-- jobs/cronjobs/statefulsets/daemonsets list migration
+
+## Stage 5C wave 2 note
+
+Namespaced **list** handlers for daemonsets, statefulsets, jobs, cronjobs, and replicasets are now dataplane-backed (scheduler-mediated snapshots, same list response metadata as pods/deployments/services).
+
+Remaining direct namespaced **list** surfaces include serviceaccounts, roles, rolebindings, and helmreleases. Namespace summary (`/api/namespaces/{name}/summary`) still starts from `kube.GetNamespaceSummary` for its legacy base counts; overlaying workload counts from these new snapshots is follow-up work.
 
 ## Stage 5A Closure Judgment
 
