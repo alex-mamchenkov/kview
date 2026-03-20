@@ -1,6 +1,6 @@
 # Stage 5 Dataplane Status
 
-This document describes what the Stage 5 dataplane currently owns in code, what remains direct-read, and how metadata and observers behave.
+This document summarizes dataplane ownership, projections, and what remains **direct-read by explicit exception**. The **route-by-route** map lives in **`docs/STAGE5C_READ_SUBSTRATE.md`** (maintain both when behavior changes).
 
 ---
 
@@ -11,71 +11,61 @@ This document describes what the Stage 5 dataplane currently owns in code, what 
 - `DataPlaneManager` manages one `ClusterPlane` per kube context.
 - Each `ClusterPlane` owns:
   - **Capability registry** for that cluster (read-side learning from namespaces, nodes, pods, deployments).
-  - **Raw snapshots**:
-    - Cluster-wide namespaces
-    - Cluster-wide nodes
-    - Namespaced pods
-    - Namespaced deployments
-    - Namespaced daemonsets
-    - Namespaced statefulsets
-    - Namespaced replicasets
-    - Namespaced jobs
-    - Namespaced cronjobs
-    - Namespaced services
-    - Namespaced ingresses
-    - Namespaced persistentvolumeclaims
-    - Namespaced configmaps
-    - Namespaced secrets
-  - **Observer state**:
-    - Namespaces observer
-    - Nodes observer
-  - **Plane health** (coarse).
+  - **Raw snapshots** (namespace-scoped unless noted):
+    - Cluster-wide: **namespaces**, **nodes**
+    - Pods, deployments, daemonsets, statefulsets, replicasets, jobs, cronjobs
+    - Services, ingresses, persistentvolumeclaims, configmaps, secrets
+  - **Observer state**: namespaces observer, nodes observer
+  - **Plane health** (coarse)
 
-All of this is keyed by **context name**, using `cluster.Manager.GetClientsForContext`.
+All keyed by **context name** via `cluster.Manager.GetClientsForContext`.
 
 ### Scheduler-mediated reads
 
-- All dataplane snapshots use a shared scheduler:
-  - Per-cluster concurrency limits.
-  - In-flight de-duplication.
-  - Bounded retry/backoff for transient/proxy errors.
-- Snapshots are cached on the plane, with TTLs:
-  - Namespaces: ~15s
-  - Namespace-scoped reads (workloads, services, networking, storage, config): ~15s
-  - Nodes: ~30s
+- Snapshots use a shared scheduler: per-cluster concurrency, in-flight de-duplication, bounded retry/backoff.
+- Cached on the plane with TTLs (~15s namespaced workloads, ~15s namespaces, ~30s nodes).
 
 ### Namespace summary projection
 
-- `/api/namespaces/{name}/summary` is **projection-led** (Stage 5C): built from dataplane namespace-scoped snapshots only (no `kube.GetNamespaceSummary`).
-  - Counts and health for pods, deployments, services, ingresses, PVCs, configmaps, secrets, daemonsets, statefulsets, jobs, cronjobs; replica set rollups in `workloadByKind`.
-  - Additive: `restartHotspots` (bounded), `workloadByKind` (healthy/progressing/degraded per kind).
-  - **Helm** is not snapshot-owned yet: helm list/count stay empty; metadata stays partial/inexact.
-  - Attaches projection metadata (`NamespaceSummaryMetaDTO`) for:
-    - `freshness`, `coverage`, `degradation`, `completeness`, `state`.
+- `/api/namespaces/{name}/summary` is **projection-led** (Stage 5C): `NamespaceSummaryProjection` builds from dataplane snapshots only—**not** `kube.GetNamespaceSummary` in the handler.
+  - Counts and health for all snapshot-owned kinds; `workloadByKind`, `restartHotspots` (bounded).
+  - **Helm** is not snapshot-owned: helm list/count stay empty; metadata remains **partial / inexact** where Helm is part of the contract.
+  - `NamespaceSummaryMetaDTO`: `freshness`, `coverage`, `degradation`, `completeness`, `state`.
 
 ### Dashboard summary
 
-- `/api/dashboard/cluster` returns a small summary built from dataplane snapshots:
-  - Namespace counts and “unhealthy” marker (from `HasUnhealthyConditions`).
-  - Node counts.
-  - Freshness/coverage/degradation/completeness/state for both.
-  - **Workload hints** (bounded): merged top pod restart hotspots from the first N namespaces (alphabetical), elevated-restart counts in that sample, and sample freshness/degradation — not cluster-complete.
+- `/api/dashboard/cluster` uses `DashboardSummary`: namespace + node snapshot metadata, optional **workload hints** (bounded cross-namespace pod restart sample—not cluster-complete).
+
+### List API enrichment (Stage 5C)
+
+- Pods and deployments list rows can include small **projection-derived** fields computed from snapshot DTOs in-handler (`EnrichPodListItemsForAPI`, `EnrichDeploymentListItemsForAPI`)—no extra kube calls.
 
 ---
 
-## Still direct-read
+## Default dataplane-backed (main namespaced list surfaces)
 
-The following remain direct `kube` reads today and are **not yet** fully behind dataplane:
+These use `*Snapshot` + `writeDataplaneListResponse` (or namespaces’ equivalent envelope):
 
-- Most detail / events / YAML handlers remain direct reads.
-- Namespace-scoped **list** handlers that are still direct reads:
-  - serviceaccounts
-  - roles
-  - rolebindings
-  - helmreleases
-- `kube.GetNamespaceSummary` (legacy base for `/api/namespaces/{name}/summary`) still performs its own direct lists for workload counts (daemonsets, statefulsets, jobs, cronjobs, etc.); those counts are **not** yet overlaid from dataplane snapshots in that projection.
+- `/api/namespaces/{ns}/pods` … `/secrets` for the kinds listed in **STAGE5C_READ_SUBSTRATE.md** §1.
 
-These paths are still correct but may not yet benefit from scheduler-mediated list caching where noted above.
+Also:
+
+- `/api/namespaces` — namespaces list + `meta`
+- `/api/dashboard/cluster` — summary from dataplane
+
+---
+
+## Explicit direct-read exceptions (summary)
+
+**Canonical list:** `docs/STAGE5C_READ_SUBSTRATE.md` §4.
+
+Categories:
+
+- **Namespace detail** (`/api/namespaces/{name}`) and **resource quotas** list.
+- **Deferred namespaced lists**: serviceaccounts, roles, rolebindings, helmreleases (+ `GET /api/helmcharts`).
+- **Cluster-scoped** APIs: nodes, clusterroles/bindings, CRDs, PVs (and their detail/events/yaml).
+- **All** detail / events / YAML (where routed) / relation lookups for kinds that have those endpoints— even when the **list** for that kind is dataplane-backed.
+- **Product** APIs: activity, sessions, healthz, contexts, websockets, auth can-i.
 
 ---
 
@@ -83,55 +73,17 @@ These paths are still correct but may not yet benefit from scheduler-mediated li
 
 ### Activation
 
-- Observers are started when the UI hits:
-  - `/api/namespaces` for the **active** context.
-- That call:
-  - Resolves the current kube context.
-  - Calls `DataPlaneManager.EnsureObservers` for that context.
-  - Uses the dataplane namespaces snapshot as the backing source for the list.
-- Startup is intentionally **endpoint-driven** rather than global:
-  - There is no process-wide "start all observers for all clusters" loop.
-  - Only clusters that are actively viewed incur observation cost.
-  - This keeps the system bounded for multi-cluster setups.
+- Observers start when the UI hits `/api/namespaces` for the **active** context (`EnsureObservers`).
+- Endpoint-driven, not global: only actively viewed clusters pay observation cost.
 
-### Behavior and lifecycle
+### Behavior
 
-- Namespaces observer:
-  - Periodically refreshes the namespaces snapshot for that context.
-  - Moves through explicit states: starting, active, blocked_by_access, backoff, degraded, stopped.
-- Nodes observer:
-  - Periodically refreshes the nodes snapshot.
-  - Applies simple exponential backoff when access is blocked or upstream is unstable.
+- Namespaces and nodes observers refresh periodically; explicit states (`starting`, `active`, `blocked_by_access`, `backoff`, `degraded`, …).
+- Transitions are logged to the runtime log buffer (`dataplane` source).
 
-Operators may see the following `ObserverState` values in logs or the dashboard:
+### `not_loaded` / lazy planes
 
-- `starting` / `active` / `running`: observer is healthy and making progress.
-- `blocked_by_access`: RBAC denies required reads; capabilities will reflect denial.
-- `backoff`: repeated failures; observer is temporarily backing off.
-- `degraded`: observer is running but has seen recent transient issues.
-- `stopped` / `failed`: observer is no longer running for that cluster.
-- `idle` / `waiting_for_scope` / `uncertain`: internal states used when a plane is created but not yet fully activated.
-
-### Runtime logs
-
-- When observer state transitions, a single log entry is written to the runtime log buffer:
-  - Source: `dataplane`
-  - Message includes observer kind, cluster name, and old/new state.
-- When the nodes observer enters backoff, a log entry records the new interval.
-- These logs appear in the existing Activity Panel logs view.
-
-### "not_loaded" and deferred lifecycle behavior
-
-- Some dataplane surfaces may describe a plane or projection as `not_loaded` or equivalent when:
-  - No observers have ever been started for the active context.
-  - No snapshots have yet been taken for that plane.
-- There is intentionally **no** automatic background initialization of all planes today:
-  - Planes are created lazily when first accessed.
-  - Observers start only when relevant endpoints (like `/api/namespaces`) are hit.
-- Future stages may introduce:
-  - More explicit plane lifecycle controls (start/stop per cluster).
-  - Background warm-up for selected clusters or profiles.
-  - Configuration for which profiles/discovery modes to use.
+- No automatic background init of all planes; lazy creation on first access.
 
 ---
 
@@ -139,78 +91,36 @@ Operators may see the following `ObserverState` values in logs or the dashboard:
 
 ### `/api/namespaces` (list)
 
-Response fields:
-
-- `items`: namespace list
-- `active`: current context
-- `limited`: currently always `false`
-- `observed`: snapshot timestamp
-
-The backing snapshot tracks:
-
-- `freshness`: hot/cold/unknown
-- `coverage`: currently `full` from the snapshot’s perspective, but the list is still a legacy direct-read elsewhere.
-- `degradation`: none/minor/severe
-- `completeness`: complete/inexact/unknown
-
-Future work may expose a full `meta` envelope here once more endpoints are moved behind the dataplane.
+- `items`, `observed`, `meta` (`freshness`, `coverage`, `degradation`, `completeness`, `state`).
+- Backed by **NamespacesSnapshot** (not a legacy handler read).
 
 ### `/api/namespaces/{name}/summary`
 
-Response shape:
+- `item` includes resource DTOs + `meta` (`NamespaceSummaryMetaDTO`).
+- UI surfaces state/freshness/coverage in the namespace drawer.
 
-- `item`: `NamespaceSummaryResourcesDTO` including:
-  - `counts`, `podHealth`, `deploymentHealth`, `problematic`, `helmReleases`.
-  - `meta` (`NamespaceSummaryMetaDTO`):
-    - `freshness`
-    - `coverage` (currently `partial`)
-    - `degradation`
-    - `completeness` (currently `inexact`)
-    - `state`: `ok`, `empty`, `denied`, `partial_proxy`, or `degraded`.
+### Dataplane list envelope (`writeDataplaneListResponse`)
 
-The UI shows `state`, `freshness`, and `coverage` in the namespace drawer.
+- `active`, `items`, `observed`, `meta` with the same core keys as above. Covered by `TestWriteDataplaneListResponse_*` in `internal/server`.
 
 ### `/api/dashboard/cluster`
 
-Response:
-
-- `item`: `ClusterDashboardSummary`:
-  - `namespaces` and `nodes` each expose:
-    - `total`, `unhealthy` (namespaces only), and
-    - `freshness`, `coverage`, `degradation`, `completeness`, `state`.
+- `ClusterDashboardSummary` with namespace/node blocks and optional workload hints.
 
 ---
 
-## Remaining Stage 5 work
+## Remaining work (post–5C, not blocking 5C closure)
 
-- Migrate additional list/detail endpoints to use dataplane snapshots where appropriate.
-- Expand projection-backed views beyond namespace summary.
-- Standardize a metadata envelope for all dataplane-backed responses (including `/api/namespaces`) and increase UI surfacing of state/freshness when useful.
-- Extend observers and snapshots for more resource types while keeping scope and API budgets bounded.
+- Migrate **deferred** namespaced lists (serviceaccounts, roles, rolebindings, helm) if/when snapshot semantics are defined.
+- Optional: dataplane-backed **node list** API to align list UX with dashboard snapshot metadata.
+- Expand observers/snapshots only with explicit scope and API budget.
+- Uniform metadata envelope across every API (including non-dataplane routes)—product decision.
 
-## Stage 5B migration wave now active
+---
 
-Dataplane-backed list endpoints now include:
+## Stage history (compact)
 
-- `/api/namespaces/{ns}/pods`
-- `/api/namespaces/{ns}/deployments`
-- `/api/namespaces/{ns}/services`
-- `/api/namespaces/{ns}/ingresses`
-- `/api/namespaces/{ns}/persistentvolumeclaims`
-- `/api/namespaces/{ns}/configmaps`
-- `/api/namespaces/{ns}/secrets`
-
-These list endpoints now return dataplane metadata (`observed`, `meta.freshness`, `meta.coverage`, `meta.degradation`, `meta.completeness`, `meta.state`) and no longer call direct kube list reads in handlers.
-
-## Stage 5C wave 2 (workload list migration)
-
-Additional dataplane-backed **namespaced list** endpoints:
-
-- `/api/namespaces/{ns}/daemonsets`
-- `/api/namespaces/{ns}/statefulsets`
-- `/api/namespaces/{ns}/jobs`
-- `/api/namespaces/{ns}/cronjobs`
-- `/api/namespaces/{ns}/replicasets` (included in this wave: DTO/list helpers align with existing patterns)
-
-Handlers use the same `writeDataplaneListResponse` envelope as Stage 5B list surfaces. Raw list acquisition remains `kube.List*` functions executed inside `executeNamespacedSnapshot`.
-
+- **5B:** First namespaced list migration (pods, deployments, services, ingresses, PVCs, configmaps, secrets).
+- **5C wave 2:** Daemonsets, statefulsets, jobs, cronjobs, replicasets lists.
+- **5C waves 3–4:** Namespace summary projection-only, list enrichment for pods/deployments, drawer/dashboard hints.
+- **5C wave 5 (closure):** `STAGE5C_READ_SUBSTRATE.md`, doc alignment, tests for list response shape.

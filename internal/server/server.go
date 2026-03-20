@@ -88,6 +88,10 @@ func (s *Server) Router() http.Handler {
 		api.Use(s.authMiddleware)
 		api.Use(s.activityAccessDeniedLogMiddleware)
 
+		// Read-path ownership (dataplane snapshot vs projection vs direct kube in handler):
+		// Keep docs/STAGE5C_READ_SUBSTRATE.md in sync when adding GET routes.
+		// Projections must not perform hidden live kube reads; use snapshots only.
+
 		api.Get("/activity", func(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 			defer cancel()

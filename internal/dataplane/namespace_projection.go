@@ -22,6 +22,7 @@ type NamespaceSummaryProjection struct {
 }
 
 // NamespaceSummaryProjection builds a namespace summary from dataplane snapshots (projection-led).
+// It must not perform ad hoc kube client reads; only DataPlaneManager snapshot entrypoints.
 // Helm releases are not snapshot-owned yet: counts stay zero and releases list empty unless a later
 // stage adds a dataplane/Helm snapshot. Coverage/completeness metadata stays partial/inexact.
 func (m *manager) NamespaceSummaryProjection(ctx context.Context, clusterName, namespace string) (NamespaceSummaryProjection, error) {

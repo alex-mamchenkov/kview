@@ -127,3 +127,4 @@ Read-side cluster observation, capabilities, and projection metadata belong to t
 - The data plane lives under `internal/dataplane`.
 - Mutation logic continues to use the shared action framework.
 - Data plane contracts must use explicit enums and structured types for capabilities, errors, and freshness.
+- **API read ownership** (snapshot vs projection vs intentional direct kube in handlers) is documented in `docs/STAGE5C_READ_SUBSTRATE.md`; keep it accurate when adding routes.

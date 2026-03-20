@@ -1,5 +1,7 @@
 # Stage 5C Migration Inventory (Wave 5C)
 
+**Closure:** For the authoritative route-by-route read substrate after Stage 5C, see **`docs/STAGE5C_READ_SUBSTRATE.md`**. This inventory remains the migration-oriented view (buckets and rationale).
+
 This inventory classifies remaining direct `kube` reads (in `internal/server/server.go`) into three buckets:
 
 - `migrate_now`: namespaced list surfaces that are high-value UI anchors and should become dataplane-backed first.
@@ -9,6 +11,7 @@ This inventory classifies remaining direct `kube` reads (in `internal/server/ser
 Notes:
 - “Current source” is based on which handler calls `s.dp.<...Snapshot>` / `writeDataplaneListResponse` (dataplane) vs calling `kube.<...>` directly (direct read).
 - Details/events/yaml are treated separately even if their parent “list” surface is migrated later.
+- **`GET /api/namespaces/{name}/summary`** is **projection-led** (`NamespaceSummaryProjection`); it is **not** a handler-level `kube.GetNamespaceSummary` read.
 
 ---
 
@@ -131,4 +134,24 @@ Helm UI surfaces are postponed for now and treated as exceptions to any “list 
 - `POST /api/helm/reinstall`
 
 Why postpone: Helm behavior is operationally sensitive; snapshot ownership would require careful semantics to avoid misleading freshness/state.
+
+### Deferred namespaced list families (explicit exception for 5C)
+
+These **list** routes remain direct reads; they were **not** in the 5C migration batch:
+
+- `GET /api/namespaces/{ns}/serviceaccounts`
+- `GET /api/namespaces/{ns}/roles`
+- `GET /api/namespaces/{ns}/rolebindings`
+
+Namespace helpers (not “workload lists”):
+
+- `GET /api/namespaces/{name}` (detail)
+- `GET /api/namespaces/{name}/resourcequotas`
+
+---
+
+## Stage 5C closure (inventory vs substrate)
+
+- **Done:** all rows under **migrate_now** (wave 2 workload lists). Earlier 5B/5C waves covered pods, deployments, services, ingresses, PVCs, configmaps, secrets, summary projection, and list enrichment—see **`STAGE5_STATUS.md`**.
+- **Canonical route map:** **`STAGE5C_READ_SUBSTRATE.md`** — use it when changing handlers so ownership stays explicit.
 

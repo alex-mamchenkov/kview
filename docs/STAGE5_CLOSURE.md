@@ -1,6 +1,45 @@
-# Stage 5A Closure
+# Stage 5 closure notes
 
-This document is the final closure status for Stage 5A.
+This file records **Stage 5C end state** (current) and retains the **Stage 5A** closure narrative below for history.
+
+---
+
+## Stage 5C end state (closure wave — current)
+
+### What we claim (truthful)
+
+> For the main **namespaced list** surfaces used as UI anchors, **dataplane snapshots** are the default read substrate with scheduler-mediated cache and **list metadata** on every migrated route. **Namespace summary** is **projection-led** from those snapshots only (handler does not call `kube.GetNamespaceSummary`). Remaining handler-level `kube` reads are **limited, intentional exceptions** (details, events, YAML where exposed, relation lookups, deferred lists, cluster-scoped families, namespace detail/quotas, Helm).
+
+### Architecture (short, operator/developer-facing)
+
+- **Raw snapshots** live in `internal/dataplane` per cluster plane; acquisition uses `kube.List*` **inside** snapshot execution, not scattered in handlers for migrated lists.
+- **Projections** (e.g. namespace summary) are first-class: they **compose** snapshot outputs and metadata; they do not hide extra live cluster reads.
+- **Handlers** should use snapshot/projection-backed paths for normal list and summary UI surfaces; **direct** reads are reserved for exceptions and should stay **obvious** in `server.go`.
+- **Route map:** `docs/STAGE5C_READ_SUBSTRATE.md` — update it when adding or changing `/api` read behavior.
+
+### Docs index
+
+| Document | Role |
+|----------|------|
+| `docs/STAGE5C_READ_SUBSTRATE.md` | Canonical GET/read ownership table |
+| `docs/STAGE5_STATUS.md` | Subsystem behavior, observers, metadata |
+| `docs/STAGE5C_MIGRATION_INVENTORY.md` | Migration buckets + deferred lists |
+
+### Known gaps (not faked as “complete dataplane”)
+
+- **Node list API** (`GET /api/nodes`) is still a **direct** handler read; the **dashboard** uses the dataplane **nodes snapshot** for summary. Full alignment would be a follow-up.
+- **Helm** list/detail and **RBAC-ish** lists (serviceaccounts, roles, rolebindings) remain direct or deferred.
+- **Resource quotas** list is direct.
+
+### Functional completeness
+
+**Stage 5C is functionally complete** for its scope: namespaced workload/network/storage/config **lists** + namespace **summary projection** + dashboard **summary** + honest documentation of exceptions. Full cluster parity and Helm/RBAC list migration are **out of scope** for 5C.
+
+---
+
+# Stage 5A Closure (historical)
+
+This section is the final closure status for **Stage 5A** as originally written.
 
 Stage 5A was intended to establish the read-side architectural foundation for a policy-driven, RBAC-aware, proxy-tolerant, multi-cluster dataplane without broad feature expansion.
 
@@ -50,7 +89,7 @@ It did not intend to finish full dataplane migration for every resource endpoint
 - Observer state transitions are logged to the runtime log buffer.
 - `/api/dashboard/cluster` is dataplane-backed.
 - `/api/namespaces` is dataplane-backed.
-- `/api/namespaces/{name}/summary` is projection-backed and overlays dataplane snapshots for pods and deployments.
+- Namespace summary has since moved to **full projection-led** implementation in Stage 5C (see above).
 
 ## Active Runtime Behavior Versus Contract Placeholders
 
@@ -68,29 +107,23 @@ These enums exist as architectural contract placeholders only in Stage 5A:
 
 They are intentionally documented in code to preserve the intended architecture, but they are not selectable or fully implemented runtime behavior in this stage.
 
-## Dataplane-Backed Endpoints And Surfaces
+## Dataplane-Backed Endpoints And Surfaces (evolved)
 
-Backend endpoints currently backed by dataplane behavior:
+See **`docs/STAGE5C_READ_SUBSTRATE.md`** for the current route map. Stage 5A originally called out:
 
 - `/api/dashboard/cluster`
 - `/api/namespaces`
-- `/api/namespaces/{name}/summary`
+- namespace summary (now projection-only in 5C)
 
-Frontend surfaces currently showing dataplane state:
+Frontend surfaces showing dataplane state:
 
 - cluster dashboard dataplane overview
 - namespace list metadata
 - namespace drawer summary status
 
-## Namespace Summary Ownership
+## Namespace Summary Ownership (updated in 5C)
 
-`/api/namespaces/{name}/summary` is **projection-led** in Stage 5C: the dataplane assembles counts, health, hotspots, and workload rollups from namespace-scoped snapshots only.
-
-Dataplane-derived today:
-
-- All snapshot-owned namespaced list kinds (pods through cronjobs, etc.)
-- `restartHotspots` and `workloadByKind` additive summaries
-- summary metadata (freshness, coverage, degradation, completeness, state)
+`/api/namespaces/{name}/summary` is **projection-led**: dataplane assembles counts, health, hotspots, and workload rollups from namespace-scoped snapshots only.
 
 Still not snapshot-backed (honest gap until a Helm snapshot exists):
 
@@ -140,49 +173,22 @@ Current visibility includes:
 These are partial by design and accepted for Stage 5A:
 
 - most resource list/detail handlers still use direct `kube` reads
-- namespace summary remains mixed ownership outside pods and deployments
 - only namespaces and nodes have long-lived observers
 - pods and deployments are snapshot-backed on demand, not via long-lived observers
 - there is no universal metadata envelope across every read endpoint yet
 - plane scope is explicit in code but not yet user-configurable
 
+*(Later stages migrated most namespaced lists; see Stage 5C read substrate doc.)*
+
 ## Deferred To Later Stages
 
-The following work is intentionally deferred:
+The following work is intentionally deferred beyond 5C’s chosen scope:
 
-- migrating more list/detail endpoints behind dataplane snapshots
+- migrating **deferred** namespaced lists (serviceaccounts, roles, rolebindings, helm) and **node list** API to dataplane
 - expanding long-lived observation to more resource kinds
 - configurable profiles, discovery modes, and scope policies
 - background warm-up or operator-configured observer lifecycle
-- broader projection-backed views beyond the current namespace summary and dashboard surfaces
 - a uniform metadata envelope for all API responses
-
-## Stage 5B progress note
-
-Stage 5B begins the first legacy-read reduction wave by moving additional namespace-scoped list paths behind dataplane snapshots.
-
-Now dataplane-backed:
-
-- `/api/namespaces/{ns}/pods`
-- `/api/namespaces/{ns}/deployments`
-- `/api/namespaces/{ns}/services`
-- `/api/namespaces/{ns}/ingresses`
-- `/api/namespaces/{ns}/persistentvolumeclaims`
-- `/api/namespaces/{ns}/configmaps`
-- `/api/namespaces/{ns}/secrets`
-
-Namespace summary ownership is also expanded for count overlays of services, ingresses, PVCs, configmaps, and secrets, while keeping the summary contract explicitly partial/inexact.
-
-Still intentionally deferred:
-
-- broad watch coverage for all kinds
-- full detail endpoint migration
-
-## Stage 5C wave 2 note
-
-Namespaced **list** handlers for daemonsets, statefulsets, jobs, cronjobs, and replicasets are now dataplane-backed (scheduler-mediated snapshots, same list response metadata as pods/deployments/services).
-
-Remaining direct namespaced **list** surfaces include serviceaccounts, roles, rolebindings, and helmreleases. Namespace summary (`/api/namespaces/{name}/summary`) still starts from `kube.GetNamespaceSummary` for its legacy base counts; overlaying workload counts from these new snapshots is follow-up work.
 
 ## Stage 5A Closure Judgment
 
