@@ -309,7 +309,7 @@ export default function NodeDrawer(props: {
                         <TableRow>
                           <TableCell>Pod</TableCell>
                           <TableCell>Namespace</TableCell>
-                          <TableCell>Phase</TableCell>
+                          <TableCell>Status</TableCell>
                           <TableCell>Ready</TableCell>
                           <TableCell>Restarts</TableCell>
                           <TableCell>Age</TableCell>

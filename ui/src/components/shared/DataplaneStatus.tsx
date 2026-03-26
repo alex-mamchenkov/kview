@@ -26,7 +26,7 @@ export default function DataplaneStatus(props: Props) {
         }
       } catch (e) {
         if (!cancelled) {
-          setErr("Failed to load dataplane status");
+          setErr("Failed to load cluster data status");
         }
       } finally {
         if (!cancelled) {
@@ -45,7 +45,7 @@ export default function DataplaneStatus(props: Props) {
       <Box sx={{ mb: 1, px: 2, display: "flex", alignItems: "center", gap: 1 }}>
         <CircularProgress size={16} />
         <Typography variant="caption" color="text.secondary">
-          Loading dataplane status…
+          Loading cluster data…
         </Typography>
       </Box>
     );
@@ -63,7 +63,7 @@ export default function DataplaneStatus(props: Props) {
   return (
     <Box sx={{ mb: 1, px: 2, display: "flex", flexWrap: "wrap", rowGap: 0.5, columnGap: 1 }}>
       <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-        Dataplane · context {data.active || "-"}
+        Cluster data · context {data.active || "-"}
       </Typography>
 
       {wh && wh.namespacesPodSampled > 0 && (
@@ -78,22 +78,22 @@ export default function DataplaneStatus(props: Props) {
 
       <Chip
         size="small"
-        label={`Namespaces: ${ns.state} (${ns.freshness}, cov=${ns.coverage})`}
+        label={`Namespaces: ${ns.state} · ${ns.freshness} · scope ${ns.coverage}`}
         color={dataplaneCoarseStateChipColor(ns.state)}
       />
       <Chip
         size="small"
-        label={`Nodes: ${nodes.state} (${nodes.freshness}, cov=${nodes.coverage})`}
+        label={`Nodes: ${nodes.state} · ${nodes.freshness} · scope ${nodes.coverage}`}
         color={dataplaneCoarseStateChipColor(nodes.state)}
       />
       <Chip
         size="small"
-        label={`NS observer: ${ns.observerState || "not_loaded"}`}
+        label={`Namespace list: ${ns.observerState || "—"}`}
         variant="outlined"
       />
       <Chip
         size="small"
-        label={`Node observer: ${nodes.observerState || "not_loaded"}`}
+        label={`Node list: ${nodes.observerState || "—"}`}
         variant="outlined"
       />
       <Chip size="small" label={`Profile: ${plane.profile || "unknown"}`} variant="outlined" />

@@ -33,6 +33,26 @@ func ListNamespaces(ctx context.Context, c *cluster.Clients) ([]dto.NamespaceLis
 	return out, nil
 }
 
+// GetNamespaceListFields performs a single-namespace GET for progressive list enrichment (stage 2).
+// It avoids YAML serialization from GetNamespaceDetails.
+func GetNamespaceListFields(ctx context.Context, c *cluster.Clients, name string) (dto.NamespaceListItemDTO, error) {
+	ns, err := c.Clientset.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return dto.NamespaceListItemDTO{}, err
+	}
+	now := time.Now()
+	age := int64(0)
+	if !ns.CreationTimestamp.IsZero() {
+		age = int64(now.Sub(ns.CreationTimestamp.Time).Seconds())
+	}
+	return dto.NamespaceListItemDTO{
+		Name:                   ns.Name,
+		Phase:                  string(ns.Status.Phase),
+		AgeSec:                 age,
+		HasUnhealthyConditions: hasUnhealthyNamespaceConditions(ns.Status.Conditions),
+	}, nil
+}
+
 func ListNamespacesFallback(ctx context.Context, c *cluster.Clients) ([]dto.NamespaceListItemDTO, error) {
 	// Fallback strategy placeholder:
 	// - some restricted users can't list namespaces at all

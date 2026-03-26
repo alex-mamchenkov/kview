@@ -25,8 +25,11 @@ export type ResourceListPageProps<TRow extends { id: string }> = {
   columns: GridColDef<TRow>[];
   /** Return rows plus optional dataplane list metadata for the shared meta strip. */
   fetchRows: () => Promise<ResourceListFetchResult<TRow>>;
-  /** Optional line above dataplane meta (e.g. namespace row-projection cap note). */
+  /** Optional line above list quality strip (e.g. namespace row status). */
   dataplaneMetaPrefix?: React.ReactNode;
+  /** Optional merge of fetched rows (e.g. progressive namespace enrichment). */
+  mapRows?: (rows: TRow[]) => TRow[];
+  mapRowsDeps?: unknown[];
   enabled?: boolean;
   filterPredicate: (row: TRow, query: string) => boolean;
   filterLabel: string;
@@ -34,7 +37,11 @@ export type ResourceListPageProps<TRow extends { id: string }> = {
   accessResource: AccessReviewResource;
   namespace?: string | null;
   defaultSortField?: string;
-  /** Initial refresh interval in seconds (default 10). */
+  /**
+   * Initial toolbar refresh interval in seconds. Default 0 (Off): lists rely on dataplane-backed
+   * snapshots and one-shot load; periodic polling can hit proxy/API limits. Users can enable
+   * 3s–60s from the toolbar when needed.
+   */
   initialRefreshSec?: number;
   renderDrawer: (props: ResourceListPageDrawerProps<TRow>) => React.ReactNode;
   /** Optional extra content in the footer row (e.g. Helm Install button). Receives refetch for post-action refresh. */
@@ -59,8 +66,10 @@ export default function ResourceListPage<TRow extends { id: string }>({
   accessResource,
   namespace = null,
   defaultSortField = "name",
-  initialRefreshSec = 10,
+  initialRefreshSec = 0,
   dataplaneMetaPrefix,
+  mapRows,
+  mapRowsDeps,
   renderDrawer,
   renderFooterExtra,
   getRowHeight,
@@ -83,6 +92,8 @@ export default function ResourceListPage<TRow extends { id: string }>({
     refreshSec,
     fetchItems: fetchRowsStable,
     onInitialResult: () => setSelectionModel([]),
+    mapRows,
+    mapRowsDeps,
   });
 
   const accessDenied = useEmptyListAccessCheck({

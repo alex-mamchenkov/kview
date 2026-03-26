@@ -1,106 +1,11 @@
 package dataplane
 
 import (
-	"context"
-	"sort"
 	"strconv"
 	"strings"
-	"sync"
-
-	"golang.org/x/sync/errgroup"
 
 	"kview/internal/kube/dto"
 )
-
-const (
-	// namespaceListRowProjectionCap limits how many namespaces receive per-row pod/deployment
-	// snapshot work on a single list request (alphabetical priority). Others omit row fields.
-	namespaceListRowProjectionCap = 64
-	namespaceListRowParallel      = 8
-)
-
-// EnrichNamespaceListItems attaches bounded per-row metrics from dataplane pods and deployments
-// snapshots. No direct kube calls outside snapshot executors. Order of items is preserved.
-func (m *manager) EnrichNamespaceListItems(ctx context.Context, clusterName string, items []dto.NamespaceListItemDTO) ([]dto.NamespaceListItemDTO, dto.NamespaceListRowProjectionMetaDTO) {
-	meta := dto.NamespaceListRowProjectionMetaDTO{
-		TotalRows: len(items),
-		Cap:       namespaceListRowProjectionCap,
-	}
-	if len(items) == 0 {
-		return items, meta
-	}
-
-	planeAny, err := m.PlaneForCluster(ctx, clusterName)
-	if err != nil {
-		return items, meta
-	}
-	plane := planeAny.(*clusterPlane)
-
-	names := make([]string, 0, len(items))
-	seen := make(map[string]struct{}, len(items))
-	for _, it := range items {
-		if it.Name == "" {
-			continue
-		}
-		if _, ok := seen[it.Name]; ok {
-			continue
-		}
-		seen[it.Name] = struct{}{}
-		names = append(names, it.Name)
-	}
-	sort.Strings(names)
-
-	k := namespaceListRowProjectionCap
-	if k > len(names) {
-		k = len(names)
-	}
-	enrichNames := names[:k]
-	meta.EnrichedRows = k
-	if k < len(names) {
-		meta.Note = "Row workload metrics (pods/deployments) are computed for the first namespaces alphabetically up to the cap; refresh or open a namespace for full detail."
-	}
-
-	type row struct {
-		metrics dto.NamespaceListItemDTO
-	}
-	rows := make(map[string]row, len(enrichNames))
-	var mu sync.Mutex
-
-	sem := make(chan struct{}, namespaceListRowParallel)
-	g, gctx := errgroup.WithContext(ctx)
-
-	for _, ns := range enrichNames {
-		ns := ns
-		g.Go(func() error {
-			select {
-			case <-gctx.Done():
-				return gctx.Err()
-			case sem <- struct{}{}:
-			}
-			defer func() { <-sem }()
-
-			podsSnap, _ := plane.PodsSnapshot(gctx, m.scheduler, m.clients, ns)
-			depsSnap, _ := plane.DeploymentsSnapshot(gctx, m.scheduler, m.clients, ns)
-			metrics := buildNamespaceListRowProjection(podsSnap, depsSnap)
-
-			mu.Lock()
-			rows[ns] = row{metrics: metrics}
-			mu.Unlock()
-			return nil
-		})
-	}
-
-	_ = g.Wait()
-
-	out := make([]dto.NamespaceListItemDTO, len(items))
-	for i := range items {
-		out[i] = items[i]
-		if r, ok := rows[items[i].Name]; ok {
-			mergeNamespaceRowInto(&out[i], r.metrics)
-		}
-	}
-	return out, meta
-}
 
 func mergeNamespaceRowInto(dst *dto.NamespaceListItemDTO, src dto.NamespaceListItemDTO) {
 	dst.RowEnriched = src.RowEnriched

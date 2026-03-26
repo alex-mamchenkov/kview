@@ -28,7 +28,7 @@ const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
   {
     field: "phase",
-    headerName: "Phase",
+    headerName: "Status",
     width: 140,
     renderCell: (p) => (
       <Chip
@@ -95,7 +95,7 @@ export default function PersistentVolumesTable({ token }: { token: string }) {
       columns={columns}
       fetchRows={fetchRows}
       filterPredicate={filterPredicate}
-      filterLabel="Filter (name/phase/storageClass/claim)"
+      filterLabel="Filter (name/status/storageClass/claim)"
       resourceLabel={resourceLabel}
       accessResource={listResourceAccess.persistentvolumes}
       namespace={null}

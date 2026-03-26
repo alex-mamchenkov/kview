@@ -3,6 +3,7 @@ package dataplane
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"kview/internal/cluster"
@@ -64,8 +65,12 @@ type DataPlaneManager interface {
 
 	// NamespacesSnapshot returns a raw snapshot for namespaces in the given cluster.
 	NamespacesSnapshot(ctx context.Context, clusterName string) (NamespaceSnapshot, error)
-	// EnrichNamespaceListItems adds bounded per-row workload metrics from pods/deployments snapshots.
-	EnrichNamespaceListItems(ctx context.Context, clusterName string, items []dto.NamespaceListItemDTO) ([]dto.NamespaceListItemDTO, dto.NamespaceListRowProjectionMetaDTO)
+	// NoteUserActivity marks UI/API interaction so background namespace enrichment can wait for idle.
+	NoteUserActivity()
+	// BeginNamespaceListProgressiveEnrichment starts scored, idle-gated enrichment for list rows.
+	BeginNamespaceListProgressiveEnrichment(clusterName string, items []dto.NamespaceListItemDTO, hints NamespaceEnrichHints) uint64
+	// NamespaceListEnrichmentPoll returns merged rows for a revision (GET /api/namespaces/enrichment).
+	NamespaceListEnrichmentPoll(clusterName string, revision uint64) NamespaceListEnrichmentPoll
 	// NodesSnapshot returns a raw snapshot for nodes in the given cluster.
 	NodesSnapshot(ctx context.Context, clusterName string) (NodesSnapshot, error)
 	// PodsSnapshot returns a raw snapshot for pods in the given namespace.
@@ -101,6 +106,9 @@ type DataPlaneManager interface {
 
 	// NamespaceSummaryProjection builds namespace summary from dataplane snapshots (projection-led).
 	NamespaceSummaryProjection(ctx context.Context, clusterName, namespace string) (NamespaceSummaryProjection, error)
+
+	// SchedulerRunStats returns cumulative snapshot-run durations by priority and resource kind.
+	SchedulerRunStats() SchedulerRunStatsSnapshot
 }
 
 // ManagerConfig describes construction-time parameters for the data plane manager.
@@ -139,8 +147,13 @@ type manager struct {
 	mu     sync.RWMutex
 	planes map[string]*clusterPlane
 
-	scheduler *simpleScheduler
+	scheduler *workScheduler
 	clients   ClientsProvider
+
+	nsEnrich *nsEnrichmentCoordinator
+
+	// Last HTTP activity (Unix nano) for namespace enrichment idle gating.
+	uiActivityUnix atomic.Int64
 }
 
 // NewManager creates a new DataPlaneManager with default configuration.
@@ -159,13 +172,19 @@ func NewManager(cfg ManagerConfig) DataPlaneManager {
 		cp = managerClients{m: cfg.ClusterManager}
 	}
 
+	sched := newWorkScheduler(4)
+	if cfg.Runtime != nil {
+		reg := cfg.Runtime.Registry()
+		sched.configureLongRun(2*time.Second, newDataplaneLongRunRecorder(reg))
+	}
 	return &manager{
 		rt:                   cfg.Runtime,
 		defaultProfile:       profile,
 		defaultDiscoveryMode: mode,
 		planes:               map[string]*clusterPlane{},
-		scheduler:            newSimpleScheduler(4),
+		scheduler:            sched,
 		clients:              cp,
+		nsEnrich:             newNsEnrichmentCoordinator(),
 	}
 }
 
@@ -307,7 +326,7 @@ type JobsSnapshot = Snapshot[dto.JobDTO]
 type CronJobsSnapshot = Snapshot[dto.CronJobDTO]
 
 // NamespacesSnapshot returns a raw snapshot for namespaces plus metadata and any normalized error.
-func (p *clusterPlane) NamespacesSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider) (NamespaceSnapshot, error) {
+func (p *clusterPlane) NamespacesSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, prio WorkPriority) (NamespaceSnapshot, error) {
 	desc := clusterSnapshotDescriptor[dto.NamespaceListItemDTO]{
 		kind:        ResourceKindNamespaces,
 		ttl:         15 * time.Second,
@@ -316,11 +335,11 @@ func (p *clusterPlane) NamespacesSnapshot(ctx context.Context, sched *simpleSche
 		capScope:    CapabilityScopeCluster,
 		fetch:       kube.ListNamespaces,
 	}
-	return executeClusterSnapshot(p, ctx, sched, clients, &p.nsStore, desc)
+	return executeClusterSnapshot(p, ctx, sched, prio, clients, &p.nsStore, desc)
 }
 
 // NodesSnapshot returns a raw snapshot for nodes plus metadata and any normalized error.
-func (p *clusterPlane) NodesSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider) (NodesSnapshot, error) {
+func (p *clusterPlane) NodesSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, prio WorkPriority) (NodesSnapshot, error) {
 	desc := clusterSnapshotDescriptor[dto.NodeListItemDTO]{
 		kind:        ResourceKindNodes,
 		ttl:         30 * time.Second,
@@ -329,11 +348,11 @@ func (p *clusterPlane) NodesSnapshot(ctx context.Context, sched *simpleScheduler
 		capScope:    CapabilityScopeCluster,
 		fetch:       kube.ListNodes,
 	}
-	return executeClusterSnapshot(p, ctx, sched, clients, &p.nodesStore, desc)
+	return executeClusterSnapshot(p, ctx, sched, prio, clients, &p.nodesStore, desc)
 }
 
 // PodsSnapshot returns a raw snapshot for pods in the given namespace plus metadata and any normalized error.
-func (p *clusterPlane) PodsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (PodsSnapshot, error) {
+func (p *clusterPlane) PodsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (PodsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.PodListItemDTO]{
 		kind:        ResourceKindPods,
 		ttl:         15 * time.Second,
@@ -342,11 +361,11 @@ func (p *clusterPlane) PodsSnapshot(ctx context.Context, sched *simpleScheduler,
 		capScope:    CapabilityScopeNamespace,
 		fetch:       kube.ListPods,
 	}
-	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.podsStore, desc)
+	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.podsStore, desc)
 }
 
 // DeploymentsSnapshot returns a raw snapshot for deployments in the given namespace plus metadata and any normalized error.
-func (p *clusterPlane) DeploymentsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (DeploymentsSnapshot, error) {
+func (p *clusterPlane) DeploymentsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (DeploymentsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.DeploymentListItemDTO]{
 		kind:        ResourceKindDeployments,
 		ttl:         15 * time.Second,
@@ -355,11 +374,11 @@ func (p *clusterPlane) DeploymentsSnapshot(ctx context.Context, sched *simpleSch
 		capScope:    CapabilityScopeNamespace,
 		fetch:       kube.ListDeployments,
 	}
-	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.depsStore, desc)
+	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.depsStore, desc)
 }
 
 // ServicesSnapshot returns a raw snapshot for services in the given namespace plus metadata and any normalized error.
-func (p *clusterPlane) ServicesSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (ServicesSnapshot, error) {
+func (p *clusterPlane) ServicesSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (ServicesSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.ServiceListItemDTO]{
 		kind:        ResourceKindServices,
 		ttl:         15 * time.Second,
@@ -368,11 +387,11 @@ func (p *clusterPlane) ServicesSnapshot(ctx context.Context, sched *simpleSchedu
 		capScope:    CapabilityScopeNamespace,
 		fetch:       kube.ListServices,
 	}
-	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.svcsStore, desc)
+	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.svcsStore, desc)
 }
 
 // IngressesSnapshot returns a raw snapshot for ingresses in the given namespace plus metadata and any normalized error.
-func (p *clusterPlane) IngressesSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (IngressesSnapshot, error) {
+func (p *clusterPlane) IngressesSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (IngressesSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.IngressListItemDTO]{
 		kind:        ResourceKindIngresses,
 		ttl:         15 * time.Second,
@@ -381,11 +400,11 @@ func (p *clusterPlane) IngressesSnapshot(ctx context.Context, sched *simpleSched
 		capScope:    CapabilityScopeNamespace,
 		fetch:       kube.ListIngresses,
 	}
-	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.ingStore, desc)
+	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.ingStore, desc)
 }
 
 // PVCsSnapshot returns a raw snapshot for PVCs in the given namespace plus metadata and any normalized error.
-func (p *clusterPlane) PVCsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (PVCsSnapshot, error) {
+func (p *clusterPlane) PVCsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (PVCsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.PersistentVolumeClaimDTO]{
 		kind:        ResourceKindPVCs,
 		ttl:         15 * time.Second,
@@ -394,11 +413,11 @@ func (p *clusterPlane) PVCsSnapshot(ctx context.Context, sched *simpleScheduler,
 		capScope:    CapabilityScopeNamespace,
 		fetch:       kube.ListPersistentVolumeClaims,
 	}
-	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.pvcsStore, desc)
+	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.pvcsStore, desc)
 }
 
 // ConfigMapsSnapshot returns a raw snapshot for configmaps in the given namespace plus metadata and any normalized error.
-func (p *clusterPlane) ConfigMapsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (ConfigMapsSnapshot, error) {
+func (p *clusterPlane) ConfigMapsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (ConfigMapsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.ConfigMapDTO]{
 		kind:        ResourceKindConfigMaps,
 		ttl:         15 * time.Second,
@@ -407,11 +426,11 @@ func (p *clusterPlane) ConfigMapsSnapshot(ctx context.Context, sched *simpleSche
 		capScope:    CapabilityScopeNamespace,
 		fetch:       kube.ListConfigMaps,
 	}
-	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.cmsStore, desc)
+	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.cmsStore, desc)
 }
 
 // SecretsSnapshot returns a raw snapshot for secrets in the given namespace plus metadata and any normalized error.
-func (p *clusterPlane) SecretsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (SecretsSnapshot, error) {
+func (p *clusterPlane) SecretsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (SecretsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.SecretDTO]{
 		kind:        ResourceKindSecrets,
 		ttl:         15 * time.Second,
@@ -420,11 +439,11 @@ func (p *clusterPlane) SecretsSnapshot(ctx context.Context, sched *simpleSchedul
 		capScope:    CapabilityScopeNamespace,
 		fetch:       kube.ListSecrets,
 	}
-	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.secsStore, desc)
+	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.secsStore, desc)
 }
 
 // DaemonSetsSnapshot returns a raw snapshot for daemonsets in the given namespace plus metadata and any normalized error.
-func (p *clusterPlane) DaemonSetsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (DaemonSetsSnapshot, error) {
+func (p *clusterPlane) DaemonSetsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (DaemonSetsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.DaemonSetDTO]{
 		kind:        ResourceKindDaemonSets,
 		ttl:         15 * time.Second,
@@ -433,11 +452,11 @@ func (p *clusterPlane) DaemonSetsSnapshot(ctx context.Context, sched *simpleSche
 		capScope:    CapabilityScopeNamespace,
 		fetch:       kube.ListDaemonSets,
 	}
-	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.dsStore, desc)
+	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.dsStore, desc)
 }
 
 // StatefulSetsSnapshot returns a raw snapshot for statefulsets in the given namespace plus metadata and any normalized error.
-func (p *clusterPlane) StatefulSetsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (StatefulSetsSnapshot, error) {
+func (p *clusterPlane) StatefulSetsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (StatefulSetsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.StatefulSetDTO]{
 		kind:        ResourceKindStatefulSets,
 		ttl:         15 * time.Second,
@@ -446,11 +465,11 @@ func (p *clusterPlane) StatefulSetsSnapshot(ctx context.Context, sched *simpleSc
 		capScope:    CapabilityScopeNamespace,
 		fetch:       kube.ListStatefulSets,
 	}
-	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.stsStore, desc)
+	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.stsStore, desc)
 }
 
 // ReplicaSetsSnapshot returns a raw snapshot for replicasets in the given namespace plus metadata and any normalized error.
-func (p *clusterPlane) ReplicaSetsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (ReplicaSetsSnapshot, error) {
+func (p *clusterPlane) ReplicaSetsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (ReplicaSetsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.ReplicaSetDTO]{
 		kind:        ResourceKindReplicaSets,
 		ttl:         15 * time.Second,
@@ -459,11 +478,11 @@ func (p *clusterPlane) ReplicaSetsSnapshot(ctx context.Context, sched *simpleSch
 		capScope:    CapabilityScopeNamespace,
 		fetch:       kube.ListReplicaSets,
 	}
-	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.rsStore, desc)
+	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.rsStore, desc)
 }
 
 // JobsSnapshot returns a raw snapshot for jobs in the given namespace plus metadata and any normalized error.
-func (p *clusterPlane) JobsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (JobsSnapshot, error) {
+func (p *clusterPlane) JobsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (JobsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.JobDTO]{
 		kind:        ResourceKindJobs,
 		ttl:         15 * time.Second,
@@ -472,11 +491,11 @@ func (p *clusterPlane) JobsSnapshot(ctx context.Context, sched *simpleScheduler,
 		capScope:    CapabilityScopeNamespace,
 		fetch:       kube.ListJobs,
 	}
-	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.jobsStore, desc)
+	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.jobsStore, desc)
 }
 
 // CronJobsSnapshot returns a raw snapshot for cronjobs in the given namespace plus metadata and any normalized error.
-func (p *clusterPlane) CronJobsSnapshot(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, namespace string) (CronJobsSnapshot, error) {
+func (p *clusterPlane) CronJobsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (CronJobsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.CronJobDTO]{
 		kind:        ResourceKindCronJobs,
 		ttl:         15 * time.Second,
@@ -485,95 +504,110 @@ func (p *clusterPlane) CronJobsSnapshot(ctx context.Context, sched *simpleSchedu
 		capScope:    CapabilityScopeNamespace,
 		fetch:       kube.ListCronJobs,
 	}
-	return executeNamespacedSnapshot(p, ctx, sched, clients, namespace, &p.cjStore, desc)
+	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.cjStore, desc)
 }
 
 func (m *manager) NamespacesSnapshot(ctx context.Context, clusterName string) (NamespaceSnapshot, error) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
-	return plane.NamespacesSnapshot(ctx, m.scheduler, m.clients)
+	return plane.NamespacesSnapshot(ctx, m.scheduler, m.clients, WorkPriorityCritical)
 }
 
 func (m *manager) NodesSnapshot(ctx context.Context, clusterName string) (NodesSnapshot, error) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
-	return plane.NodesSnapshot(ctx, m.scheduler, m.clients)
+	return plane.NodesSnapshot(ctx, m.scheduler, m.clients, WorkPriorityCritical)
 }
 
 func (m *manager) PodsSnapshot(ctx context.Context, clusterName, namespace string) (PodsSnapshot, error) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
-	return plane.PodsSnapshot(ctx, m.scheduler, m.clients, namespace)
+	return plane.PodsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
 }
 
 func (m *manager) DeploymentsSnapshot(ctx context.Context, clusterName, namespace string) (DeploymentsSnapshot, error) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
-	return plane.DeploymentsSnapshot(ctx, m.scheduler, m.clients, namespace)
+	return plane.DeploymentsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
 }
 
 func (m *manager) ServicesSnapshot(ctx context.Context, clusterName, namespace string) (ServicesSnapshot, error) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
-	return plane.ServicesSnapshot(ctx, m.scheduler, m.clients, namespace)
+	return plane.ServicesSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
 }
 
 func (m *manager) IngressesSnapshot(ctx context.Context, clusterName, namespace string) (IngressesSnapshot, error) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
-	return plane.IngressesSnapshot(ctx, m.scheduler, m.clients, namespace)
+	return plane.IngressesSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
 }
 
 func (m *manager) PVCsSnapshot(ctx context.Context, clusterName, namespace string) (PVCsSnapshot, error) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
-	return plane.PVCsSnapshot(ctx, m.scheduler, m.clients, namespace)
+	return plane.PVCsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
 }
 
 func (m *manager) ConfigMapsSnapshot(ctx context.Context, clusterName, namespace string) (ConfigMapsSnapshot, error) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
-	return plane.ConfigMapsSnapshot(ctx, m.scheduler, m.clients, namespace)
+	return plane.ConfigMapsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
 }
 
 func (m *manager) SecretsSnapshot(ctx context.Context, clusterName, namespace string) (SecretsSnapshot, error) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
-	return plane.SecretsSnapshot(ctx, m.scheduler, m.clients, namespace)
+	return plane.SecretsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
 }
 
 func (m *manager) DaemonSetsSnapshot(ctx context.Context, clusterName, namespace string) (DaemonSetsSnapshot, error) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
-	return plane.DaemonSetsSnapshot(ctx, m.scheduler, m.clients, namespace)
+	return plane.DaemonSetsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
 }
 
 func (m *manager) StatefulSetsSnapshot(ctx context.Context, clusterName, namespace string) (StatefulSetsSnapshot, error) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
-	return plane.StatefulSetsSnapshot(ctx, m.scheduler, m.clients, namespace)
+	return plane.StatefulSetsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
 }
 
 func (m *manager) ReplicaSetsSnapshot(ctx context.Context, clusterName, namespace string) (ReplicaSetsSnapshot, error) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
-	return plane.ReplicaSetsSnapshot(ctx, m.scheduler, m.clients, namespace)
+	return plane.ReplicaSetsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
 }
 
 func (m *manager) JobsSnapshot(ctx context.Context, clusterName, namespace string) (JobsSnapshot, error) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
-	return plane.JobsSnapshot(ctx, m.scheduler, m.clients, namespace)
+	return plane.JobsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
 }
 
 func (m *manager) CronJobsSnapshot(ctx context.Context, clusterName, namespace string) (CronJobsSnapshot, error) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
-	return plane.CronJobsSnapshot(ctx, m.scheduler, m.clients, namespace)
+	return plane.CronJobsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
 }
 
 func (m *manager) EnsureObservers(ctx context.Context, clusterName string) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
 	plane.EnsureObservers(ctx, m.scheduler, m.clients, m.rt)
+}
+
+func (m *manager) SchedulerRunStats() SchedulerRunStatsSnapshot {
+	return m.scheduler.StatsSnapshot()
+}
+
+func (m *manager) NoteUserActivity() {
+	m.uiActivityUnix.Store(time.Now().UnixNano())
+}
+
+func (m *manager) activityReg() runtime.ActivityRegistry {
+	if m.rt == nil {
+		return nil
+	}
+	return m.rt.Registry()
 }

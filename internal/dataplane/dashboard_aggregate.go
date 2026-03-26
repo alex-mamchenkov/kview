@@ -79,11 +79,11 @@ func (m *manager) aggregateClusterDashboard(ctx context.Context, plane *clusterP
 			}
 			defer func() { <-sem }()
 
-			ps, _ := plane.PodsSnapshot(gctx, m.scheduler, m.clients, ns)
-			ds, _ := plane.DeploymentsSnapshot(gctx, m.scheduler, m.clients, ns)
-			sv, _ := plane.ServicesSnapshot(gctx, m.scheduler, m.clients, ns)
-			ing, _ := plane.IngressesSnapshot(gctx, m.scheduler, m.clients, ns)
-			pvc, _ := plane.PVCsSnapshot(gctx, m.scheduler, m.clients, ns)
+			ps, _ := plane.PodsSnapshot(gctx, m.scheduler, m.clients, ns, WorkPriorityMedium)
+			ds, _ := plane.DeploymentsSnapshot(gctx, m.scheduler, m.clients, ns, WorkPriorityMedium)
+			sv, _ := plane.ServicesSnapshot(gctx, m.scheduler, m.clients, ns, WorkPriorityMedium)
+			ing, _ := plane.IngressesSnapshot(gctx, m.scheduler, m.clients, ns, WorkPriorityMedium)
+			pvc, _ := plane.PVCsSnapshot(gctx, m.scheduler, m.clients, ns, WorkPriorityMedium)
 
 			samples[i] = sample{ns: ns, pods: ps, deps: ds, svcs: sv, ings: ing, pvcs: pvc}
 			return nil

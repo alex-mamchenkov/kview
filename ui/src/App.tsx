@@ -29,7 +29,14 @@ import HelmChartsTable from "./components/resources/helm/HelmChartsTable";
 import CustomResourceDefinitionsTable from "./components/resources/customresourcedefinitions/CustomResourceDefinitionsTable";
 import { apiGet, apiPost, toApiError } from "./api";
 import type { ApiContextsResponse, ApiNamespacesListResponse } from "./types/api";
-import { loadState, saveState, toggleFavouriteNamespace, type Section } from "./state";
+import {
+  loadState,
+  namespacesListApiPath,
+  recordRecentNamespace,
+  saveState,
+  toggleFavouriteNamespace,
+  type Section,
+} from "./state";
 import { useConnectionState } from "./connectionState";
 import ConnectionBanner from "./components/shared/ConnectionBanner";
 import DashboardView from "./components/resources/dashboard/DashboardView";
@@ -63,6 +70,11 @@ function AppInner() {
   // load from localStorage once
   const [appState, setAppState] = useState(() => loadState());
 
+  const namespacesListPath = useMemo(
+    () => namespacesListApiPath(appState, activeContext, namespace),
+    [appState, activeContext, namespace],
+  );
+
   // persist on change
   useEffect(() => {
     saveState(appState);
@@ -93,7 +105,8 @@ function AppInner() {
       setActiveContext(chosenCtx);
 
       // 2) namespaces
-      const { limited, items: nsItems } = await fetchNamespaces(token);
+      const nsPath0 = namespacesListApiPath(appState, chosenCtx, appState.activeNamespace || "");
+      const { limited, items: nsItems } = await fetchNamespaces(token, nsPath0);
       setNsLimited(limited);
       setNamespaces(nsItems);
 
@@ -116,20 +129,29 @@ function AppInner() {
       const fav = (appState.favouriteNamespacesByContext[chosenCtx] || []).slice();
       setFavourites(fav);
 
-      // update stored state if we auto-picked
-      setAppState((s) => ({
-        ...s,
-        activeContext: chosenCtx || s.activeContext,
-        activeNamespace: chosenNs || s.activeNamespace,
-        activeSection: s.activeSection || "pods",
-      }));
+      // update stored state if we auto-picked; record MRU for enrichment hints
+      setAppState((s) => {
+        let next: typeof s = {
+          ...s,
+          activeContext: chosenCtx || s.activeContext,
+          activeNamespace: chosenNs || s.activeNamespace,
+          activeSection: s.activeSection || "pods",
+        };
+        if (chosenCtx && chosenNs) {
+          next = recordRecentNamespace(next, chosenCtx, chosenNs);
+        }
+        return next;
+      });
     })().catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function fetchNamespaces(currentToken: string): Promise<{ limited: boolean; items: string[] }> {
+  async function fetchNamespaces(
+    currentToken: string,
+    apiPath: string,
+  ): Promise<{ limited: boolean; items: string[] }> {
     try {
-      const nsRes = await apiGet<ApiNamespacesListResponse>("/api/namespaces", currentToken);
+      const nsRes = await apiGet<ApiNamespacesListResponse>(apiPath, currentToken);
       return {
         limited: !!nsRes.limited,
         items: (nsRes.items || []).map((x) => x.name),
@@ -147,8 +169,8 @@ function AppInner() {
     await apiPost("/api/context/select", token, { name });
     setActiveContext(name);
 
-    // refresh namespaces for new context
-    const { limited, items: nsItems } = await fetchNamespaces(token);
+    const nsPath = namespacesListApiPath(appState, name, appState.activeNamespace || "");
+    const { limited, items: nsItems } = await fetchNamespaces(token, nsPath);
     setNsLimited(limited);
     setNamespaces(nsItems);
 
@@ -163,12 +185,20 @@ function AppInner() {
     const fav = (appState.favouriteNamespacesByContext[name] || []).slice();
     setFavourites(fav);
 
-    setAppState((s) => ({ ...s, activeContext: name, activeNamespace: chosenNs }));
+    setAppState((s) => {
+      let next = { ...s, activeContext: name, activeNamespace: chosenNs };
+      if (name && chosenNs) next = recordRecentNamespace(next, name, chosenNs);
+      return next;
+    });
   }
 
   function onSelectNamespace(ns: string) {
     setNamespace(ns);
-    setAppState((s) => ({ ...s, activeNamespace: ns }));
+    setAppState((s) => {
+      let next = { ...s, activeNamespace: ns };
+      if (activeContext) next = recordRecentNamespace(next, activeContext, ns);
+      return next;
+    });
   }
 
   function onToggleFavourite(ns: string) {
@@ -243,6 +273,7 @@ function AppInner() {
               {section === "namespaces" ? (
                 <NamespacesTable
                   token={token}
+                  listApiPath={namespacesListPath}
                   onNavigate={(sec, ns) => {
                     onSelectNamespace(ns);
                     onSelectSection(sec as Section);

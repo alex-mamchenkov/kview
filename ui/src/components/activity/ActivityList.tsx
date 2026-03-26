@@ -19,8 +19,45 @@ type Activity = {
   type: string;
   title: string;
   status: string;
+  createdAt?: string;
+  startedAt?: string;
+  resourceType?: string;
+  executionMs?: number;
   metadata?: Record<string, string>;
 };
+
+function fmtExecutionMs(ms: number | undefined): string {
+  if (ms === undefined || ms < 0) return "—";
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  return `${m}m${s % 60}s`;
+}
+
+function fmtStarted(iso: string | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+/** User-facing operation type (API still uses internal type strings). */
+function activityTypeDisplayLabel(type: string): string {
+  switch ((type || "").toLowerCase()) {
+    case "namespace-list-enrich":
+      return "Namespace rows";
+    case "dataplane-snapshot":
+      return "Resource list";
+    case "runtime-log":
+    case "runtime_log":
+      return "System log";
+    case "analytics-poller":
+      return "Analytics";
+    default:
+      return type || "—";
+  }
+}
 
 type Props = {
   items?: Activity[];
@@ -68,6 +105,11 @@ export default function ActivityList({
             <TableCell sx={compactHeaderCellSx}>Title</TableCell>
             <TableCell sx={compactHeaderCellSx}>Kind</TableCell>
             <TableCell sx={compactHeaderCellSx}>Type</TableCell>
+            <TableCell sx={compactHeaderCellSx}>Resource</TableCell>
+            <TableCell sx={compactHeaderCellSx}>Started</TableCell>
+            <TableCell sx={compactHeaderCellSx} align="right">
+              Duration
+            </TableCell>
             <TableCell sx={compactHeaderCellSx}>Target</TableCell>
             <TableCell sx={compactHeaderCellSx}>Status</TableCell>
             <TableCell sx={compactHeaderCellSx} align="right">Actions</TableCell>
@@ -86,7 +128,26 @@ export default function ActivityList({
                 <Chip size="small" label={a.kind || "-"} sx={chipSxForValue(a.kind, "kind")} />
               </TableCell>
               <TableCell sx={compactCellSx}>
-                <Chip size="small" label={a.type || "-"} sx={chipSxForValue(a.type, "type")} />
+                <Chip
+                  size="small"
+                  label={activityTypeDisplayLabel(a.type)}
+                  sx={chipSxForValue(a.type, "type")}
+                />
+              </TableCell>
+              <TableCell sx={compactCellSx}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>
+                  {a.resourceType || "—"}
+                </Typography>
+              </TableCell>
+              <TableCell sx={compactCellSx}>
+                <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
+                  {fmtStarted(a.startedAt || a.createdAt)}
+                </Typography>
+              </TableCell>
+              <TableCell sx={compactCellSx} align="right">
+                <Typography variant="caption" sx={{ fontFamily: "monospace", fontVariantNumeric: "tabular-nums" }}>
+                  {fmtExecutionMs(a.executionMs)}
+                </Typography>
               </TableCell>
               <TableCell sx={compactCellSx}>
                 <Typography variant="caption" sx={{ fontFamily: "monospace" }}>

@@ -39,8 +39,24 @@ Underlying list IO is still `kube.List*` **inside** the dataplane snapshot execu
 
 | Route | Behavior |
 |-------|----------|
-| `GET /api/namespaces` | `NamespacesSnapshot` for base rows; then `EnrichNamespaceListItems` adds bounded per-namespace workload metrics from **pods + deployments** snapshots (alphabetical cap, parallel fetch). Response includes `rowProjection` (`NamespaceListRowProjectionMetaDTO`) and optional row fields on each item (`rowEnriched`, `summaryState`, counts, `problematicCount`, restart signals). |
+| `GET /api/namespaces` | **Stage 1:** `NamespacesSnapshot` list only — response returns items immediately with `rowProjection.revision` / `loading`. **Stages 2–3** run in background (cancelled when a newer list starts): live **GET** per selected namespace (`GetNamespaceListFields`), then **pods + deployments** dataplane snapshots (`WorkPriorityLow`). Which namespaces are selected is **scored from optional query hints**, not an alphabetical walk of the full list (see §2.1). UI polls `GET /api/namespaces/enrichment?revision=…` for merged rows. |
 | `GET /api/dashboard/cluster` | `EnsureObservers` + `DashboardSummary`: `visibility` (namespaces/nodes snapshots + observed-at), `resources` and `hotspots` (bounded alphabetical namespace sample — pods/deployments/services/ingresses/PVCs), plus `workloadHints` alias for chips. |
+| `GET /api/namespaces/enrichment?revision=` | Server-side merge snapshot for progressive namespace list rows (same revision as `rowProjection.revision` from `GET /api/namespaces`). Includes `enrichTargets` (count of namespaces in the scored enrichment subset). Not a direct kube call; reflects in-process background work. |
+
+### 2.1 Namespace list: enrichment hints, scoring, and idle worker
+
+Background row enrichment for the namespaces table is intentionally **narrow and user-aligned**:
+
+- **No alphabetical cluster scan** for enrichment targets. The handler takes the current list snapshot order from `NamespacesSnapshot` and intersects it with names implied by hints.
+- **Optional query parameters** (parsed in `internal/dataplane` as `ParseNamespaceEnrichHints`):
+  - `enrichFocus` — current namespace (UI selection).
+  - `enrichRecent` — MRU names, comma-separated and/or repeated keys; earlier names in the combined list are treated as more recent.
+  - `enrichFav` — favourite names, comma-separated and/or repeated keys.
+- **Scoring** (`buildEnrichmentWorkOrder`): focus ≫ favourite ≫ recency (recency uses position in the recent list). Sort by score descending; **ties break by snapshot list index** (stable, not A–Z).
+- **Cap:** at most **32** namespaces receive GET + pods/deployments enrichment; up to **2** in parallel (`nsEnrichMaxParallel`).
+- **Idle-only start:** the worker waits until the API has seen **no user activity** for **2s** (`nsEnrichIdleQuiet`). Activity is updated on `/api/*` **except** `GET /api/namespaces/enrichment` (trimmed path), so enrichment polling does not reset the idle timer.
+
+**UI:** the list URL is built in `ui/src/state.ts` as `namespacesListApiPath`, using persisted `recentNamespacesByContext` (updated when the user picks a namespace) and `favouriteNamespacesByContext`. The Namespaces table passes that path into `fetchRows` so list load and hints stay aligned.
 
 ---
 

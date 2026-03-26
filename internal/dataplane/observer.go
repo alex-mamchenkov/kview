@@ -65,7 +65,7 @@ func observerStateForError(n NormalizedError) ObserverState {
 	}
 }
 
-func (p *clusterPlane) EnsureObservers(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
+func (p *clusterPlane) EnsureObservers(ctx context.Context, sched *workScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
 	p.obsMu.Lock()
 	if p.observers != nil {
 		p.obsMu.Unlock()
@@ -78,10 +78,10 @@ func (p *clusterPlane) EnsureObservers(ctx context.Context, sched *simpleSchedul
 	go p.runNodeObserver(ctx, sched, clients, rt)
 }
 
-func (p *clusterPlane) namespaceObserverTick(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
+func (p *clusterPlane) namespaceObserverTick(ctx context.Context, sched *workScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
 	// Run one refresh cycle immediately so observer state becomes truthful as soon
 	// as a dataplane-backed endpoint activates the plane.
-	snap, err := p.NamespacesSnapshot(ctx, sched, clients)
+	snap, err := p.NamespacesSnapshot(ctx, sched, clients, WorkPriorityLow)
 	if err != nil {
 		if snap.Err != nil {
 			state := observerStateForError(*snap.Err)
@@ -95,7 +95,7 @@ func (p *clusterPlane) namespaceObserverTick(ctx context.Context, sched *simpleS
 	p.setObserverState(observerKindNamespaces, ObserverStateActive, rt)
 }
 
-func (p *clusterPlane) runNamespaceObserver(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
+func (p *clusterPlane) runNamespaceObserver(ctx context.Context, sched *workScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
 	interval := 30 * time.Second
 
 	p.setObserverState(observerKindNamespaces, ObserverStateStarting, rt)
@@ -115,8 +115,8 @@ func (p *clusterPlane) runNamespaceObserver(ctx context.Context, sched *simpleSc
 	}
 }
 
-func (p *clusterPlane) nodeObserverTick(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, rt runtime.RuntimeManager, interval *time.Duration, ticker *time.Ticker) {
-	snap, err := p.NodesSnapshot(ctx, sched, clients)
+func (p *clusterPlane) nodeObserverTick(ctx context.Context, sched *workScheduler, clients ClientsProvider, rt runtime.RuntimeManager, interval *time.Duration, ticker *time.Ticker) {
+	snap, err := p.NodesSnapshot(ctx, sched, clients, WorkPriorityLow)
 	if err != nil {
 		if snap.Err != nil {
 			state := observerStateForError(*snap.Err)
@@ -145,7 +145,7 @@ func (p *clusterPlane) nodeObserverTick(ctx context.Context, sched *simpleSchedu
 	p.setObserverState(observerKindNodes, ObserverStateActive, rt)
 }
 
-func (p *clusterPlane) runNodeObserver(ctx context.Context, sched *simpleScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
+func (p *clusterPlane) runNodeObserver(ctx context.Context, sched *workScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
 	baseInterval := 60 * time.Second
 	interval := baseInterval
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"kview/internal/cluster"
 	"kview/internal/dataplane"
 	"kview/internal/kube"
+	"kview/internal/kube/dto"
 	"kview/internal/runtime"
 	"kview/internal/session"
 	"kview/internal/stream"
@@ -87,6 +89,7 @@ func (s *Server) Router() http.Handler {
 	r.Route("/api", func(api chi.Router) {
 		api.Use(s.authMiddleware)
 		api.Use(s.activityAccessDeniedLogMiddleware)
+		api.Use(s.dataplaneUserActivityMiddleware)
 
 		// Read-path ownership (dataplane snapshot vs projection vs direct kube in handler):
 		// Keep docs/STAGE5C_READ_SUBSTRATE.md in sync when adding GET routes.
@@ -96,7 +99,7 @@ func (s *Server) Router() http.Handler {
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 			defer cancel()
 
-			activities, err := s.rt.Registry().List(ctx)
+			activities, err := runtime.ListActivitiesSorted(ctx, s.rt.Registry())
 			if err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list activities"})
 				return
@@ -551,7 +554,24 @@ func (s *Server) Router() http.Handler {
 
 			state := dataplane.CoarseState(snap.Err, len(snap.Items))
 
-			items, rowProj := s.dp.EnrichNamespaceListItems(ctx, active, snap.Items)
+			items := snap.Items
+			hints := dataplane.ParseNamespaceEnrichHints(r.URL.Query())
+			rev := s.dp.BeginNamespaceListProgressiveEnrichment(active, items, hints)
+			rowProj := dto.NamespaceListRowProjectionMetaDTO{
+				TotalRows:    len(items),
+				EnrichedRows: 0,
+				Cap:          0,
+				Revision:     rev,
+				Loading:      rev != 0,
+				Stage:        "list",
+				Note:         "Pod and deployment counts for namespaces you use often appear shortly after you stop interacting with the app.",
+			}
+			if rev == 0 {
+				rowProj.Loading = false
+				if len(items) > 0 {
+					rowProj.Note = "Row metrics run only for current, recent, and favourite namespaces after idle. Select a namespace, browse resources, or star namespaces."
+				}
+			}
 
 			writeJSON(w, http.StatusOK, map[string]any{
 				"active":        active,
@@ -567,6 +587,19 @@ func (s *Server) Router() http.Handler {
 					"state":        state,
 				},
 			})
+		})
+
+		api.Get("/namespaces/enrichment", func(w http.ResponseWriter, r *http.Request) {
+			active := s.mgr.ActiveContext()
+			revStr := r.URL.Query().Get("revision")
+			rev, err := strconv.ParseUint(revStr, 10, 64)
+			if err != nil || rev == 0 {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid or missing revision query parameter", "active": active})
+				return
+			}
+
+			poll := s.dp.NamespaceListEnrichmentPoll(active, rev)
+			writeJSON(w, http.StatusOK, poll)
 		})
 
 		api.Get("/namespaces/{name}", func(w http.ResponseWriter, r *http.Request) {
@@ -2984,6 +3017,17 @@ func isWebSocketUpgradeRequest(r *http.Request) bool {
 	connection := strings.ToLower(r.Header.Get("Connection"))
 	upgrade := strings.ToLower(r.Header.Get("Upgrade"))
 	return strings.Contains(connection, "upgrade") && upgrade == "websocket"
+}
+
+func (s *Server) dataplaneUserActivityMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Namespace enrichment idle gate: polling this route must not count as "activity".
+		p := strings.TrimSuffix(r.URL.Path, "/")
+		if p != "/api/namespaces/enrichment" {
+			s.dp.NoteUserActivity()
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) serveUI(w http.ResponseWriter, r *http.Request) {

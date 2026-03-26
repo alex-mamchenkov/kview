@@ -90,7 +90,6 @@ export default function HelmChartsTable({ token }: { token: string }) {
       accessResource={listResourceAccess.helmcharts}
       namespace={null}
       defaultSortField="chartName"
-      initialRefreshSec={30}
       getRowHeight={() => "auto"}
       renderDrawer={({ selectedRow, open, onClose }) => (
         <HelmChartDrawer

@@ -61,8 +61,7 @@ export default function DashboardView(props: Props) {
       <Box sx={{ px: 2, pt: 1 }}>
         <Typography variant="h6">Cluster overview</Typography>
         <Typography variant="body2" color="text.secondary">
-          Bounded Stage 5C operator view: dataplane snapshots, freshness, and a sampled workload rollup (not full-cluster
-          analytics).
+          Cached lists and a sample of namespaces — useful for a quick pulse, not a full inventory of the cluster.
         </Typography>
       </Box>
 
@@ -92,37 +91,37 @@ export default function DashboardView(props: Props) {
               <>
                 <Paper variant="outlined" sx={{ p: 2 }}>
                   <Typography variant="subtitle2" color="primary" gutterBottom>
-                    1 · Plane &amp; control
+                    1 · How data is collected
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    What powers this view (dataplane profile, discovery, scope, observers).
+                    Settings that control which namespaces and resource types are watched, and how often lists refresh.
                   </Typography>
                   <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
-                    <Chip size="small" label={`Profile: ${plane.profile}`} variant="outlined" />
-                    <Chip size="small" label={`Discovery: ${plane.discoveryMode}`} variant="outlined" />
-                    <Chip size="small" label={`Activation: ${plane.activationMode}`} variant="outlined" />
+                    <Chip size="small" label={`View: ${plane.profile}`} variant="outlined" />
+                    <Chip size="small" label={`Namespace selection: ${plane.discoveryMode}`} variant="outlined" />
+                    <Chip size="small" label={`When active: ${plane.activationMode}`} variant="outlined" />
                     <Chip
                       size="small"
-                      label={`Scope · ns: ${plane.scope.namespaces}`}
+                      label={`Namespaces: ${plane.scope.namespaces}`}
                       variant="outlined"
                       sx={{ maxWidth: "100%" }}
                     />
-                    <Chip size="small" label={`Scope · kinds: ${plane.scope.resourceKinds}`} variant="outlined" />
-                    <Chip size="small" label={`NS observer: ${ns.observerState || "not_loaded"}`} variant="outlined" />
-                    <Chip size="small" label={`Node observer: ${nodes.observerState || "not_loaded"}`} variant="outlined" />
+                    <Chip size="small" label={`Resource types: ${plane.scope.resourceKinds}`} variant="outlined" />
+                    <Chip size="small" label={`Namespace list: ${ns.observerState || "—"}`} variant="outlined" />
+                    <Chip size="small" label={`Node list: ${nodes.observerState || "—"}`} variant="outlined" />
                   </Box>
                   <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
-                    Implemented profiles: {plane.profilesImplemented?.join(", ") || "—"} · Discovery modes:{" "}
+                    Available views: {plane.profilesImplemented?.join(", ") || "—"} · Namespace modes:{" "}
                     {plane.discoveryImplemented?.join(", ") || "—"}
                   </Typography>
                 </Paper>
 
                 <Paper variant="outlined" sx={{ p: 2 }}>
                   <Typography variant="subtitle2" color="primary" gutterBottom>
-                    2 · Visibility &amp; freshness
+                    2 · Lists and freshness
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    Cluster-wide namespace and node list snapshots — use this to judge trust in the numbers below.
+                    Cluster-wide namespace and node lists — how current they are and how much of the cluster they cover.
                   </Typography>
                   {visibility.trustNote && (
                     <Typography variant="caption" color="warning.main" display="block" sx={{ mb: 1 }}>
@@ -149,27 +148,27 @@ export default function DashboardView(props: Props) {
                       />
                       <StatCell label="Nodes (total)" value={nodes.total} />
                       <StatCell
-                        label="Namespaces meta"
-                        value={`cov ${ns.coverage} · deg ${ns.degradation} · cmp ${ns.completeness}`}
+                        label="Namespaces · scope / issues / detail"
+                        value={`${ns.coverage} · ${ns.degradation} · ${ns.completeness}`}
                       />
                       <StatCell
-                        label="Nodes meta"
-                        value={`cov ${nodes.coverage} · deg ${nodes.degradation} · cmp ${nodes.completeness}`}
+                        label="Nodes · scope / issues / detail"
+                        value={`${nodes.coverage} · ${nodes.degradation} · ${nodes.completeness}`}
                       />
-                      <StatCell label="Namespaces observed at" value={visibility.namespacesObservedAt || "—"} />
-                      <StatCell label="Nodes observed at" value={visibility.nodesObservedAt || "—"} />
+                      <StatCell label="Namespaces last checked" value={visibility.namespacesObservedAt || "—"} />
+                      <StatCell label="Nodes last checked" value={visibility.nodesObservedAt || "—"} />
                     </TableBody>
                   </Table>
                 </Paper>
 
                 <Paper variant="outlined" sx={{ p: 2 }}>
                   <Typography variant="subtitle2" color="primary" gutterBottom>
-                    3 · Visible resources (sampled)
+                    3 · Resource totals (sample)
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    Totals sum pods, deployments, services, ingresses, and PVCs from the first{" "}
-                    {resources.sampledNamespaces} namespaces alphabetically
-                    {resources.partial ? ` (of ${resources.totalNamespaces} visible — not cluster-complete)` : ""}.
+                    Pods, deployments, services, ingresses, and PVCs counted across the first {resources.sampledNamespaces}{" "}
+                    namespaces (alphabetically)
+                    {resources.partial ? ` — out of ${resources.totalNamespaces} visible namespaces, not the whole cluster` : ""}.
                   </Typography>
                   {resources.note && (
                     <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
@@ -179,10 +178,15 @@ export default function DashboardView(props: Props) {
                   <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mb: 1 }}>
                     {resources.partial && <Chip size="small" color="warning" label="Partial aggregate" variant="outlined" />}
                     {resources.sampleFreshness && (
-                      <Chip size="small" variant="outlined" label={`Sample freshness: ${resources.sampleFreshness}`} />
+                      <Chip size="small" variant="outlined" label={`Sample age: ${resources.sampleFreshness}`} />
                     )}
                     {resources.sampleDegradation && resources.sampleDegradation !== "none" && (
-                      <Chip size="small" color="warning" variant="outlined" label={`Sample degradation: ${resources.sampleDegradation}`} />
+                      <Chip
+                        size="small"
+                        color="warning"
+                        variant="outlined"
+                        label={`Sample issues: ${resources.sampleDegradation}`}
+                      />
                     )}
                   </Box>
                   <Table size="small">
@@ -198,11 +202,11 @@ export default function DashboardView(props: Props) {
 
                 <Paper variant="outlined" sx={{ p: 2 }}>
                   <Typography variant="subtitle2" color="primary" gutterBottom>
-                    4 · Hotspots &amp; risk (sampled)
+                    4 · Hotspots (same sample)
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    Where to look first: derived from the same namespace sample as section 3. Restart counts use restarts ≥
-                    3; top pods list is globally merged and capped.
+                    Highlights from the same namespaces as section 3. Pods with at least 3 container restarts are flagged;
+                    top lists are merged and capped.
                   </Typography>
                   {hotspots.note && hotspots.note !== resources.note && (
                     <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
@@ -217,17 +221,17 @@ export default function DashboardView(props: Props) {
                   </Box>
                   <Table size="small">
                     <TableBody>
-                      <StatCell label="Unhealthy namespaces (cluster list)" value={hotspots.unhealthyNamespaces} />
-                      <StatCell label="Degraded / attention deployments (in sample)" value={hotspots.degradedDeployments} />
-                      <StatCell label="Pods with elevated restarts (≥3, in sample)" value={hotspots.podsWithElevatedRestarts} />
-                      <StatCell label="Problematic resources (in sample, deduped per ns)" value={hotspots.problematicResources} />
+                      <StatCell label="Unhealthy namespaces (from cluster list)" value={hotspots.unhealthyNamespaces} />
+                      <StatCell label="Deployments needing attention (in sample)" value={hotspots.degradedDeployments} />
+                      <StatCell label="Pods with many restarts (≥3, in sample)" value={hotspots.podsWithElevatedRestarts} />
+                      <StatCell label="Other flagged resources (in sample, per namespace)" value={hotspots.problematicResources} />
                     </TableBody>
                   </Table>
                   {hotspots.topProblematicNamespaces && hotspots.topProblematicNamespaces.length > 0 && (
                     <>
                       <Divider sx={{ my: 1.5 }} />
                       <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
-                        Top namespaces by problematic count (sample)
+                        Namespaces with the most flagged resources (sample)
                       </Typography>
                       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
                         {hotspots.topProblematicNamespaces.map((t) => (
@@ -246,7 +250,7 @@ export default function DashboardView(props: Props) {
                     <>
                       <Divider sx={{ my: 1.5 }} />
                       <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
-                        Top pod restart hotspots (merged)
+                        Pods with the most restarts
                       </Typography>
                       <Table size="small">
                         <TableBody>

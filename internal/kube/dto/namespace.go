@@ -16,12 +16,22 @@ type NamespaceListItemDTO struct {
 	RestartHotspot     bool   `json:"restartHotspot,omitempty"` // any pod at medium+ restart bucket (>=5), same as list severity
 }
 
-// NamespaceListRowProjectionMetaDTO describes bounded row enrichment on GET /api/namespaces.
+// NamespaceListRowProjectionMetaDTO describes progressive row enrichment on GET /api/namespaces.
 type NamespaceListRowProjectionMetaDTO struct {
 	EnrichedRows int    `json:"enrichedRows"`
 	TotalRows    int    `json:"totalRows"`
-	Cap          int    `json:"cap"`
+	Cap          int    `json:"cap"` // 0 means no cap (full cluster processed in background).
 	Note         string `json:"note,omitempty"`
+	// Revision identifies the background enrichment job; poll GET /api/namespaces/enrichment?revision=…
+	Revision uint64 `json:"revision,omitempty"`
+	// Loading is true while background stages may still run.
+	Loading bool `json:"loading,omitempty"`
+	// Stage is list (HTTP response) | detail | related | complete (terminal for this revision).
+	Stage string `json:"stage,omitempty"`
+	// DetailRows counts namespaces that finished stage 2 (live GET).
+	DetailRows int `json:"detailRows,omitempty"`
+	// RelatedRows counts namespaces that finished stage 3 (pods/deployments snapshots).
+	RelatedRows int `json:"relatedRows,omitempty"`
 }
 
 type NamespaceDetailsDTO struct {

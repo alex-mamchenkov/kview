@@ -1,8 +1,12 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Chip, Typography } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
 import { apiGet } from "../../../api";
-import { type ApiNamespacesListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
+import {
+  type ApiNamespacesEnrichmentPoll,
+  type ApiNamespacesListResponse,
+  dataplaneListMetaFromResponse,
+} from "../../../types/api";
 import NamespaceDrawer from "./NamespaceDrawer";
 import { fmtAge } from "../../../utils/format";
 import { namespacePhaseChipColor, namespaceRowSummaryStateColor } from "../../../utils/k8sUi";
@@ -15,6 +19,9 @@ type Row = Namespace & { id: string };
 
 const resourceLabel = getResourceLabel("namespaces");
 
+/** Poll interval while namespace row details are loading (lighter than per-table list timers). */
+const namespaceRowDetailsPollMs = 1500;
+
 function dashNum(row: Row, key: "podCount" | "deploymentCount" | "problematicCount" | "podsWithRestarts"): string {
   if (!row.rowEnriched) return "—";
   const v = row[key];
@@ -26,7 +33,7 @@ const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 200 },
   {
     field: "phase",
-    headerName: "Phase",
+    headerName: "Status",
     width: 170,
     renderCell: (p) => {
       const phase = String(p.value || "");
@@ -147,22 +154,75 @@ const columns: GridColDef<Row>[] = [
 
 export default function NamespacesTable({
   token,
+  listApiPath,
   onNavigate,
 }: {
   token: string;
+  /** GET path for the namespaces list (optional query hints for prioritized row details). */
+  listApiPath: string;
   onNavigate?: (section: string, namespace: string) => void;
 }) {
   const [rowProjection, setRowProjection] = useState<ApiNamespacesListResponse["rowProjection"] | null>(null);
+  const [enrichRows, setEnrichRows] = useState<ApiNamespacesEnrichmentPoll["updates"] | null>(null);
+  const [enrichPoll, setEnrichPoll] = useState<ApiNamespacesEnrichmentPoll | null>(null);
 
   const fetchRows = useCallback(async () => {
-    const res = await apiGet<ApiNamespacesListResponse>("/api/namespaces", token);
+    // Do not clear enrichRows/enrichPoll here: clearing before the request completes drops merged
+    // cells during loading and on every auto-refresh. mapRows only applies poll data when its
+    // revision matches rowProjection.revision (after this fetch returns).
+    const res = await apiGet<ApiNamespacesListResponse>(listApiPath, token);
     setRowProjection(res.rowProjection ?? null);
     const items = res.items || [];
     return {
       rows: items.map((n) => ({ ...n, id: n.name })),
       dataplaneMeta: dataplaneListMetaFromResponse({ meta: res.meta, observed: res.observed }),
     };
-  }, [token]);
+  }, [token, listApiPath]);
+
+  const mapRows = useCallback(
+    (rows: Row[]) => {
+      const listRev = rowProjection?.revision ?? 0;
+      if (!enrichRows?.length || !listRev) return rows;
+      // Ignore stale poll payloads (previous job or pre-first-poll) so we do not flash back to list-only.
+      if (enrichPoll == null || enrichPoll.revision !== listRev) return rows;
+      const u = new Map(enrichRows.map((n) => [n.name, n]));
+      return rows.map((r) => {
+        const ex = u.get(r.name);
+        return ex ? ({ ...r, ...ex, id: r.name } as Row) : r;
+      });
+    },
+    [enrichRows, enrichPoll, rowProjection?.revision],
+  );
+
+  const revision = rowProjection?.revision ?? 0;
+
+  useEffect(() => {
+    if (!revision || !token) return;
+
+    let cancelled = false;
+    let id = 0;
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        const res = await apiGet<ApiNamespacesEnrichmentPoll>(
+          `/api/namespaces/enrichment?revision=${revision}`,
+          token,
+        );
+        if (cancelled || res.stale) return;
+        setEnrichRows(res.updates ?? []);
+        setEnrichPoll(res);
+        if (res.complete && id) window.clearInterval(id);
+      } catch {
+        /* ignore transient poll errors */
+      }
+    };
+    void tick();
+    id = window.setInterval(tick, namespaceRowDetailsPollMs);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [revision, token]);
 
   const filterPredicate = useCallback((row: Row, q: string) => {
     const lc = q.toLowerCase();
@@ -179,26 +239,46 @@ export default function NamespacesTable({
 
   const title = useMemo(() => <span>{resourceLabel}</span>, []);
 
-  const dataplaneMetaPrefix = useMemo(
-    () =>
-      rowProjection && rowProjection.totalRows > 0 ? (
-        <Typography variant="caption" color="text.secondary" display="block">
-          Row metrics: {rowProjection.enrichedRows}/{rowProjection.totalRows} namespaces (cap {rowProjection.cap})
-          {rowProjection.note ? ` — ${rowProjection.note}` : ""}
-        </Typography>
-      ) : null,
-    [rowProjection],
-  );
+  const listStatusPrefix = useMemo(() => {
+    const total = rowProjection?.totalRows ?? 0;
+    if (total <= 0) return null;
+    const p = enrichPoll;
+    const rawStage = p?.stage ?? rowProjection?.stage ?? "list";
+    const d = p?.detailRows ?? 0;
+    const r = p?.relatedRows ?? 0;
+    const done = p?.complete ?? false;
+    const stageHint =
+      rawStage === "complete" || done
+        ? "Up to date"
+        : rawStage === "detail"
+          ? "Fetching namespace details"
+          : rawStage === "related"
+            ? "Loading workload counts"
+            : "Preparing";
+    const targets = p?.enrichTargets;
+    const priorityHint =
+      targets != null && targets > 0 ? ` · ${targets} namespace${targets === 1 ? "" : "s"} prioritized` : "";
+    return (
+      <Typography variant="caption" color="text.secondary" display="block">
+        {stageHint}
+        {!done ? ` · Details ${d}/${total} · Counts ${r}/${total}` : ""}
+        {priorityHint}
+        {rowProjection?.note ? ` — ${rowProjection.note}` : ""}
+      </Typography>
+    );
+  }, [rowProjection, enrichPoll]);
 
   return (
     <ResourceListPage<Row>
       token={token}
       title={title}
-      dataplaneMetaPrefix={dataplaneMetaPrefix}
+      dataplaneMetaPrefix={listStatusPrefix}
+      mapRows={mapRows}
+      mapRowsDeps={[enrichRows, enrichPoll, rowProjection?.revision]}
       columns={columns}
       fetchRows={fetchRows}
       filterPredicate={filterPredicate}
-      filterLabel="Filter (name, phase, workload state, counts)"
+      filterLabel="Filter (name, status, workload state, counts)"
       resourceLabel={resourceLabel}
       accessResource={listResourceAccess.namespaces}
       namespace={null}

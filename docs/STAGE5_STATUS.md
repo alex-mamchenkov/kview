@@ -52,7 +52,7 @@ These use `*Snapshot` + `writeDataplaneListResponse` (or namespaces’ equivalen
 
 Also:
 
-- `/api/namespaces` — namespaces list + `meta` + bounded **row projection** (`rowProjection` + per-item workload fields from pods/deployments snapshots).
+- `/api/namespaces` — namespaces list returns **snapshot list immediately**; `rowProjection.revision` drives background row enrichment (live GET per namespace, then pods/deployments snapshots); UI polls `/api/namespaces/enrichment`.
 - `/api/dashboard/cluster` — structured overview: `plane`, `visibility` (ns/node snapshots + trust copy), `resources` + `hotspots` (same bounded namespace sample for rollups), `workloadHints` (backward-compatible hotspot fields).
 
 ---

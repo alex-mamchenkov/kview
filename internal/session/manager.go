@@ -76,14 +76,20 @@ func (m *InMemoryManager) Create(_ context.Context, s Session) (Session, error) 
 	if s.Type == TypePortForward {
 		actType = runtime.ActivityTypePortForward
 	}
+	resType := "session:terminal"
+	if actType == runtime.ActivityTypePortForward {
+		resType = "session:portforward"
+	}
 	activity := runtime.Activity{
-		ID:        s.ID,
-		Kind:      runtime.ActivityKindSession,
-		Type:      actType,
-		Title:     s.Title,
-		Status:    runtime.ActivityStatus(s.Status),
-		CreatedAt: s.CreatedAt,
-		UpdatedAt: s.UpdatedAt,
+		ID:           s.ID,
+		Kind:         runtime.ActivityKindSession,
+		Type:         actType,
+		Title:        s.Title,
+		Status:       runtime.ActivityStatus(s.Status),
+		CreatedAt:    s.CreatedAt,
+		UpdatedAt:    s.UpdatedAt,
+		StartedAt:    s.CreatedAt,
+		ResourceType: resType,
 		Metadata: map[string]string{
 			"targetCluster":   s.TargetCluster,
 			"targetNamespace": s.TargetNamespace,

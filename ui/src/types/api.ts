@@ -59,6 +59,34 @@ export type ResourceListFetchResult<TRow> = {
   dataplaneMeta?: DataplaneListMeta | null;
 };
 
+/** GET /api/namespaces/enrichment?revision= */
+export type ApiNamespacesEnrichmentPoll = {
+  revision: number;
+  stale?: boolean;
+  latestRevision?: number;
+  complete: boolean;
+  stage?: string;
+  detailRows: number;
+  relatedRows: number;
+  totalRows: number;
+  /** Count of namespaces selected for progressive enrichment (scored subset). */
+  enrichTargets?: number;
+  updates: Array<{
+    name: string;
+    phase: string;
+    ageSec: number;
+    hasUnhealthyConditions: boolean;
+    rowEnriched?: boolean;
+    summaryState?: string;
+    podCount?: number;
+    deploymentCount?: number;
+    problematicCount?: number;
+    podsWithRestarts?: number;
+    restartHotspot?: boolean;
+  }>;
+  active?: string;
+};
+
 /** /api/contexts response */
 export type ApiContextsResponse = { contexts?: Array<{ name: string }> };
 
@@ -72,6 +100,11 @@ export type ApiNamespacesListResponse = {
     totalRows: number;
     cap: number;
     note?: string;
+    revision?: number;
+    loading?: boolean;
+    stage?: string;
+    detailRows?: number;
+    relatedRows?: number;
   };
   meta?: {
     freshness: string;

@@ -47,6 +47,11 @@ type Activity = {
   status: string;
   createdAt: string;
   updatedAt: string;
+  startedAt?: string;
+  resourceType?: string;
+  /** Wall time from start to now (running) or to updatedAt (stopped), milliseconds */
+  executionMs?: number;
+  metadata?: Record<string, string>;
 };
 
 type ActivityLogEntry = {
@@ -144,7 +149,7 @@ export default function ActivityTabs({
         setActivities(res.items || []);
       })
       .catch((e) => {
-        // For Phase 1 keep error handling simple; Activity Panel is additive.
+        // Keep error handling simple; Activity Panel is additive.
         setErr(String(e));
       })
       .finally(() => setLoading(false));

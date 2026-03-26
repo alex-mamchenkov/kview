@@ -123,8 +123,8 @@ func (m *manager) DashboardSummary(ctx context.Context, clusterName string) Clus
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
 
-	nsSnap, _ := plane.NamespacesSnapshot(ctx, m.scheduler, m.clients)
-	nodesSnap, _ := plane.NodesSnapshot(ctx, m.scheduler, m.clients)
+	nsSnap, _ := plane.NamespacesSnapshot(ctx, m.scheduler, m.clients, WorkPriorityMedium)
+	nodesSnap, _ := plane.NodesSnapshot(ctx, m.scheduler, m.clients, WorkPriorityMedium)
 
 	nsObs := "not_loaded"
 	nodeObs := "not_loaded"

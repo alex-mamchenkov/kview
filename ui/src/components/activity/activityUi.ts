@@ -87,7 +87,11 @@ function genericChipTone(value: string): ChipTone {
       return "secondary";
     case "session":
     case "runtime":
+    case "worker":
       return "primary";
+    case "namespace-list-enrich":
+    case "dataplane-snapshot":
+      return "info";
     case "rbac":
       return "warning";
     default:
@@ -102,6 +106,7 @@ export function chipToneForValue(value: string, category: ChipCategory = "status
     if (normalized === "terminal") return "info";
     if (normalized === "portforward") return "secondary";
     if (normalized === "runtime") return "primary";
+    if (normalized === "worker") return "primary";
     if (normalized === "rbac") return "warning";
   }
 

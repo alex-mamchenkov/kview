@@ -9,10 +9,7 @@ type Props = {
   prefix?: React.ReactNode;
 };
 
-/**
- * Compact list-level dataplane truthfulness line (freshness, coverage, degradation, completeness, state).
- * Rationale: one pattern for all dataplane-backed resource lists without forcing identical page layouts.
- */
+/** Compact list-level quality line for cached resource lists (shown under the toolbar). */
 export default function DataplaneListMetaStrip({ meta, prefix }: Props) {
   if (!meta || (!meta.state && !meta.freshness && !meta.observed)) {
     return null;
@@ -23,12 +20,12 @@ export default function DataplaneListMetaStrip({ meta, prefix }: Props) {
       {prefix}
       <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.75 }}>
         {meta.state && (
-          <Chip size="small" label={`State: ${meta.state}`} color={dataplaneCoarseStateChipColor(meta.state)} />
+          <Chip size="small" label={`Sync: ${meta.state}`} color={dataplaneCoarseStateChipColor(meta.state)} />
         )}
         <Typography variant="caption" color="text.secondary" component="span">
-          Freshness {meta.freshness ?? "—"} · Coverage {meta.coverage ?? "—"} · Degradation {meta.degradation ?? "—"} ·
-          Completeness {meta.completeness ?? "—"}
-          {meta.observed ? ` · Observed ${meta.observed}` : ""}
+          Updated {meta.freshness ?? "—"} · Scope {meta.coverage ?? "—"} · Issues {meta.degradation ?? "—"} · Detail{" "}
+          {meta.completeness ?? "—"}
+          {meta.observed ? ` · Checked ${meta.observed}` : ""}
         </Typography>
       </Box>
     </Box>

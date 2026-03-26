@@ -30,6 +30,8 @@ export type AppStateV1 = {
   activeNamespace?: string;
   activeSection?: Section;
   favouriteNamespacesByContext: Record<string, string[]>;
+  /** MRU namespaces per kube context (for background list enrichment). */
+  recentNamespacesByContext?: Record<string, string[]>;
 };
 
 const KEY = "kview.state.v1";
@@ -45,6 +47,7 @@ export function loadState(): AppStateV1 {
     const parsed = JSON.parse(raw);
     if (parsed?.v !== 1) return { v: 1, favouriteNamespacesByContext: {} };
     if (!parsed.favouriteNamespacesByContext) parsed.favouriteNamespacesByContext = {};
+    if (!parsed.recentNamespacesByContext) parsed.recentNamespacesByContext = {};
     return parsed as AppStateV1;
   } catch {
     return { v: 1, favouriteNamespacesByContext: {} };
@@ -53,6 +56,37 @@ export function loadState(): AppStateV1 {
 
 export function saveState(s: AppStateV1) {
   localStorage.setItem(KEY, JSON.stringify(s));
+}
+
+const MAX_RECENT_NAMESPACES = 20;
+const MAX_FAVOURITES_FOR_ENRICH_QUERY = 40;
+
+/** Path for GET /api/namespaces including enrichment hint query (current, recent, favourites). */
+export function namespacesListApiPath(state: AppStateV1, contextName: string, focusNamespace: string): string {
+  const params = new URLSearchParams();
+  const focus = (focusNamespace || "").trim();
+  if (focus) params.set("enrichFocus", focus);
+  const recent = (state.recentNamespacesByContext?.[contextName] || []).filter(Boolean).slice(0, MAX_RECENT_NAMESPACES);
+  if (recent.length) params.set("enrichRecent", recent.join(","));
+  const fav = (state.favouriteNamespacesByContext?.[contextName] || [])
+    .filter(Boolean)
+    .slice(0, MAX_FAVOURITES_FOR_ENRICH_QUERY);
+  if (fav.length) params.set("enrichFav", fav.join(","));
+  const q = params.toString();
+  return q ? `/api/namespaces?${q}` : "/api/namespaces";
+}
+
+export function recordRecentNamespace(state: AppStateV1, ctx: string, ns: string): AppStateV1 {
+  if (!ctx || !ns) return state;
+  const prev = state.recentNamespacesByContext?.[ctx] || [];
+  const next = [ns, ...prev.filter((x) => x !== ns)].slice(0, MAX_RECENT_NAMESPACES);
+  return {
+    ...state,
+    recentNamespacesByContext: {
+      ...(state.recentNamespacesByContext || {}),
+      [ctx]: next,
+    },
+  };
 }
 
 export function toggleFavouriteNamespace(state: AppStateV1, ctx: string, ns: string): AppStateV1 {

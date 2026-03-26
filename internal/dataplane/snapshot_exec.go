@@ -58,7 +58,8 @@ func (p *clusterPlane) snapshotMetaHot(now time.Time) SnapshotMetadata {
 func executeClusterSnapshot[I any](
 	p *clusterPlane,
 	ctx context.Context,
-	sched *simpleScheduler,
+	sched *workScheduler,
+	prio WorkPriority,
 	clients ClientsProvider,
 	store *snapshotStore[Snapshot[I]],
 	desc clusterSnapshotDescriptor[I],
@@ -75,7 +76,7 @@ func executeClusterSnapshot[I any](
 	}
 
 	var out Snapshot[I]
-	runErr := sched.Run(ctx, key, func(runCtx context.Context) error {
+	runErr := sched.Run(ctx, prio, key, func(runCtx context.Context) error {
 		now := time.Now().UTC()
 		if clients == nil {
 			out.Err = nil
@@ -115,7 +116,8 @@ func executeClusterSnapshot[I any](
 func executeNamespacedSnapshot[I any](
 	p *clusterPlane,
 	ctx context.Context,
-	sched *simpleScheduler,
+	sched *workScheduler,
+	prio WorkPriority,
 	clients ClientsProvider,
 	namespace string,
 	store *namespacedSnapshotStore[Snapshot[I]],
@@ -133,7 +135,7 @@ func executeNamespacedSnapshot[I any](
 	}
 
 	var out Snapshot[I]
-	runErr := sched.Run(ctx, key, func(runCtx context.Context) error {
+	runErr := sched.Run(ctx, prio, key, func(runCtx context.Context) error {
 		now := time.Now().UTC()
 		if clients == nil {
 			out.Err = nil

@@ -30,14 +30,16 @@ func (m *Manager) Start(_ context.Context) error {
 
 	// Register a runtime/system activity and mark it as running.
 	a := Activity{
-		ID:        RuntimeActivityID,
-		Kind:      ActivityKindStream,
-		Type:      ActivityTypeRuntimeLog,
-		Title:     "Runtime",
-		Status:    ActivityStatusStarting,
-		CreatedAt: now,
-		UpdatedAt: now,
-		Metadata:  map[string]string{"scope": "system"},
+		ID:           RuntimeActivityID,
+		Kind:         ActivityKindStream,
+		Type:         ActivityTypeRuntimeLog,
+		Title:        "Runtime",
+		Status:       ActivityStatusStarting,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		StartedAt:    now,
+		ResourceType: "system:runtime",
+		Metadata:     map[string]string{"scope": "system"},
 	}
 	_ = m.registry.Register(context.Background(), a)
 	m.logs.Append(LogLevelInfo, "runtime", "runtime activity registered (starting)")

@@ -35,7 +35,7 @@ const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
   {
     field: "phase",
-    headerName: "Phase",
+    headerName: "Status",
     width: 130,
     renderCell: (p) => {
       const phase = String(p.value || "");
@@ -118,7 +118,7 @@ export default function PodsTable({ token, namespace }: { token: string; namespa
       fetchRows={fetchRows}
       enabled={!!namespace}
       filterPredicate={filterPredicate}
-      filterLabel="Filter (name/node/phase)"
+      filterLabel="Filter (name/node/status)"
       resourceLabel={resourceLabel}
       accessResource={listResourceAccess.pods}
       namespace={namespace}
