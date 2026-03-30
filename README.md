@@ -229,9 +229,13 @@ Important documents:
 
 | Document | Purpose |
 |--------|--------|
-| UI_UX_GUIDE.md | UI architecture and UX contracts |
-| AI_AGENT_RULES.md | strict development rules for AI agents |
-| ARCHITECTURE_PRINCIPLES.md | core architectural rules |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | core architecture and principles |
+| [docs/DATAPLANE.md](docs/DATAPLANE.md) | read-side dataplane behavior |
+| [docs/API_READ_OWNERSHIP.md](docs/API_READ_OWNERSHIP.md) | GET / read API source map (keep in sync with routes) |
+| [docs/UI_UX_GUIDE.md](docs/UI_UX_GUIDE.md) | UI architecture and UX contracts |
+| [docs/AI_AGENT_RULES.md](docs/AI_AGENT_RULES.md) | development rules for AI agents |
+
+Stage-era notes live under [docs/archive/](docs/archive/README.md) for history only.
 
 Documentation acts as a **contract**.
 

@@ -69,7 +69,8 @@ Verify:
 Ensure new code follows:
 
 docs/UI_UX_GUIDE.md  
-docs/ARCHITECTURE_PRINCIPLES.md
+docs/ARCHITECTURE.md  
+docs/API_READ_OWNERSHIP.md (when adding or changing GET / read routes)
 
 If architecture changes → update documentation.
 

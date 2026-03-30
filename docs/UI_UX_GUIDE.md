@@ -135,3 +135,11 @@ Maintain consistent:
 - drawer layouts
 - action placement
 - table density
+
+---
+
+# Related documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — product architecture and read/mutation boundaries
+- [DATAPLANE.md](DATAPLANE.md) — snapshot metadata and dataplane behavior (for list honesty chips and dashboard copy)
+- [API_READ_OWNERSHIP.md](API_READ_OWNERSHIP.md) — which routes are snapshot-backed vs direct read

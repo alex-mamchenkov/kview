@@ -125,6 +125,7 @@ export default function ActivityPanel({ token }: Props) {
         />
       )}
       <Box
+        onDoubleClick={() => setOpen((v) => !v)}
         sx={{
           display: "flex",
           alignItems: "center",
@@ -149,7 +150,11 @@ export default function ActivityPanel({ token }: Props) {
           <Tab label="Logs" />
         </Tabs>
         <Box sx={{ flexGrow: 1 }} />
-        <IconButton size="small" onClick={() => setOpen((v) => !v)}>
+        <IconButton
+          size="small"
+          onClick={() => setOpen((v) => !v)}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
           {open ? <ExpandMoreIcon fontSize="small" /> : <ExpandLessIcon fontSize="small" />}
         </IconButton>
       </Box>

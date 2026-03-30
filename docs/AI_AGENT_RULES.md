@@ -95,8 +95,10 @@ Do not introduce experimental code without purpose.
 If architecture changes, update:
 
 - README
-- UI_UX_GUIDE
-- ARCHITECTURE_PRINCIPLES
+- docs/ARCHITECTURE.md
+- docs/DATAPLANE.md (read-side behavior)
+- docs/API_READ_OWNERSHIP.md (if GET / read routes change)
+- docs/UI_UX_GUIDE.md
 
 ---
 
