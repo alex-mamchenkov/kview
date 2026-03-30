@@ -253,7 +253,8 @@ func (m *manager) runNamespaceListEnrichment(ctx context.Context, cluster string
 			sess.detailDone++
 			sess.mu.Unlock()
 
-			planeAny, perr := m.PlaneForCluster(gctx, cluster)
+			workCtx := ContextWithWorkSource(gctx, WorkSourceEnrichment)
+			planeAny, perr := m.PlaneForCluster(workCtx, cluster)
 			if perr != nil {
 				sess.mu.Lock()
 				sess.relatedDone++
@@ -261,8 +262,8 @@ func (m *manager) runNamespaceListEnrichment(ctx context.Context, cluster string
 				return nil
 			}
 			plane := planeAny.(*clusterPlane)
-			podsSnap, _ := plane.PodsSnapshot(gctx, m.scheduler, m.clients, name, WorkPriorityLow)
-			depsSnap, _ := plane.DeploymentsSnapshot(gctx, m.scheduler, m.clients, name, WorkPriorityLow)
+			podsSnap, _ := plane.PodsSnapshot(workCtx, m.scheduler, m.clients, name, WorkPriorityLow)
+			depsSnap, _ := plane.DeploymentsSnapshot(workCtx, m.scheduler, m.clients, name, WorkPriorityLow)
 			metrics := buildNamespaceListRowProjection(podsSnap, depsSnap)
 
 			sess.mu.Lock()

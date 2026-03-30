@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { Paper, Typography, Box } from "@mui/material";
 import { DataGrid, GridColDef, GridRowSelectionModel } from "@mui/x-data-grid";
 import useListQuery from "../../utils/useListQuery";
+import { defaultRevisionPollSec } from "../../utils/dataplaneRevisionPoll";
 import useEmptyListAccessCheck from "../../utils/useEmptyListAccessCheck";
 import useListFilters from "../../utils/useListFilters";
 import type { AccessReviewResource } from "../../utils/k8sResources";
@@ -48,6 +49,14 @@ export type ResourceListPageProps<TRow extends { id: string }> = {
   renderFooterExtra?: (refetch: () => Promise<void>) => React.ReactNode;
   /** Optional row height for DataGrid (e.g. () => "auto" for multi-line cells). */
   getRowHeight?: () => "auto" | number;
+  /**
+   * Dataplane-backed lists: poll GET /api/dataplane/revision cheaply; full fetchRows only when revision changes.
+   * Ignored when the user selects a full list refresh interval (`refreshSec > 0`) in the toolbar.
+   */
+  dataplaneRevisionPoll?: {
+    fetchRevision: () => Promise<string>;
+    pollSec?: number;
+  };
 };
 
 /**
@@ -73,6 +82,7 @@ export default function ResourceListPage<TRow extends { id: string }>({
   renderDrawer,
   renderFooterExtra,
   getRowHeight,
+  dataplaneRevisionPoll,
 }: ResourceListPageProps<TRow>) {
   const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>([]);
   const selectedId = useMemo<string | null>(() => {
@@ -94,6 +104,8 @@ export default function ResourceListPage<TRow extends { id: string }>({
     onInitialResult: () => setSelectionModel([]),
     mapRows,
     mapRowsDeps,
+    fetchRevision: dataplaneRevisionPoll?.fetchRevision,
+    revisionPollSec: dataplaneRevisionPoll ? (dataplaneRevisionPoll.pollSec ?? defaultRevisionPollSec) : 0,
   });
 
   const accessDenied = useEmptyListAccessCheck({
@@ -138,17 +150,29 @@ export default function ResourceListPage<TRow extends { id: string }>({
 
   return (
     <Paper sx={{ p: 2 }}>
-      <Typography variant="h6" sx={{ mb: 0.5 }}>
+      <Typography variant="h6" sx={{ mb: 0.5, flexShrink: 0 }}>
         {title}
       </Typography>
-      <DataplaneListMetaStrip meta={dataplaneMeta} prefix={dataplaneMetaPrefix} />
+      <Box sx={{ flexShrink: 0 }}>
+        <DataplaneListMetaStrip meta={dataplaneMeta} prefix={dataplaneMetaPrefix} />
+      </Box>
 
-      <div style={{ height: "100%", width: "100%", minHeight: 0 }}>
+      <Box
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 0,
+          width: "100%",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
         <DataGrid<TRow>
           rows={filteredRows}
           columns={columns}
           density="compact"
           loading={loading}
+          sx={{ flex: 1, minHeight: 0, width: "100%" }}
           disableMultipleRowSelection
           hideFooterSelectedRowCount
           rowSelectionModel={selectionModel}
@@ -184,9 +208,9 @@ export default function ResourceListPage<TRow extends { id: string }>({
             } as Record<string, unknown>,
           }}
         />
-      </div>
+      </Box>
 
-      <Box sx={{ mt: 1, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 1 }}>
+      <Box sx={{ mt: 1, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 1, flexShrink: 0 }}>
         {renderFooterExtra?.(refetch)}
         <Box sx={{ flexGrow: renderFooterExtra ? 1 : 0 }} />
         <Typography variant="caption" color="text.secondary">

@@ -110,6 +110,14 @@ func (s *Server) Router() http.Handler {
 			})
 		})
 
+		api.Get("/dataplane/work/live", func(w http.ResponseWriter, _ *http.Request) {
+			if s.dp == nil {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "dataplane unavailable"})
+				return
+			}
+			writeJSON(w, http.StatusOK, s.dp.SchedulerLiveWork())
+		})
+
 		api.Get("/activity/{id}/logs", func(w http.ResponseWriter, r *http.Request) {
 			id := chi.URLParam(r, "id")
 			if id == "" {
@@ -511,6 +519,39 @@ func (s *Server) Router() http.Handler {
 			})
 		})
 
+		api.Get("/dataplane/revision", func(w http.ResponseWriter, r *http.Request) {
+			kindStr := strings.TrimSpace(r.URL.Query().Get("kind"))
+			kind, ok := dataplane.ParseListRevisionResourceKind(kindStr)
+			if !ok {
+				writeJSON(w, http.StatusBadRequest, map[string]any{
+					"error":  "unknown or missing kind query parameter",
+					"active": s.mgr.ActiveContext(),
+				})
+				return
+			}
+			ns := strings.TrimSpace(r.URL.Query().Get("namespace"))
+			if dataplane.ListRevisionKindNeedsNamespace(kind) && ns == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{
+					"error":  "namespace query parameter is required for this kind",
+					"active": s.mgr.ActiveContext(),
+				})
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			defer cancel()
+
+			active := s.mgr.ActiveContext()
+			s.dp.EnsureObservers(ctx, active)
+
+			env, err := s.dp.ListSnapshotRevision(ctx, active, kind, ns)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+			writeJSON(w, http.StatusOK, env)
+		})
+
 		api.Get("/contexts", func(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{
 				"active":   s.mgr.ActiveContext(),
@@ -580,6 +621,7 @@ func (s *Server) Router() http.Handler {
 				"rowProjection": rowProj,
 				"observed":      snap.Meta.ObservedAt,
 				"meta": map[string]any{
+					"revision":     strconv.FormatUint(snap.Meta.Revision, 10),
 					"freshness":    snap.Meta.Freshness,
 					"coverage":     snap.Meta.Coverage,
 					"degradation":  snap.Meta.Degradation,
@@ -3085,6 +3127,7 @@ func writeDataplaneListResponse(w http.ResponseWriter, active string, items any,
 		"items":    items,
 		"observed": meta.ObservedAt,
 		"meta": map[string]any{
+			"revision":     strconv.FormatUint(meta.Revision, 10),
 			"freshness":    meta.Freshness,
 			"coverage":     meta.Coverage,
 			"degradation":  meta.Degradation,

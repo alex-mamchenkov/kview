@@ -109,7 +109,7 @@ func executeClusterSnapshot[I any](
 		return nil
 	})
 
-	store.set(out)
+	setClusterSnapshot(store, out)
 	return out, runErr
 }
 
@@ -168,6 +168,6 @@ func executeNamespacedSnapshot[I any](
 		return nil
 	})
 
-	store.set(namespace, out)
+	setNamespacedSnapshot(store, namespace, out)
 	return out, runErr
 }

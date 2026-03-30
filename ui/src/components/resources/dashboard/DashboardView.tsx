@@ -68,7 +68,23 @@ export default function DashboardView(props: Props) {
   }, [props.token]);
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto", pb: 2 }}>
+    <Box
+      className="kview-dashboard-root"
+      sx={{
+        flex: 1,
+        minHeight: 0,
+        minWidth: 0,
+        width: "100%",
+        maxWidth: "100%",
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        overflowY: "auto",
+        overflowX: "hidden",
+        pb: 2,
+        boxSizing: "border-box",
+      }}
+    >
       <Box sx={{ px: 2, pt: 1 }}>
         <Typography variant="h6">Cluster overview</Typography>
         <Typography variant="body2" color="text.secondary">

@@ -12,6 +12,7 @@ import { fmtAge } from "../../../utils/format";
 import { namespacePhaseChipColor, namespaceRowSummaryStateColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
+import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
 
 type Namespace = NonNullable<ApiNamespacesListResponse["items"]>[number];
 
@@ -277,6 +278,10 @@ export default function NamespacesTable({
       mapRowsDeps={[enrichRows, enrichPoll, rowProjection?.revision]}
       columns={columns}
       fetchRows={fetchRows}
+      dataplaneRevisionPoll={{
+        fetchRevision: dataplaneRevisionFetcher(token, "namespaces"),
+        pollSec: defaultRevisionPollSec,
+      }}
       filterPredicate={filterPredicate}
       filterLabel="Filter (name, status, workload state, counts)"
       resourceLabel={resourceLabel}

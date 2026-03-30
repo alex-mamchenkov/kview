@@ -8,6 +8,7 @@ import { fmtAge } from "../../../utils/format";
 import { eventChipColor, listHealthHintColor, phaseChipColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
+import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
 
 type Pod = {
   name: string;
@@ -116,6 +117,10 @@ export default function PodsTable({ token, namespace }: { token: string; namespa
       title={<>{resourceLabel} — {namespace}</>}
       columns={columns}
       fetchRows={fetchRows}
+      dataplaneRevisionPoll={{
+        fetchRevision: dataplaneRevisionFetcher(token, "pods", namespace),
+        pollSec: defaultRevisionPollSec,
+      }}
       enabled={!!namespace}
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/node/status)"

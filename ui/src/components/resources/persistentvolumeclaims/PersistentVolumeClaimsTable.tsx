@@ -8,6 +8,7 @@ import { pvcPhaseChipColor } from "../../../utils/k8sUi";
 import PersistentVolumeClaimDrawer from "./PersistentVolumeClaimDrawer";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
+import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
 
 type PersistentVolumeClaim = {
   name: string;
@@ -120,6 +121,10 @@ export default function PersistentVolumeClaimsTable({
       title={<>{resourceLabel} — {namespace}</>}
       columns={columns}
       fetchRows={fetchRows}
+      dataplaneRevisionPoll={{
+        fetchRevision: dataplaneRevisionFetcher(token, "persistentvolumeclaims", namespace),
+        pollSec: defaultRevisionPollSec,
+      }}
       enabled={!!namespace}
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/status/storageClass/volume)"

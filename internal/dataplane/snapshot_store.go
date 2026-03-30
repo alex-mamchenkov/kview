@@ -10,7 +10,8 @@ type observedAtGetter interface {
 }
 
 type snapshotStore[T observedAtGetter] struct {
-	mu   sync.RWMutex
+	mu  sync.RWMutex
+	rev uint64
 	snap T
 }
 
@@ -35,9 +36,28 @@ func (s *snapshotStore[T]) set(snap T) {
 	s.snap = snap
 }
 
+// setClusterSnapshot stores a cluster-wide snapshot and bumps the monotonic revision for that list.
+func setClusterSnapshot[I any](s *snapshotStore[Snapshot[I]], snap Snapshot[I]) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rev++
+	snap.Meta.Revision = s.rev
+	s.snap = snap
+}
+
+func peekClusterSnapshot[I any](s *snapshotStore[Snapshot[I]]) (snap Snapshot[I], ok bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.snap.Meta.ObservedAt.IsZero() {
+		return Snapshot[I]{}, false
+	}
+	return s.snap, true
+}
+
 type namespacedSnapshotStore[T observedAtGetter] struct {
 	mu    sync.RWMutex
 	snaps map[string]T
+	nsRev map[string]uint64
 }
 
 func newNamespacedSnapshotStore[T observedAtGetter]() namespacedSnapshotStore[T] {
@@ -81,4 +101,29 @@ func (s *namespacedSnapshotStore[T]) set(namespace string, snap T) {
 		s.snaps = make(map[string]T)
 	}
 	s.snaps[namespace] = snap
+}
+
+// setNamespacedSnapshot stores a per-namespace snapshot and bumps revision for that namespace key.
+func setNamespacedSnapshot[I any](s *namespacedSnapshotStore[Snapshot[I]], namespace string, snap Snapshot[I]) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.snaps == nil {
+		s.snaps = make(map[string]Snapshot[I])
+	}
+	if s.nsRev == nil {
+		s.nsRev = make(map[string]uint64)
+	}
+	s.nsRev[namespace]++
+	snap.Meta.Revision = s.nsRev[namespace]
+	s.snaps[namespace] = snap
+}
+
+func peekNamespacedSnapshot[I any](s *namespacedSnapshotStore[Snapshot[I]], namespace string) (snap Snapshot[I], ok bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	sn, have := s.snaps[namespace]
+	if !have || sn.Meta.ObservedAt.IsZero() {
+		return Snapshot[I]{}, false
+	}
+	return sn, true
 }

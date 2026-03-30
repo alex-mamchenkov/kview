@@ -36,7 +36,31 @@ type Props = {
   token: string;
   requestedTerminalId?: string | null;
   requestedTerminalRequestKey?: number;
-  onCountsChange?: (counts: { activities: number; terminals: number; portForwards: number }) => void;
+  onCountsChange?: (counts: {
+    activities: number;
+    dataplaneWork: number;
+    terminals: number;
+    portForwards: number;
+  }) => void;
+};
+
+type LiveWorkRow = {
+  workKey: string;
+  cluster: string;
+  class: string;
+  kind: string;
+  namespace?: string;
+  priority: string;
+  source: string;
+  state: string;
+  waitMs: number;
+  runningMs: number;
+};
+
+type LiveWork = {
+  maxSlotsPerCluster: number;
+  running: LiveWorkRow[];
+  queued: LiveWorkRow[];
 };
 
 type Activity = {
@@ -93,6 +117,9 @@ export default function ActivityTabs({
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsErr, setSessionsErr] = useState<string | null>(null);
+
+  const [liveWork, setLiveWork] = useState<LiveWork | null>(null);
+  const [liveWorkErr, setLiveWorkErr] = useState<string | null>(null);
 
   const [openTerminalIds, setOpenTerminalIds] = useState<string[]>([]);
   const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
@@ -160,6 +187,23 @@ export default function ActivityTabs({
     const id = window.setInterval(reloadActivities, 5000);
     return () => window.clearInterval(id);
   }, [reloadActivities]);
+
+  const reloadLiveWork = useCallback(() => {
+    setLiveWorkErr(null);
+    apiGet<LiveWork>("/api/dataplane/work/live", token)
+      .then((res) => {
+        setLiveWork(res);
+      })
+      .catch((e) => {
+        setLiveWorkErr(String(e));
+      });
+  }, [token]);
+
+  useEffect(() => {
+    reloadLiveWork();
+    const id = window.setInterval(reloadLiveWork, 3000);
+    return () => window.clearInterval(id);
+  }, [reloadLiveWork]);
 
   const reloadSessions = useCallback(() => {
     setSessionsLoading(true);
@@ -240,7 +284,7 @@ export default function ActivityTabs({
   };
 
   useEffect(() => {
-    if (tab !== 3) return;
+    if (tab !== 4) return;
 
     const loadOnce = () => {
       const node = logsScrollRef.current;
@@ -286,7 +330,7 @@ export default function ActivityTabs({
   }, [terminalSessions]);
 
   useEffect(() => {
-    if (tab !== 3) return;
+    if (tab !== 4) return;
     const node = logsScrollRef.current;
     if (!node) return;
     if (logsStickToBottomRef.current) {
@@ -295,12 +339,21 @@ export default function ActivityTabs({
   }, [logs, tab]);
 
   useEffect(() => {
+    const dw =
+      liveWork != null ? (liveWork.running?.length ?? 0) + (liveWork.queued?.length ?? 0) : 0;
     onCountsChange?.({
       activities: activities.length,
+      dataplaneWork: dw,
       terminals: openTerminalIds.length,
       portForwards: portForwardSessions.length,
     });
-  }, [activities.length, openTerminalIds.length, portForwardSessions.length, onCountsChange]);
+  }, [
+    activities.length,
+    liveWork,
+    openTerminalIds.length,
+    portForwardSessions.length,
+    onCountsChange,
+  ]);
 
   return (
     <Box sx={{ flexGrow: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
@@ -326,7 +379,155 @@ export default function ActivityTabs({
           }}
         />
       </Box>
-      <Box sx={{ display: tab === 1 ? "flex" : "none", flex: 1, minHeight: 0, flexDirection: "column", gap: 0.75 }}>
+      <Box sx={{ display: tab === 1 ? "flex" : "none", flex: 1, minHeight: 0, overflow: "hidden", flexDirection: "column" }}>
+        {liveWorkErr && !liveWork ? (
+          <EmptyState message={`Dataplane work: ${liveWorkErr}`} sx={panelEmptyStateSx} />
+        ) : (
+          <Box sx={compactTableContainerSx}>
+            {liveWorkErr ? (
+              <Typography variant="caption" color="error" sx={{ px: 0.5, py: 0.25, display: "block" }}>
+                {liveWorkErr}
+              </Typography>
+            ) : null}
+            <Typography variant="caption" color="text.secondary" sx={{ px: 0.5, py: 0.25, display: "block" }}>
+              Slots / cluster: {liveWork?.maxSlotsPerCluster ?? "—"} · running {liveWork?.running?.length ?? 0} · queued{" "}
+              {liveWork?.queued?.length ?? 0}
+            </Typography>
+            <Table size="small" stickyHeader sx={compactTableSx}>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={compactHeaderCellSx}>State</TableCell>
+                  <TableCell sx={compactHeaderCellSx}>Cluster</TableCell>
+                  <TableCell sx={compactHeaderCellSx}>Kind</TableCell>
+                  <TableCell sx={compactHeaderCellSx}>NS</TableCell>
+                  <TableCell sx={compactHeaderCellSx}>Pri</TableCell>
+                  <TableCell sx={compactHeaderCellSx}>Src</TableCell>
+                  <TableCell sx={compactHeaderCellSx} align="right">
+                    Q ms
+                  </TableCell>
+                  <TableCell sx={compactHeaderCellSx} align="right">
+                    Run ms
+                  </TableCell>
+                  <TableCell sx={compactHeaderCellSx}>Key</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {!liveWork && !liveWorkErr ? (
+                  <TableRow>
+                    <TableCell sx={compactCellSx} colSpan={9}>
+                      <EmptyState message="Loading dataplane work…" sx={panelEmptyStateSx} />
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {liveWork &&
+                (liveWork.running?.length ?? 0) + (liveWork.queued?.length ?? 0) === 0 &&
+                !liveWorkErr ? (
+                  <TableRow>
+                    <TableCell sx={compactCellSx} colSpan={9}>
+                      <EmptyState message="No snapshot work running or queued." sx={panelEmptyStateSx} />
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {(liveWork?.running ?? []).map((row, i) => (
+                  <TableRow key={`r-${row.workKey}-${i}`} hover>
+                    <TableCell sx={compactCellSx}>
+                      <Chip size="small" label="run" sx={chipSxForValue("running", "status")} />
+                    </TableCell>
+                    <TableCell sx={compactCellSx}>
+                      <Typography variant="caption" noWrap sx={{ maxWidth: 120, display: "block" }}>
+                        {row.cluster}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={compactCellSx}>
+                      <Typography variant="caption" noWrap>
+                        {row.kind}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={compactCellSx}>
+                      <Typography variant="caption" noWrap sx={{ maxWidth: 88 }}>
+                        {row.namespace || "—"}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={compactCellSx}>
+                      <Typography variant="caption">{row.priority}</Typography>
+                    </TableCell>
+                    <TableCell sx={compactCellSx}>
+                      <Typography variant="caption" noWrap sx={{ maxWidth: 72 }}>
+                        {row.source}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={compactCellSx} align="right">
+                      <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
+                        {row.waitMs}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={compactCellSx} align="right">
+                      <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
+                        {row.runningMs}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={compactCellSx}>
+                      <Tooltip title={row.workKey}>
+                        <Typography variant="caption" noWrap sx={{ maxWidth: 160, fontFamily: "monospace" }}>
+                          {row.workKey}
+                        </Typography>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {(liveWork?.queued ?? []).map((row, i) => (
+                  <TableRow key={`q-${row.workKey}-${i}`} hover>
+                    <TableCell sx={compactCellSx}>
+                      <Chip size="small" label="q" sx={chipSxForValue("pending", "status")} />
+                    </TableCell>
+                    <TableCell sx={compactCellSx}>
+                      <Typography variant="caption" noWrap sx={{ maxWidth: 120, display: "block" }}>
+                        {row.cluster}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={compactCellSx}>
+                      <Typography variant="caption" noWrap>
+                        {row.kind}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={compactCellSx}>
+                      <Typography variant="caption" noWrap sx={{ maxWidth: 88 }}>
+                        {row.namespace || "—"}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={compactCellSx}>
+                      <Typography variant="caption">{row.priority}</Typography>
+                    </TableCell>
+                    <TableCell sx={compactCellSx}>
+                      <Typography variant="caption" noWrap sx={{ maxWidth: 72 }}>
+                        {row.source}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={compactCellSx} align="right">
+                      <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
+                        {row.waitMs}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={compactCellSx} align="right">
+                      <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
+                        —
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={compactCellSx}>
+                      <Tooltip title={row.workKey}>
+                        <Typography variant="caption" noWrap sx={{ maxWidth: 160, fontFamily: "monospace" }}>
+                          {row.workKey}
+                        </Typography>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+        )}
+      </Box>
+      <Box sx={{ display: tab === 2 ? "flex" : "none", flex: 1, minHeight: 0, flexDirection: "column", gap: 0.75 }}>
         {openTerminalIds.length > 0 && (
           <Box
             sx={{
@@ -407,7 +608,7 @@ export default function ActivityTabs({
           </Typography>
         )}
       </Box>
-      <Box sx={{ display: tab === 2 ? "flex" : "none", flex: 1, minHeight: 0, overflow: "hidden", flexDirection: "column" }}>
+      <Box sx={{ display: tab === 3 ? "flex" : "none", flex: 1, minHeight: 0, overflow: "hidden", flexDirection: "column" }}>
         <Box sx={compactTableContainerSx}>
           {sessionsLoading ? (
             <EmptyState message="Loading port forwards..." sx={panelEmptyStateSx} />
@@ -499,7 +700,7 @@ export default function ActivityTabs({
           )}
         </Box>
       </Box>
-      <Box sx={{ display: tab === 3 ? "flex" : "none", flex: 1, minHeight: 0, overflow: "hidden", flexDirection: "column" }}>
+      <Box sx={{ display: tab === 4 ? "flex" : "none", flex: 1, minHeight: 0, overflow: "hidden", flexDirection: "column" }}>
         {logsErr && logs.length === 0 && !logsLoading ? (
           <EmptyState message="Unable to load runtime logs." sx={panelEmptyStateSx} />
         ) : (

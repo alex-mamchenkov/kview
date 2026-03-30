@@ -18,6 +18,8 @@ export type DataplaneListMeta = {
   coverage?: string;
   degradation?: string;
   completeness?: string;
+  /** Monotonic string revision for dataplane-backed lists (matches /api/dataplane/revision). */
+  revision?: string;
   /** Snapshot time when provided at list root (e.g. namespaces) or folded in from `observed`. */
   observed?: string;
 };
@@ -49,6 +51,7 @@ export function dataplaneListMetaFromResponse(res: {
     coverage: m?.coverage,
     degradation: m?.degradation,
     completeness: m?.completeness,
+    revision: m?.revision != null ? String(m.revision) : undefined,
     observed: res.observed,
   };
 }

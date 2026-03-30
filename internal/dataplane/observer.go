@@ -81,7 +81,8 @@ func (p *clusterPlane) EnsureObservers(ctx context.Context, sched *workScheduler
 func (p *clusterPlane) namespaceObserverTick(ctx context.Context, sched *workScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
 	// Run one refresh cycle immediately so observer state becomes truthful as soon
 	// as a dataplane-backed endpoint activates the plane.
-	snap, err := p.NamespacesSnapshot(ctx, sched, clients, WorkPriorityLow)
+	obsCtx := ContextWithWorkSource(ctx, WorkSourceObserver)
+	snap, err := p.NamespacesSnapshot(obsCtx, sched, clients, WorkPriorityLow)
 	if err != nil {
 		if snap.Err != nil {
 			state := observerStateForError(*snap.Err)
@@ -116,7 +117,8 @@ func (p *clusterPlane) runNamespaceObserver(ctx context.Context, sched *workSche
 }
 
 func (p *clusterPlane) nodeObserverTick(ctx context.Context, sched *workScheduler, clients ClientsProvider, rt runtime.RuntimeManager, interval *time.Duration, ticker *time.Ticker) {
-	snap, err := p.NodesSnapshot(ctx, sched, clients, WorkPriorityLow)
+	obsCtx := ContextWithWorkSource(ctx, WorkSourceObserver)
+	snap, err := p.NodesSnapshot(obsCtx, sched, clients, WorkPriorityLow)
 	if err != nil {
 		if snap.Err != nil {
 			state := observerStateForError(*snap.Err)
@@ -165,4 +167,3 @@ func (p *clusterPlane) runNodeObserver(ctx context.Context, sched *workScheduler
 		}
 	}
 }
-

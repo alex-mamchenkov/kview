@@ -220,9 +220,12 @@ const (
 type SnapshotMetadata struct {
 	ObservedAt time.Time
 
-	Freshness   FreshnessClass
-	Coverage    CoverageClass
-	Degradation DegradationClass
+	// Revision increments whenever this snapshot cell is replaced after a list fetch (or synthetic update).
+	Revision uint64 `json:"revision,omitempty"`
+
+	Freshness    FreshnessClass
+	Coverage     CoverageClass
+	Degradation  DegradationClass
 	Completeness CompletenessClass
 }
 

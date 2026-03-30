@@ -222,6 +222,7 @@ function AppInner() {
           sx={{
             display: "flex",
             height: "100dvh",
+            maxHeight: "100dvh",
             backgroundColor: "var(--bg-primary)",
             color: "var(--text-primary)",
             pt: 8,
@@ -264,9 +265,11 @@ function AppInner() {
               color: "var(--text-primary)",
               display: "flex",
               flexDirection: "column",
+              overflow: "hidden",
             }}
           >
             <ConnectionBanner />
+            {/* Single bounded main column: children fill width/height; dashboard scrolls here; tables scroll inside Paper/DataGrid */}
             <Box className="kview-main-content" sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
               {section === "dashboard" ? <DashboardView token={token} /> : null}
               {section === "nodes" ? <NodesTable token={token} /> : null}

@@ -1,0 +1,33 @@
+import { apiGet } from "../api";
+
+/** Default interval for GET /api/dataplane/revision polling (seconds). */
+export const defaultRevisionPollSec = 2;
+
+export type ApiDataplaneRevisionResponse = {
+  active?: string;
+  kind?: string;
+  namespace?: string;
+  revision?: string;
+  known?: boolean;
+  observed?: string;
+  freshness?: string;
+  state?: string;
+};
+
+/**
+ * Returns a fetcher for dataplane list revision strings (compare with ===).
+ * Kind values match backend ResourceKind strings (e.g. "pods", "namespaces", "persistentvolumeclaims").
+ */
+export function dataplaneRevisionFetcher(token: string, kind: string, namespace?: string | null) {
+  return async (): Promise<string> => {
+    const q = new URLSearchParams({ kind });
+    if (namespace) {
+      q.set("namespace", namespace);
+    }
+    const res = await apiGet<ApiDataplaneRevisionResponse>(`/api/dataplane/revision?${q.toString()}`, token);
+    if (!res.known) {
+      return "0";
+    }
+    return res.revision ?? "0";
+  };
+}

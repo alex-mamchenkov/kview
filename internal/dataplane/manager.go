@@ -104,11 +104,17 @@ type DataPlaneManager interface {
 	// DashboardSummary returns a minimal cluster dashboard backed by dataplane snapshots.
 	DashboardSummary(ctx context.Context, clusterName string) ClusterDashboardSummary
 
+	// ListSnapshotRevision returns revision metadata for a list cell without scheduling kube fetches.
+	ListSnapshotRevision(ctx context.Context, clusterName string, kind ResourceKind, namespace string) (ListSnapshotRevisionEnvelope, error)
+
 	// NamespaceSummaryProjection builds namespace summary from dataplane snapshots (projection-led).
 	NamespaceSummaryProjection(ctx context.Context, clusterName, namespace string) (NamespaceSummaryProjection, error)
 
 	// SchedulerRunStats returns cumulative snapshot-run durations by priority and resource kind.
 	SchedulerRunStats() SchedulerRunStatsSnapshot
+
+	// SchedulerLiveWork returns running and queued snapshot scheduler work (for operator visibility).
+	SchedulerLiveWork() SchedulerLiveWork
 }
 
 // ManagerConfig describes construction-time parameters for the data plane manager.
@@ -599,6 +605,10 @@ func (m *manager) EnsureObservers(ctx context.Context, clusterName string) {
 
 func (m *manager) SchedulerRunStats() SchedulerRunStatsSnapshot {
 	return m.scheduler.StatsSnapshot()
+}
+
+func (m *manager) SchedulerLiveWork() SchedulerLiveWork {
+	return m.scheduler.LiveWorkSnapshot(time.Now())
 }
 
 func (m *manager) NoteUserActivity() {

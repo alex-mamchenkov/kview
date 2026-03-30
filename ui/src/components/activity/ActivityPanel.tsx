@@ -25,7 +25,12 @@ export default function ActivityPanel({ token }: Props) {
   const [dragging, setDragging] = useState(false);
   const [requestedTerminalId, setRequestedTerminalId] = useState<string | null>(null);
   const [requestKey, setRequestKey] = useState(0);
-  const [tabCounts, setTabCounts] = useState({ activities: 0, terminals: 0, portForwards: 0 });
+  const [tabCounts, setTabCounts] = useState({
+    activities: 0,
+    dataplaneWork: 0,
+    terminals: 0,
+    portForwards: 0,
+  });
 
   useEffect(() => {
     const offset = open ? `${HEADER_HEIGHT + height}px` : `${HEADER_HEIGHT}px`;
@@ -64,7 +69,7 @@ export default function ActivityPanel({ token }: Props) {
       setRequestedTerminalId(sessionId);
       setRequestKey((v) => v + 1);
       setOpen(true);
-      setTab(1);
+      setTab(2);
     };
     window.addEventListener(OPEN_TERMINAL_SESSION_EVENT, onOpenTerminal as EventListener);
     return () => {
@@ -75,7 +80,7 @@ export default function ActivityPanel({ token }: Props) {
   useEffect(() => {
     const onFocusPortForwards = () => {
       setOpen(true);
-      setTab(2);
+      setTab(3);
     };
     window.addEventListener(FOCUS_PORT_FORWARDS_TAB_EVENT, onFocusPortForwards);
     return () => {
@@ -86,7 +91,7 @@ export default function ActivityPanel({ token }: Props) {
   useEffect(() => {
     const onFocusLogs = () => {
       setOpen(true);
-      setTab(3);
+      setTab(4);
     };
     window.addEventListener(FOCUS_LOGS_TAB_EVENT, onFocusLogs);
     return () => {
@@ -138,6 +143,7 @@ export default function ActivityPanel({ token }: Props) {
           sx={{ minHeight: HEADER_HEIGHT, "& .MuiTab-root": { minHeight: HEADER_HEIGHT, py: 0 } }}
         >
           <Tab label={`Activities (${tabCounts.activities})`} />
+          <Tab label={`Work (${tabCounts.dataplaneWork})`} />
           <Tab label={`Terminals (${tabCounts.terminals})`} />
           <Tab label={`Port Forwards (${tabCounts.portForwards})`} />
           <Tab label="Logs" />

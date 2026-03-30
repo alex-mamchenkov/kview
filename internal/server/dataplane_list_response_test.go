@@ -14,6 +14,7 @@ func TestWriteDataplaneListResponse_MetadataShape(t *testing.T) {
 	obs := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
 	meta := dataplane.SnapshotMetadata{
 		ObservedAt:   obs,
+		Revision:     42,
 		Freshness:    dataplane.FreshnessClassHot,
 		Coverage:     dataplane.CoverageClassFull,
 		Degradation:  dataplane.DegradationClassNone,
@@ -39,10 +40,13 @@ func TestWriteDataplaneListResponse_MetadataShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("meta missing or wrong type: %#v", body["meta"])
 	}
-	for _, k := range []string{"freshness", "coverage", "degradation", "completeness", "state"} {
+	for _, k := range []string{"revision", "freshness", "coverage", "degradation", "completeness", "state"} {
 		if _, ok := metaObj[k]; !ok {
 			t.Fatalf("meta.%s missing", k)
 		}
+	}
+	if metaObj["revision"] != "42" {
+		t.Fatalf("revision: %v", metaObj["revision"])
 	}
 	if metaObj["freshness"] != string(dataplane.FreshnessClassHot) {
 		t.Fatalf("freshness: %v", metaObj["freshness"])

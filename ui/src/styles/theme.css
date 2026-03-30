@@ -64,19 +64,47 @@
   --chip-secondary-border: #2f5e59;
 }
 
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+#root {
+  height: 100%;
+}
+
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
 }
 
+/*
+ * Main region scroll contract (see App.tsx .kview-main-content):
+ * - This column fills width beside the sidebar and height above the activity panel (padding-bottom).
+ * - overflow: hidden stays on the Box in App so each page owns vertical scroll (dashboard) or the
+ *   DataGrid owns it (tables inside Paper).
+ * - All direct page roots stretch to full width; row flex was shrinking non-Paper children to content width.
+ */
 .kview-main-content {
   display: flex;
-  min-height: 0;
-}.kview-main-content > .MuiPaper-root {
-  display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
+  min-width: 0;
+  width: 100%;
+}
+
+.kview-main-content > * {
+  flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.kview-main-content > .MuiPaper-root {
+  display: flex;
+  flex-direction: column;
   margin: 0;
   border-radius: 0;
 }

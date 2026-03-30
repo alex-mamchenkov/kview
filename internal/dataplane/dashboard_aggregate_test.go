@@ -29,7 +29,7 @@ func TestVisibleNamespacesWithCachedPods(t *testing.T) {
 	p := newClusterPlane("c", ProfileFocused, DiscoveryModeTargeted, ObservationScope{})
 	now := time.Now().UTC()
 	meta := SnapshotMetadata{ObservedAt: now}
-	p.podsStore.set("bravo", PodsSnapshot{Items: []dto.PodListItemDTO{{Name: "p1"}}, Meta: meta})
+	setNamespacedSnapshot(&p.podsStore, "bravo", PodsSnapshot{Items: []dto.PodListItemDTO{{Name: "p1"}}, Meta: meta})
 
 	vis := []string{"alpha", "bravo", "charlie"}
 	got := visibleNamespacesWithCachedPods(p, vis)
@@ -47,16 +47,16 @@ func TestAggregateClusterDashboard_FromCachedPodsOnly(t *testing.T) {
 	now := time.Now().UTC()
 	meta := SnapshotMetadata{ObservedAt: now}
 	ns := "app"
-	plane.podsStore.set(ns, PodsSnapshot{
+	setNamespacedSnapshot(&plane.podsStore, ns, PodsSnapshot{
 		Meta: meta,
 		Items: []dto.PodListItemDTO{
 			{Name: "pod-a", Namespace: ns, Restarts: 5, Phase: "Running", Ready: "1/1"},
 		},
 	})
-	plane.depsStore.set(ns, DeploymentsSnapshot{Meta: meta, Items: nil})
-	plane.svcsStore.set(ns, ServicesSnapshot{Meta: meta, Items: nil})
-	plane.ingStore.set(ns, IngressesSnapshot{Meta: meta, Items: nil})
-	plane.pvcsStore.set(ns, PVCsSnapshot{Meta: meta, Items: nil})
+	setNamespacedSnapshot(&plane.depsStore, ns, DeploymentsSnapshot{Meta: meta, Items: nil})
+	setNamespacedSnapshot(&plane.svcsStore, ns, ServicesSnapshot{Meta: meta, Items: nil})
+	setNamespacedSnapshot(&plane.ingStore, ns, IngressesSnapshot{Meta: meta, Items: nil})
+	setNamespacedSnapshot(&plane.pvcsStore, ns, PVCsSnapshot{Meta: meta, Items: nil})
 
 	res, hot, wh, cov := mm.aggregateClusterDashboard(plane, []string{ns}, 1, 0)
 	if res.Pods != 1 {

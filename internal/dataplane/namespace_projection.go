@@ -39,6 +39,8 @@ func (m *manager) NamespaceSummaryProjection(ctx context.Context, clusterName, n
 		return out, nil
 	}
 
+	ctx = ContextWithWorkSourceIfUnset(ctx, WorkSourceProjection)
+
 	if _, _, err := m.clients.GetClientsForContext(ctx, clusterName); err != nil {
 		n := NormalizeError(err)
 		out.Err = &n

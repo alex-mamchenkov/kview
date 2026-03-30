@@ -80,23 +80,29 @@ type inFlight struct {
 type slotTicket struct{}
 
 type laneRunner struct {
-	key    workKey
-	inf    *inFlight
-	cancel context.CancelFunc
-	ticket *slotTicket
+	key          workKey
+	inf          *inFlight
+	cancel       context.CancelFunc
+	ticket       *slotTicket
+	startedAt    time.Time
+	priority     WorkPriority
+	source       string
+	queuedWaitMs int64 // time from enqueue to slot grant (0 if acquired immediately)
 }
 
 type waiterNode struct {
-	priority    WorkPriority
-	seq         uint64
-	key         workKey
-	inf         *inFlight
-	parentCtx   context.Context
-	ready       chan struct{}
-	runCtx      context.Context
-	cancel      context.CancelFunc
-	ticket      *slotTicket
-	abandoned   bool
+	priority   WorkPriority
+	seq        uint64
+	key        workKey
+	inf        *inFlight
+	parentCtx  context.Context
+	ready      chan struct{}
+	runCtx     context.Context
+	cancel     context.CancelFunc
+	ticket     *slotTicket
+	abandoned  bool
+	enqueuedAt time.Time
+	source     string
 }
 
 type waiterHeap []*waiterNode
@@ -132,7 +138,7 @@ type clusterLane struct {
 // preemption of strictly lower effective priority, bounded retry on transient errors, and
 // simple run-duration stats (no Prometheus).
 type workScheduler struct {
-	mu sync.Mutex
+	mu   sync.Mutex
 	cond *sync.Cond
 
 	inFlight      map[workKey]*inFlight
@@ -202,11 +208,20 @@ func (s *workScheduler) grantNextWaitersLocked(lane *clusterLane) {
 		}
 		runCtx, cancel := context.WithCancel(w.parentCtx)
 		ticket := &slotTicket{}
+		now := time.Now()
+		qw := now.Sub(w.enqueuedAt).Milliseconds()
+		if qw < 0 {
+			qw = 0
+		}
 		lane.runners = append(lane.runners, &laneRunner{
-			key:    w.key,
-			inf:    w.inf,
-			cancel: cancel,
-			ticket: ticket,
+			key:          w.key,
+			inf:          w.inf,
+			cancel:       cancel,
+			ticket:       ticket,
+			startedAt:    now,
+			priority:     w.priority,
+			source:       w.source,
+			queuedWaitMs: qw,
 		})
 		w.runCtx = runCtx
 		w.cancel = cancel
@@ -228,11 +243,16 @@ func (s *workScheduler) acquireSlot(cluster string, prio WorkPriority, parentCtx
 		if len(lane.runners) < s.maxPerCluster {
 			runCtx, cancel := context.WithCancel(parentCtx)
 			ticket := &slotTicket{}
+			now := time.Now()
 			lane.runners = append(lane.runners, &laneRunner{
-				key:    key,
-				inf:    inf,
-				cancel: cancel,
-				ticket: ticket,
+				key:          key,
+				inf:          inf,
+				cancel:       cancel,
+				ticket:       ticket,
+				startedAt:    now,
+				priority:     prio,
+				source:       workSourceOrAPI(parentCtx),
+				queuedWaitMs: 0,
 			})
 			s.mu.Unlock()
 			release := func() { s.releaseSlot(cluster, ticket) }
@@ -249,12 +269,14 @@ func (s *workScheduler) acquireSlot(cluster string, prio WorkPriority, parentCtx
 
 		lane.seq++
 		me := &waiterNode{
-			priority:    prio,
-			seq:         lane.seq,
-			key:         key,
-			inf:         inf,
-			parentCtx:   parentCtx,
-			ready:       make(chan struct{}),
+			priority:   prio,
+			seq:        lane.seq,
+			key:        key,
+			inf:        inf,
+			parentCtx:  parentCtx,
+			ready:      make(chan struct{}),
+			enqueuedAt: time.Now(),
+			source:     workSourceOrAPI(parentCtx),
 		}
 		heap.Push(&lane.waiters, me)
 		s.mu.Unlock()
