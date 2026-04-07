@@ -296,6 +296,7 @@ export default function DashboardView(props: Props) {
                       <StatCell label="Secrets" value={resources.secrets} />
                       <StatCell label="ServiceAccounts" value={resources.serviceAccounts} />
                       <StatCell label="Roles" value={resources.roles} />
+                      <StatCell label="RoleBindings" value={resources.roleBindings} />
                     </TableBody>
                   </Table>
                 </Paper>

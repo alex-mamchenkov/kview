@@ -45,6 +45,10 @@ func TestWorkloadSnapshots_NoClients_UnknownFreshness(t *testing.T) {
 			s, err := dp.RolesSnapshot(ctx, cluster, ns)
 			return s.Meta, err
 		}},
+		{"rolebindings", func() (SnapshotMetadata, error) {
+			s, err := dp.RoleBindingsSnapshot(ctx, cluster, ns)
+			return s.Meta, err
+		}},
 	}
 
 	for _, tc := range tests {

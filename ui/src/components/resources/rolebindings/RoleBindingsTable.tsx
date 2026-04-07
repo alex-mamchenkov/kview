@@ -5,6 +5,11 @@ import { fmtAge, valueOrDash } from "../../../utils/format";
 import RoleBindingDrawer from "./RoleBindingDrawer";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
+import {
+  dataplaneListMetaFromResponse,
+  type ApiDataplaneListResponse,
+} from "../../../types/api";
+import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
 
 type RoleBinding = {
   name: string;
@@ -56,12 +61,15 @@ export default function RoleBindingsTable({
   namespace: string;
 }) {
   const fetchRows = useCallback(async () => {
-    const res = await apiGet<{ items: RoleBinding[] }>(
+    const res = await apiGet<ApiDataplaneListResponse<RoleBinding>>(
       `/api/namespaces/${encodeURIComponent(namespace)}/rolebindings`,
       token,
     );
     const items = res.items || [];
-    return { rows: items.map((rb) => ({ ...rb, id: `${rb.namespace}/${rb.name}` })) };
+    return {
+      rows: items.map((rb) => ({ ...rb, id: `${rb.namespace}/${rb.name}` })),
+      dataplaneMeta: dataplaneListMetaFromResponse({ meta: res.meta, observed: res.observed }),
+    };
   }, [token, namespace]);
 
   const filterPredicate = useCallback(
@@ -75,6 +83,10 @@ export default function RoleBindingsTable({
       title={<>{resourceLabel} — {namespace}</>}
       columns={columns}
       fetchRows={fetchRows}
+      dataplaneRevisionPoll={{
+        fetchRevision: dataplaneRevisionFetcher(token, "rolebindings", namespace),
+        pollSec: defaultRevisionPollSec,
+      }}
       enabled={!!namespace}
       filterPredicate={filterPredicate}
       filterLabel="Filter (name)"

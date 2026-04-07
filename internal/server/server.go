@@ -2297,13 +2297,9 @@ func (s *Server) Router() http.Handler {
 			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 			defer cancel()
 
-			clients, active, err := s.mgr.GetClients(ctx)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
-				return
-			}
-
-			items, err := kube.ListRoleBindings(ctx, clients, ns)
+			active := s.mgr.ActiveContext()
+			s.dp.EnsureObservers(ctx, active)
+			snap, err := s.dp.RoleBindingsSnapshot(ctx, active, ns)
 			if err != nil {
 				status := http.StatusInternalServerError
 				if apierrors.IsForbidden(err) {
@@ -2312,8 +2308,7 @@ func (s *Server) Router() http.Handler {
 				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
 				return
 			}
-
-			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": items})
+			writeDataplaneListResponse(w, active, snap.Items, snap.Meta, snap.Err)
 		})
 
 		api.Get("/namespaces/{ns}/rolebindings/{name}", func(w http.ResponseWriter, r *http.Request) {

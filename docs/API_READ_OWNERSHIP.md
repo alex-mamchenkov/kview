@@ -34,6 +34,7 @@ These routes use `DataPlaneManager.*Snapshot` and `writeDataplaneListResponse`. 
 | `GET /api/namespaces/{ns}/secrets` | `SecretsSnapshot` |
 | `GET /api/namespaces/{ns}/serviceaccounts` | `ServiceAccountsSnapshot` |
 | `GET /api/namespaces/{ns}/roles` | `RolesSnapshot` |
+| `GET /api/namespaces/{ns}/rolebindings` | `RoleBindingsSnapshot` |
 
 ---
 
@@ -83,7 +84,6 @@ Background row enrichment is **narrow and user-aligned**:
 
 | Route | Reason |
 |-------|--------|
-| `GET /api/namespaces/{ns}/rolebindings` | Deferred list migration. |
 | `GET /api/namespaces/{ns}/helmreleases` | Deferred (Helm snapshot ownership TBD). |
 | `GET /api/helmcharts` | Cluster-scoped Helm catalog; direct read. |
 

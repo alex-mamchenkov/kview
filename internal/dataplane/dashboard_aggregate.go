@@ -89,6 +89,7 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 		secSnap, secOK := plane.secsStore.getCached(ns)
 		saSnap, saOK := plane.saStore.getCached(ns)
 		rolesSnap, rolesOK := plane.rolesStore.getCached(ns)
+		roleBindingsSnap, roleBindingsOK := plane.roleBindingsStore.getCached(ns)
 
 		if podsOK && podsSnap.Err == nil {
 			res.Pods += len(podsSnap.Items)
@@ -155,6 +156,10 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 		if rolesOK && rolesSnap.Err == nil {
 			res.Roles += len(rolesSnap.Items)
 			aggregateMetas = append(aggregateMetas, rolesSnap.Meta)
+		}
+		if roleBindingsOK && roleBindingsSnap.Err == nil {
+			res.RoleBindings += len(roleBindingsSnap.Items)
+			aggregateMetas = append(aggregateMetas, roleBindingsSnap.Meta)
 		}
 
 		var probPods []dto.ProblematicResource
@@ -275,6 +280,9 @@ func namespaceHasCachedDataplaneList(plane *clusterPlane, ns string) bool {
 		return true
 	}
 	if _, ok := plane.rolesStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.roleBindingsStore.getCached(ns); ok {
 		return true
 	}
 	return false

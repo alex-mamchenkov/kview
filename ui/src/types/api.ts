@@ -209,6 +209,7 @@ export type ApiDashboardClusterResponse = {
       secrets: number;
       serviceAccounts: number;
       roles: number;
+      roleBindings: number;
       totalNamespaces: number;
       note?: string;
       aggregateFreshness?: string;

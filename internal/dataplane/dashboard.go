@@ -98,6 +98,7 @@ type ClusterDashboardResourcesPanel struct {
 	Secrets                int    `json:"secrets"`
 	ServiceAccounts        int    `json:"serviceAccounts"`
 	Roles                  int    `json:"roles"`
+	RoleBindings           int    `json:"roleBindings"`
 	TotalNamespaces        int    `json:"totalNamespaces"`
 	Note                   string `json:"note,omitempty"`
 	AggregateFreshness     string `json:"aggregateFreshness,omitempty"`
