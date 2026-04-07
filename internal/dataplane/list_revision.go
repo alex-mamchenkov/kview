@@ -22,7 +22,7 @@ type ListSnapshotRevisionEnvelope struct {
 // ListRevisionKindNeedsNamespace is true for namespaced list kinds.
 func ListRevisionKindNeedsNamespace(k ResourceKind) bool {
 	switch k {
-	case ResourceKindNamespaces:
+	case ResourceKindNamespaces, ResourceKindNodes:
 		return false
 	default:
 		return true
@@ -34,6 +34,8 @@ func ParseListRevisionResourceKind(s string) (ResourceKind, bool) {
 	switch strings.TrimSpace(s) {
 	case string(ResourceKindNamespaces):
 		return ResourceKindNamespaces, true
+	case string(ResourceKindNodes):
+		return ResourceKindNodes, true
 	case string(ResourceKindPods):
 		return ResourceKindPods, true
 	case string(ResourceKindDeployments):
@@ -86,6 +88,12 @@ func (p *clusterPlane) listSnapshotRevision(kind ResourceKind, namespace string)
 	switch kind {
 	case ResourceKindNamespaces:
 		snap, ok := peekClusterSnapshot(&p.nsStore)
+		if !ok {
+			return env
+		}
+		fillListRevisionEnvFromSnap(&env, snap, snap.Err)
+	case ResourceKindNodes:
+		snap, ok := peekClusterSnapshot(&p.nodesStore)
 		if !ok {
 			return env
 		}

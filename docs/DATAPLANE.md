@@ -87,7 +87,6 @@ Dataplane-backed **list** handlers use a shared envelope pattern (`active`, `ite
 
 These are **intentional** current limits, not bugs:
 
-- **`GET /api/nodes`** (node list) is still a **direct** handler read; the **dashboard** uses the dataplane **nodes snapshot** for summary metadata. Aligning the node list API with snapshots would be follow-up work.
 - **`GET /api/helmcharts`** remains a direct read until cluster-scoped Helm catalog snapshot semantics exist.
 - **Namespace detail** (`GET /api/namespaces/{name}`) and **resource quotas** list are direct reads.
 - **Detail, events, YAML, relation** endpoints remain direct reads even when the **list** for that kind is dataplane-backed.

@@ -20,6 +20,7 @@ These routes use `DataPlaneManager.*Snapshot` and `writeDataplaneListResponse`. 
 
 | Route pattern | Snapshot / notes |
 |---------------|------------------|
+| `GET /api/nodes` | `NodesSnapshot`; cluster-scoped list. |
 | `GET /api/namespaces/{ns}/pods` | `PodsSnapshot`; rows may include projection-derived fields (`restartSeverity`, `listHealthHint`) from `EnrichPodListItemsForAPI`. |
 | `GET /api/namespaces/{ns}/deployments` | `DeploymentsSnapshot`; optional `EnrichDeploymentListItemsForAPI` fields. |
 | `GET /api/namespaces/{ns}/daemonsets` | `DaemonSetsSnapshot` |
@@ -91,7 +92,7 @@ Background row enrichment is **narrow and user-aligned**:
 
 | Routes (representative) | Notes |
 |-------------------------|-------|
-| `GET /api/nodes`, `GET /api/nodes/{name}` | Node list/detail direct read. **Dashboard** uses dataplane **cached** node snapshot for summary counts/metadata. |
+| `GET /api/nodes/{name}` | Node detail direct read. Node list uses `NodesSnapshot`. |
 | `GET /api/clusterroles`, `…/{name}`, events, yaml | RBAC cluster scope. |
 | `GET /api/clusterrolebindings`, … | Same. |
 | `GET /api/customresourcedefinitions`, … | CRD cluster scope. |

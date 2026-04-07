@@ -7,6 +7,11 @@ import { fmtAge, valueOrDash } from "../../../utils/format";
 import { nodeStatusChipColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
+import {
+  dataplaneListMetaFromResponse,
+  type ApiDataplaneListResponse,
+} from "../../../types/api";
+import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
 
 type Node = {
   name: string;
@@ -80,9 +85,12 @@ const columns: GridColDef<Row>[] = [
 
 export default function NodesTable({ token }: { token: string }) {
   const fetchRows = useCallback(async () => {
-    const res = await apiGet<{ items: Node[] }>("/api/nodes", token);
+    const res = await apiGet<ApiDataplaneListResponse<Node>>("/api/nodes", token);
     const items = res.items || [];
-    return { rows: items.map((n) => ({ ...n, id: n.name })) };
+    return {
+      rows: items.map((n) => ({ ...n, id: n.name })),
+      dataplaneMeta: dataplaneListMetaFromResponse({ meta: res.meta, observed: res.observed }),
+    };
   }, [token]);
 
   const filterPredicate = useCallback((row: Row, q: string) => {
@@ -100,6 +108,10 @@ export default function NodesTable({ token }: { token: string }) {
       title={resourceLabel}
       columns={columns}
       fetchRows={fetchRows}
+      dataplaneRevisionPoll={{
+        fetchRevision: dataplaneRevisionFetcher(token, "nodes"),
+        pollSec: defaultRevisionPollSec,
+      }}
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/role/status)"
       resourceLabel={resourceLabel}
