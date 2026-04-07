@@ -5,6 +5,11 @@ import { fmtAge, valueOrDash } from "../../../utils/format";
 import RoleDrawer from "./RoleDrawer";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
+import {
+  dataplaneListMetaFromResponse,
+  type ApiDataplaneListResponse,
+} from "../../../types/api";
+import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
 
 type Role = {
   name: string;
@@ -43,12 +48,15 @@ export default function RolesTable({
   namespace: string;
 }) {
   const fetchRows = useCallback(async () => {
-    const res = await apiGet<{ items: Role[] }>(
+    const res = await apiGet<ApiDataplaneListResponse<Role>>(
       `/api/namespaces/${encodeURIComponent(namespace)}/roles`,
       token,
     );
     const items = res.items || [];
-    return { rows: items.map((role) => ({ ...role, id: `${role.namespace}/${role.name}` })) };
+    return {
+      rows: items.map((role) => ({ ...role, id: `${role.namespace}/${role.name}` })),
+      dataplaneMeta: dataplaneListMetaFromResponse({ meta: res.meta, observed: res.observed }),
+    };
   }, [token, namespace]);
 
   const filterPredicate = useCallback(
@@ -62,6 +70,10 @@ export default function RolesTable({
       title={<>{resourceLabel} — {namespace}</>}
       columns={columns}
       fetchRows={fetchRows}
+      dataplaneRevisionPoll={{
+        fetchRevision: dataplaneRevisionFetcher(token, "roles", namespace),
+        pollSec: defaultRevisionPollSec,
+      }}
       enabled={!!namespace}
       filterPredicate={filterPredicate}
       filterLabel="Filter (name)"

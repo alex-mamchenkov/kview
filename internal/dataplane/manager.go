@@ -89,6 +89,8 @@ type DataPlaneManager interface {
 	SecretsSnapshot(ctx context.Context, clusterName, namespace string) (SecretsSnapshot, error)
 	// ServiceAccountsSnapshot returns a raw snapshot for serviceaccounts in the given namespace.
 	ServiceAccountsSnapshot(ctx context.Context, clusterName, namespace string) (ServiceAccountsSnapshot, error)
+	// RolesSnapshot returns a raw snapshot for roles in the given namespace.
+	RolesSnapshot(ctx context.Context, clusterName, namespace string) (RolesSnapshot, error)
 	// DaemonSetsSnapshot returns a raw snapshot for daemonsets in the given namespace.
 	DaemonSetsSnapshot(ctx context.Context, clusterName, namespace string) (DaemonSetsSnapshot, error)
 	// StatefulSetsSnapshot returns a raw snapshot for statefulsets in the given namespace.
@@ -245,19 +247,20 @@ type clusterPlane struct {
 	nodesStore snapshotStore[NodesSnapshot]
 
 	// Namespace-scoped snapshots for first-wave resources.
-	podsStore namespacedSnapshotStore[PodsSnapshot]
-	depsStore namespacedSnapshotStore[DeploymentsSnapshot]
-	svcsStore namespacedSnapshotStore[ServicesSnapshot]
-	ingStore  namespacedSnapshotStore[IngressesSnapshot]
-	pvcsStore namespacedSnapshotStore[PVCsSnapshot]
-	cmsStore  namespacedSnapshotStore[ConfigMapsSnapshot]
-	secsStore namespacedSnapshotStore[SecretsSnapshot]
-	saStore   namespacedSnapshotStore[ServiceAccountsSnapshot]
-	dsStore   namespacedSnapshotStore[DaemonSetsSnapshot]
-	stsStore  namespacedSnapshotStore[StatefulSetsSnapshot]
-	rsStore   namespacedSnapshotStore[ReplicaSetsSnapshot]
-	jobsStore namespacedSnapshotStore[JobsSnapshot]
-	cjStore   namespacedSnapshotStore[CronJobsSnapshot]
+	podsStore  namespacedSnapshotStore[PodsSnapshot]
+	depsStore  namespacedSnapshotStore[DeploymentsSnapshot]
+	svcsStore  namespacedSnapshotStore[ServicesSnapshot]
+	ingStore   namespacedSnapshotStore[IngressesSnapshot]
+	pvcsStore  namespacedSnapshotStore[PVCsSnapshot]
+	cmsStore   namespacedSnapshotStore[ConfigMapsSnapshot]
+	secsStore  namespacedSnapshotStore[SecretsSnapshot]
+	saStore    namespacedSnapshotStore[ServiceAccountsSnapshot]
+	rolesStore namespacedSnapshotStore[RolesSnapshot]
+	dsStore    namespacedSnapshotStore[DaemonSetsSnapshot]
+	stsStore   namespacedSnapshotStore[StatefulSetsSnapshot]
+	rsStore    namespacedSnapshotStore[ReplicaSetsSnapshot]
+	jobsStore  namespacedSnapshotStore[JobsSnapshot]
+	cjStore    namespacedSnapshotStore[CronJobsSnapshot]
 
 	// Observers state for this cluster.
 	obsMu     sync.Mutex
@@ -280,6 +283,7 @@ func newClusterPlane(name string, profile Profile, mode DiscoveryMode, scope Obs
 		cmsStore:      newNamespacedSnapshotStore[ConfigMapsSnapshot](),
 		secsStore:     newNamespacedSnapshotStore[SecretsSnapshot](),
 		saStore:       newNamespacedSnapshotStore[ServiceAccountsSnapshot](),
+		rolesStore:    newNamespacedSnapshotStore[RolesSnapshot](),
 		dsStore:       newNamespacedSnapshotStore[DaemonSetsSnapshot](),
 		stsStore:      newNamespacedSnapshotStore[StatefulSetsSnapshot](),
 		rsStore:       newNamespacedSnapshotStore[ReplicaSetsSnapshot](),
@@ -330,6 +334,7 @@ type PVCsSnapshot = Snapshot[dto.PersistentVolumeClaimDTO]
 type ConfigMapsSnapshot = Snapshot[dto.ConfigMapDTO]
 type SecretsSnapshot = Snapshot[dto.SecretDTO]
 type ServiceAccountsSnapshot = Snapshot[dto.ServiceAccountListItemDTO]
+type RolesSnapshot = Snapshot[dto.RoleListItemDTO]
 type DaemonSetsSnapshot = Snapshot[dto.DaemonSetDTO]
 type StatefulSetsSnapshot = Snapshot[dto.StatefulSetDTO]
 type ReplicaSetsSnapshot = Snapshot[dto.ReplicaSetDTO]
@@ -466,6 +471,19 @@ func (p *clusterPlane) ServiceAccountsSnapshot(ctx context.Context, sched *workS
 	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.saStore, desc)
 }
 
+// RolesSnapshot returns a raw snapshot for roles in the given namespace plus metadata and any normalized error.
+func (p *clusterPlane) RolesSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (RolesSnapshot, error) {
+	desc := namespacedSnapshotDescriptor[dto.RoleListItemDTO]{
+		kind:        ResourceKindRoles,
+		ttl:         15 * time.Second,
+		capGroup:    "rbac.authorization.k8s.io",
+		capResource: "roles",
+		capScope:    CapabilityScopeNamespace,
+		fetch:       kube.ListRoles,
+	}
+	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.rolesStore, desc)
+}
+
 // DaemonSetsSnapshot returns a raw snapshot for daemonsets in the given namespace plus metadata and any normalized error.
 func (p *clusterPlane) DaemonSetsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (DaemonSetsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.DaemonSetDTO]{
@@ -589,6 +607,12 @@ func (m *manager) ServiceAccountsSnapshot(ctx context.Context, clusterName, name
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
 	return plane.ServiceAccountsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
+}
+
+func (m *manager) RolesSnapshot(ctx context.Context, clusterName, namespace string) (RolesSnapshot, error) {
+	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
+	plane := planeAny.(*clusterPlane)
+	return plane.RolesSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
 }
 
 func (m *manager) DaemonSetsSnapshot(ctx context.Context, clusterName, namespace string) (DaemonSetsSnapshot, error) {

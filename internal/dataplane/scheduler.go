@@ -28,6 +28,7 @@ const (
 	ResourceKindConfigMaps      ResourceKind = "configmaps"
 	ResourceKindSecrets         ResourceKind = "secrets"
 	ResourceKindServiceAccounts ResourceKind = "serviceaccounts"
+	ResourceKindRoles           ResourceKind = "roles"
 	ResourceKindDaemonSets      ResourceKind = "daemonsets"
 	ResourceKindStatefulSets    ResourceKind = "statefulsets"
 	ResourceKindReplicaSets     ResourceKind = "replicasets"
