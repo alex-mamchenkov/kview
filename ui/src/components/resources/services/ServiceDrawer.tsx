@@ -172,7 +172,9 @@ export default function ServiceDrawer(props: {
   namespace: string;
   serviceName: string | null;
 }) {
-  const { retryNonce } = useConnectionState();
+  const { health, retryNonce } = useConnectionState();
+  const offline = health === "unhealthy";
+  const offlineReason = "Cluster connection is unavailable";
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<ServiceDetails | null>(null);
@@ -265,6 +267,7 @@ export default function ServiceDrawer(props: {
     [knownServicePorts]
   );
   const handleOpenPortForwardDialog = () => {
+    if (offline) return;
     setPortForwardError("");
     if (knownServicePorts.length > 0) {
       setPortForwardRemotePort(String(knownServicePorts[0].port));
@@ -276,6 +279,7 @@ export default function ServiceDrawer(props: {
   };
 
   const handleCreatePortForward = async () => {
+    if (offline) return;
     if (!summary?.name) {
       setPortForwardError("Service is not available.");
       return;
@@ -388,6 +392,7 @@ export default function ServiceDrawer(props: {
                           variant="outlined"
                           size="small"
                           disabled={
+                            offline ||
                             creatingPortForward ||
                             !details ||
                             knownServicePorts.length === 0
@@ -610,6 +615,8 @@ export default function ServiceDrawer(props: {
         remotePort={portForwardRemotePort}
         localPort={portForwardLocalPort}
         error={portForwardError}
+        disabled={offline}
+        disabledReason={offlineReason}
         remotePortOptions={knownServicePortOptions}
         onChangeRemotePort={setPortForwardRemotePort}
         onChangeLocalPort={setPortForwardLocalPort}

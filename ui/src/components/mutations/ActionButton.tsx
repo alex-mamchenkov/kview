@@ -2,6 +2,7 @@ import React from "react";
 import { Button, Tooltip } from "@mui/material";
 import { useMutationDialog } from "./useMutationDialog";
 import type { MutationActionDescriptor, TargetRef } from "../../lib/actions/types";
+import { useConnectionState } from "../../connectionState";
 
 export type ActionButtonProps = {
   descriptor: MutationActionDescriptor;
@@ -40,20 +41,27 @@ export default function ActionButton({
   initialParams,
 }: ActionButtonProps) {
   const { open } = useMutationDialog();
+  const { health } = useConnectionState();
+  const offline = health === "unhealthy";
+  const effectiveDisabled = disabled || offline;
+  const effectiveDisabledReason = offline
+    ? "Cluster connection is unavailable"
+    : disabledReason;
 
   function handleClick() {
+    if (effectiveDisabled) return;
     open({ descriptor, targetRef, token, onSuccess, initialParams });
   }
 
   return (
-    <Tooltip title={disabled && disabledReason ? disabledReason : ""}>
+    <Tooltip title={effectiveDisabled && effectiveDisabledReason ? effectiveDisabledReason : ""}>
       {/* span wrapper required so Tooltip works on a disabled button */}
       <span>
         <Button
           size={size}
           variant={variant}
           color={color}
-          disabled={disabled}
+          disabled={effectiveDisabled}
           onClick={handleClick}
         >
           {label ?? descriptor.title}

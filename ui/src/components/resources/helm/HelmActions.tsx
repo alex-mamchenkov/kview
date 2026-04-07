@@ -14,6 +14,7 @@ import {
 } from "@mui/material";
 import { apiPostWithContext, toApiError } from "../../../api";
 import { useActiveContext } from "../../../activeContext";
+import { useConnectionState } from "../../../connectionState";
 import ActionButton from "../../mutations/ActionButton";
 
 // --- Uninstall / Upgrade / Reinstall buttons for a selected release ---
@@ -129,11 +130,13 @@ type InstallButtonProps = {
 
 export function HelmInstallButton({ token, namespace, onSuccess }: InstallButtonProps) {
   const activeContext = useActiveContext();
+  const { health } = useConnectionState();
+  const offline = health === "unhealthy";
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <Button size="small" variant="contained" onClick={() => setOpen(true)}>
+      <Button size="small" variant="contained" disabled={offline} onClick={() => setOpen(true)}>
         Install
       </Button>
       <InstallDialog
@@ -142,6 +145,7 @@ export function HelmInstallButton({ token, namespace, onSuccess }: InstallButton
         token={token}
         activeContext={activeContext}
         defaultNamespace={namespace}
+        offline={offline}
         onSuccess={() => {
           setOpen(false);
           onSuccess();
@@ -159,6 +163,7 @@ function InstallDialog(props: {
   token: string;
   activeContext: string;
   defaultNamespace: string;
+  offline: boolean;
   onSuccess: () => void;
 }) {
   const [namespace, setNamespace] = useState(props.defaultNamespace);
@@ -182,7 +187,7 @@ function InstallDialog(props: {
     }
   }, [props.open, props.defaultNamespace]);
 
-  const valid = namespace.trim() !== "" && release.trim() !== "" && chart.trim() !== "";
+  const valid = !props.offline && namespace.trim() !== "" && release.trim() !== "" && chart.trim() !== "";
 
   async function handleConfirm() {
     if (!valid) return;
@@ -209,13 +214,18 @@ function InstallDialog(props: {
     <Dialog open={props.open} onClose={props.onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Install Helm Release</DialogTitle>
       <DialogContent>
+        {props.offline && (
+          <Alert severity="error" sx={{ mb: 2, mt: 1 }}>
+            Cluster connection is unavailable. Helm install is disabled until connectivity recovers.
+          </Alert>
+        )}
         <TextField
           autoFocus
           fullWidth
           label="Namespace"
           value={namespace}
           onChange={(e) => setNamespace(e.target.value)}
-          disabled={busy}
+          disabled={busy || props.offline}
           sx={{ mb: 2, mt: 1 }}
         />
         <TextField
@@ -223,7 +233,7 @@ function InstallDialog(props: {
           label="Release name"
           value={release}
           onChange={(e) => setRelease(e.target.value)}
-          disabled={busy}
+          disabled={busy || props.offline}
           sx={{ mb: 2 }}
         />
         <TextField
@@ -232,7 +242,7 @@ function InstallDialog(props: {
           placeholder="repo/chart or ./path"
           value={chart}
           onChange={(e) => setChart(e.target.value)}
-          disabled={busy}
+          disabled={busy || props.offline}
           sx={{ mb: 2 }}
         />
         <TextField
@@ -240,7 +250,7 @@ function InstallDialog(props: {
           label="Version (optional)"
           value={version}
           onChange={(e) => setVersion(e.target.value)}
-          disabled={busy}
+          disabled={busy || props.offline}
           sx={{ mb: 2 }}
         />
         <TextField
@@ -251,7 +261,7 @@ function InstallDialog(props: {
           maxRows={12}
           value={valuesYaml}
           onChange={(e) => setValuesYaml(e.target.value)}
-          disabled={busy}
+          disabled={busy || props.offline}
           InputProps={{ sx: { fontFamily: "monospace", fontSize: "0.85rem" } }}
           sx={{ mb: 1 }}
         />
@@ -260,7 +270,7 @@ function InstallDialog(props: {
             <Checkbox
               checked={createNamespace}
               onChange={(e) => setCreateNamespace(e.target.checked)}
-              disabled={busy}
+              disabled={busy || props.offline}
             />
           }
           label="Create namespace if it does not exist"

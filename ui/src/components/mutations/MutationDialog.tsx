@@ -24,6 +24,7 @@ import type {
   ParamSpec,
   TargetRef,
 } from "../../lib/actions/types";
+import { useConnectionState } from "../../connectionState";
 
 type DialogPhase = "confirm" | "running" | "success" | "error";
 
@@ -68,6 +69,8 @@ export default function MutationDialog({
   onSuccess,
   initialParams,
 }: MutationDialogProps) {
+  const { health } = useConnectionState();
+  const offline = health === "unhealthy";
   const [phase, setPhase] = useState<DialogPhase>("confirm");
   const [typedValue, setTypedValue] = useState("");
   const [simpleChecked, setSimpleChecked] = useState(false);
@@ -107,6 +110,7 @@ export default function MutationDialog({
 
   const canExecute =
     phase !== "running" &&
+    !offline &&
     paramsValid &&
     (confirmSpec.mode === "none" ||
       (confirmSpec.mode === "simple" && simpleChecked) ||
@@ -192,6 +196,12 @@ export default function MutationDialog({
       </DialogTitle>
 
       <DialogContent>
+        {offline && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            Cluster connection is unavailable. Actions are disabled until connectivity recovers.
+          </Alert>
+        )}
+
         {/* ── 2. Target Summary ── */}
         <Box
           sx={{
@@ -285,7 +295,7 @@ export default function MutationDialog({
                               [spec.key]: e.target.value,
                             }))
                           }
-                          disabled={phase === "running"}
+                          disabled={phase === "running" || offline}
                           error={showError}
                           helperText={
                             showError
@@ -321,7 +331,7 @@ export default function MutationDialog({
                               [spec.key]: e.target.value,
                             }))
                           }
-                          disabled={phase === "running"}
+                          disabled={phase === "running" || offline}
                           fullWidth
                           InputProps={{
                             sx: { fontFamily: "monospace", fontSize: "0.85rem" },
@@ -351,7 +361,7 @@ export default function MutationDialog({
                             [spec.key]: e.target.value,
                           }))
                         }
-                        disabled={phase === "running"}
+                        disabled={phase === "running" || offline}
                         fullWidth
                       />
                     </Box>
@@ -372,7 +382,7 @@ export default function MutationDialog({
                     <Checkbox
                       checked={simpleChecked}
                       onChange={(e) => setSimpleChecked(e.target.checked)}
-                      disabled={phase === "running"}
+                      disabled={phase === "running" || offline}
                     />
                   }
                   label="I confirm this action"
@@ -394,7 +404,7 @@ export default function MutationDialog({
                     label="Confirmation"
                     value={typedValue}
                     onChange={(e) => setTypedValue(e.target.value)}
-                    disabled={phase === "running"}
+                    disabled={phase === "running" || offline}
                     error={
                       typedValue.length > 0 &&
                       typedValue !== confirmSpec.requiredValue

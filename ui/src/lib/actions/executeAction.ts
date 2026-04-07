@@ -1,4 +1,5 @@
 import { apiPostWithContext, toApiError } from "../../api";
+import { getConnectionState } from "../../connectionState";
 import type { ExecuteActionRequest, ExecuteActionResult } from "./types";
 
 /**
@@ -11,6 +12,13 @@ export async function executeAction(
   contextName: string,
   request: ExecuteActionRequest,
 ): Promise<ExecuteActionResult> {
+  if (getConnectionState().health === "unhealthy") {
+    return {
+      success: false,
+      message: "Cluster connection is unavailable. Actions are disabled until connectivity recovers.",
+    };
+  }
+
   try {
     const response = await apiPostWithContext<{
       result?: { status: string; message?: string; details?: unknown };

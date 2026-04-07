@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiPostWithContext } from "../../api";
 import { useActiveContext } from "../../activeContext";
+import { useConnectionState } from "../../connectionState";
 
 export type Capabilities = {
   delete: boolean;
@@ -37,11 +38,16 @@ export function useResourceCapabilities({
   name: string;
 }): Capabilities | null {
   const activeContext = useActiveContext();
+  const { health } = useConnectionState();
   const [caps, setCaps] = useState<Capabilities | null>(null);
 
   useEffect(() => {
     if (!activeContext || !name) return;
     setCaps(null);
+    if (health === "unhealthy") {
+      setCaps(CAPS_DENIED);
+      return;
+    }
     apiPostWithContext<{ capabilities: Capabilities }>(
       "/api/capabilities",
       token,
@@ -50,7 +56,7 @@ export function useResourceCapabilities({
     )
       .then((res) => setCaps(res.capabilities))
       .catch(() => setCaps(CAPS_DENIED));
-  }, [activeContext, token, namespace, name, group, resource]);
+  }, [activeContext, token, namespace, name, group, resource, health]);
 
   return caps;
 }

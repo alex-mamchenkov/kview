@@ -330,7 +330,9 @@ export default function PodDrawer(props: {
   namespace: string;
   podName: string | null;
 }) {
-  const { retryNonce } = useConnectionState();
+  const { health, retryNonce } = useConnectionState();
+  const offline = health === "unhealthy";
+  const offlineReason = "Cluster connection is unavailable";
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<PodDetails | null>(null);
@@ -454,7 +456,7 @@ export default function PodDrawer(props: {
   }, [props.open, name]);
 
   const openTerminalForContainer = async (containerName: string) => {
-    if (!name || !containerName) return;
+    if (!name || !containerName || offline) return;
     try {
       setCreatingTerminal(true);
       const sessionId = await createTerminalSession(
@@ -479,6 +481,7 @@ export default function PodDrawer(props: {
   };
 
   const handleOpenPortForwardDialog = () => {
+    if (offline) return;
     setPortForwardError("");
     if (knownPodPortOptions.length > 0) {
       setPortForwardRemotePort(knownPodPortOptions[0].value);
@@ -490,7 +493,7 @@ export default function PodDrawer(props: {
   };
 
   const handleCreatePortForward = async () => {
-    if (!name) return;
+    if (!name || offline) return;
     const remote = Number(portForwardRemotePort);
     if (!Number.isFinite(remote) || remote <= 0) {
       setPortForwardError("Remote port must be a positive number.");
@@ -968,7 +971,7 @@ export default function PodDrawer(props: {
                         <Button
                           variant="outlined"
                           size="small"
-                          disabled={creatingTerminal || !details || (details.containers || []).length === 0}
+                          disabled={offline || creatingTerminal || !details || (details.containers || []).length === 0}
                           onClick={(e) => {
                             if (!details) return;
                             setTerminalMenuAnchor(e.currentTarget);
@@ -979,7 +982,7 @@ export default function PodDrawer(props: {
                         <Button
                           variant="outlined"
                           size="small"
-                          disabled={creatingPortForward || !details}
+                          disabled={offline || creatingPortForward || !details}
                           onClick={handleOpenPortForwardDialog}
                         >
                           Port forward
@@ -998,7 +1001,7 @@ export default function PodDrawer(props: {
                           .map((containerName) => (
                             <MenuItem
                               key={containerName}
-                              disabled={creatingTerminal}
+                              disabled={offline || creatingTerminal}
                               onClick={() => {
                                 setTerminalMenuAnchor(null);
                                 void openTerminalForContainer(containerName);
@@ -1139,7 +1142,7 @@ export default function PodDrawer(props: {
                               <Button
                                 variant="outlined"
                                 size="small"
-                                disabled={creatingTerminal || !ctn.name}
+                                disabled={offline || creatingTerminal || !ctn.name}
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
@@ -1882,6 +1885,8 @@ export default function PodDrawer(props: {
         remotePort={portForwardRemotePort}
         localPort={portForwardLocalPort}
         error={portForwardError}
+        disabled={offline}
+        disabledReason={offlineReason}
         remotePortOptions={knownPodPortOptions}
         onChangeRemotePort={setPortForwardRemotePort}
         onChangeLocalPort={setPortForwardLocalPort}
@@ -1969,4 +1974,3 @@ export default function PodDrawer(props: {
     </RightDrawer>
   );
 }
-

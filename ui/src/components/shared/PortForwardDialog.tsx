@@ -26,6 +26,8 @@ type Props = {
   remotePort: string;
   localPort: string;
   error?: string;
+  disabled?: boolean;
+  disabledReason?: string;
   remotePortOptions?: PortForwardOption[];
   onChangeRemotePort: (value: string) => void;
   onChangeLocalPort: (value: string) => void;
@@ -40,6 +42,8 @@ export default function PortForwardDialog({
   remotePort,
   localPort,
   error,
+  disabled,
+  disabledReason,
   remotePortOptions,
   onChangeRemotePort,
   onChangeLocalPort,
@@ -65,6 +69,11 @@ export default function PortForwardDialog({
           <Typography variant="body2" color="text.secondary">
             {targetLabel}
           </Typography>
+          {disabled && disabledReason ? (
+            <Typography variant="caption" color="error">
+              {disabledReason}
+            </Typography>
+          ) : null}
           {hasOptions ? (
             <FormControl size="small" fullWidth>
               <InputLabel id="pf-remote-port-label">Remote port</InputLabel>
@@ -73,6 +82,7 @@ export default function PortForwardDialog({
                 label="Remote port"
                 value={remotePort}
                 onChange={(e) => onChangeRemotePort(String(e.target.value))}
+                disabled={disabled || busy}
                 autoFocus
               >
                 {options.map((opt) => (
@@ -90,6 +100,7 @@ export default function PortForwardDialog({
               value={remotePort}
               onChange={(e) => onChangeRemotePort(e.target.value)}
               helperText="Container port to forward"
+              disabled={disabled || busy}
               fullWidth
               autoFocus
             />
@@ -101,6 +112,7 @@ export default function PortForwardDialog({
             value={localPort}
             onChange={(e) => onChangeLocalPort(e.target.value)}
             helperText="Empty = try same as remote first, then pick free port"
+            disabled={disabled || busy}
             fullWidth
           />
           {error && (
@@ -119,7 +131,7 @@ export default function PortForwardDialog({
         >
           Cancel
         </Button>
-        <Button onClick={onSubmit} variant="contained" disabled={busy}>
+        <Button onClick={onSubmit} variant="contained" disabled={busy || disabled}>
           {busy ? "Starting..." : "Start"}
         </Button>
       </DialogActions>
