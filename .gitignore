@@ -49,3 +49,6 @@ internal/server/ui_dist/*
 # direnv
 .envrc
 .direnv/
+
+# OpenAI Codex
+.codex
