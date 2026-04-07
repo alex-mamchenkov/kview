@@ -1,6 +1,6 @@
 import React, { useCallback } from "react";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGetWithContext } from "../../../api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import RoleDrawer from "./RoleDrawer";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
@@ -47,10 +47,11 @@ export default function RolesTable({
   token: string;
   namespace: string;
 }) {
-  const fetchRows = useCallback(async () => {
-    const res = await apiGet<ApiDataplaneListResponse<Role>>(
+  const fetchRows = useCallback(async (contextName?: string) => {
+    const res = await apiGetWithContext<ApiDataplaneListResponse<Role>>(
       `/api/namespaces/${encodeURIComponent(namespace)}/roles`,
       token,
+      contextName || "",
     );
     const items = res.items || [];
     return {

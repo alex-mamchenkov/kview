@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import DeploymentDrawer from "./DeploymentDrawer";
 import { fmtAge } from "../../../utils/format";
@@ -88,10 +88,11 @@ export default function DeploymentsTable({
   token: string;
   namespace: string;
 }) {
-  const fetchRows = useCallback(async () => {
-    const res = await apiGet<ApiDataplaneListResponse<Deployment>>(
+  const fetchRows = useCallback(async (contextName?: string) => {
+    const res = await apiGetWithContext<ApiDataplaneListResponse<Deployment>>(
       `/api/namespaces/${encodeURIComponent(namespace)}/deployments`,
       token,
+      contextName || "",
     );
     const items = res.items || [];
     return {

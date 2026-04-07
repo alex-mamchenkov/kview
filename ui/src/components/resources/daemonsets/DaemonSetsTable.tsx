@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import DaemonSetDrawer from "./DaemonSetDrawer";
 import { fmtAge } from "../../../utils/format";
@@ -77,10 +77,11 @@ export default function DaemonSetsTable({
   token: string;
   namespace: string;
 }) {
-  const fetchRows = useCallback(async () => {
-    const res = await apiGet<ApiDataplaneListResponse<DaemonSet>>(
+  const fetchRows = useCallback(async (contextName?: string) => {
+    const res = await apiGetWithContext<ApiDataplaneListResponse<DaemonSet>>(
       `/api/namespaces/${encodeURIComponent(namespace)}/daemonsets`,
       token,
+      contextName || "",
     );
     const items = res.items || [];
     return {

@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import { pvcPhaseChipColor } from "../../../utils/k8sUi";
@@ -94,10 +94,11 @@ export default function PersistentVolumeClaimsTable({
   token: string;
   namespace: string;
 }) {
-  const fetchRows = useCallback(async () => {
-    const res = await apiGet<ApiDataplaneListResponse<PersistentVolumeClaim>>(
+  const fetchRows = useCallback(async (contextName?: string) => {
+    const res = await apiGetWithContext<ApiDataplaneListResponse<PersistentVolumeClaim>>(
       `/api/namespaces/${encodeURIComponent(namespace)}/persistentvolumeclaims`,
       token,
+      contextName || "",
     );
     const items = res.items || [];
     return {

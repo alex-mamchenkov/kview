@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import ServiceDrawer from "./ServiceDrawer";
@@ -69,10 +69,11 @@ const columns: GridColDef<Row>[] = [
 ];
 
 export default function ServicesTable({ token, namespace }: { token: string; namespace: string }) {
-  const fetchRows = useCallback(async () => {
-    const res = await apiGet<ApiDataplaneListResponse<Service>>(
+  const fetchRows = useCallback(async (contextName?: string) => {
+    const res = await apiGetWithContext<ApiDataplaneListResponse<Service>>(
       `/api/namespaces/${encodeURIComponent(namespace)}/services`,
       token,
+      contextName || "",
     );
     const items = res.items || [];
     return {

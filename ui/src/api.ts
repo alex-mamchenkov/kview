@@ -192,7 +192,7 @@ export async function apiPost<T>(path: string, token: string, body: unknown, opt
 }
 
 export async function apiGetWithContext<T>(path: string, token: string, contextName: string): Promise<T> {
-  if (!contextName) throw new Error("Missing active context");
+  if (!contextName) return apiGet<T>(path, token);
   return apiGet<T>(path, token, { headers: { "X-Kview-Context": contextName } });
 }
 

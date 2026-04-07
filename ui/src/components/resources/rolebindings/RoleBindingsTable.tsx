@@ -1,6 +1,6 @@
 import React, { useCallback } from "react";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGetWithContext } from "../../../api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import RoleBindingDrawer from "./RoleBindingDrawer";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
@@ -60,10 +60,11 @@ export default function RoleBindingsTable({
   token: string;
   namespace: string;
 }) {
-  const fetchRows = useCallback(async () => {
-    const res = await apiGet<ApiDataplaneListResponse<RoleBinding>>(
+  const fetchRows = useCallback(async (contextName?: string) => {
+    const res = await apiGetWithContext<ApiDataplaneListResponse<RoleBinding>>(
       `/api/namespaces/${encodeURIComponent(namespace)}/rolebindings`,
       token,
+      contextName || "",
     );
     const items = res.items || [];
     return {

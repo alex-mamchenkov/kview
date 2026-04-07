@@ -17,6 +17,7 @@ Underlying **list IO** for snapshot-backed routes is still `kube.List*` **inside
 ## 1. Dataplane snapshot–backed (list envelope)
 
 These routes use `DataPlaneManager.*Snapshot` and `writeDataplaneListResponse`. Each response includes `active`, `items`, `observed`, and `meta` (`freshness`, `coverage`, `degradation`, `completeness`, `state`).
+Dataplane-backed read endpoints accept optional `X-Kview-Context`; when absent, they fall back to the process active context for backwards compatibility.
 
 | Route pattern | Snapshot / notes |
 |---------------|------------------|

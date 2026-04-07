@@ -2,9 +2,9 @@ package kube
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"helm.sh/helm/v3/pkg/release"
 	syaml "sigs.k8s.io/yaml"
@@ -148,7 +148,6 @@ type releaseYAMLView struct {
 	Status    string                 `json:"status"`
 	Chart     string                 `json:"chart"`
 	Config    map[string]interface{} `json:"config,omitempty"`
-	Manifest  string                 `json:"manifest,omitempty"`
 	Info      *releaseInfoView       `json:"info,omitempty"`
 }
 
@@ -168,7 +167,6 @@ func buildReleaseYAML(rel *release.Release) string {
 		Status:    releaseStatus(rel),
 		Chart:     chartString(rel),
 		Config:    rel.Config,
-		Manifest:  rel.Manifest,
 	}
 	if rel.Info != nil {
 		view.Info = &releaseInfoView{
@@ -184,13 +182,30 @@ func buildReleaseYAML(rel *release.Release) string {
 		}
 	}
 
-	jsonBytes, err := json.Marshal(view)
+	yamlBytes, err := syaml.Marshal(view)
 	if err != nil {
 		return ""
 	}
-	yamlBytes, err := syaml.JSONToYAML(jsonBytes)
-	if err != nil {
-		return ""
+	yamlStr := string(yamlBytes)
+	if strings.TrimSpace(rel.Manifest) == "" {
+		return yamlStr
 	}
-	return string(yamlBytes)
+	return strings.TrimRight(yamlStr, "\n") + "\nmanifest: |\n" + indentYAMLLiteralBlock(rel.Manifest)
+}
+
+func indentYAMLLiteralBlock(value string) string {
+	value = strings.ReplaceAll(value, "\r\n", "\n")
+	value = strings.ReplaceAll(value, "\r", "\n")
+	value = strings.TrimRight(value, "\n") + "\n"
+
+	lines := strings.SplitAfter(value, "\n")
+	var b strings.Builder
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		b.WriteString("  ")
+		b.WriteString(line)
+	}
+	return b.String()
 }

@@ -28,7 +28,7 @@ export type ResourceListPageProps<TRow extends { id: string }> = {
   title: React.ReactNode;
   columns: GridColDef<TRow>[];
   /** Return rows plus optional dataplane list metadata for the shared meta strip. */
-  fetchRows: () => Promise<ResourceListFetchResult<TRow>>;
+  fetchRows: (contextName?: string) => Promise<ResourceListFetchResult<TRow>>;
   /** Optional line above list quality strip (e.g. namespace row status). */
   dataplaneMetaPrefix?: React.ReactNode;
   /** Optional merge of fetched rows (e.g. progressive namespace enrichment). */
@@ -57,7 +57,7 @@ export type ResourceListPageProps<TRow extends { id: string }> = {
    * Ignored when the user selects a full list refresh interval (`refreshSec > 0`) in the toolbar.
    */
   dataplaneRevisionPoll?: {
-    fetchRevision: () => Promise<string>;
+    fetchRevision: (contextName?: string) => Promise<string>;
     pollSec?: number;
   };
   /** Full dataplane-backed refetch cadence while toolbar refresh remains Off. Default 10s for dataplane lists. */
@@ -102,7 +102,11 @@ export default function ResourceListPage<TRow extends { id: string }>({
   const [refreshSec, setRefreshSec] = useState<number>(initialRefreshSec);
   const activeContext = useActiveContext();
 
-  const fetchRowsStable = useCallback(() => fetchRows(), [fetchRows]);
+  const fetchRowsStable = useCallback(() => fetchRows(activeContext), [activeContext, fetchRows]);
+  const fetchRevisionStable = useCallback(
+    () => dataplaneRevisionPoll?.fetchRevision(activeContext) ?? Promise.resolve("0"),
+    [activeContext, dataplaneRevisionPoll],
+  );
 
   const { items: rows, dataplaneMeta, error, loading, lastRefresh, refetch } = useListQuery<TRow>({
     enabled,
@@ -112,7 +116,7 @@ export default function ResourceListPage<TRow extends { id: string }>({
     onInitialResult: () => setSelectionModel([]),
     mapRows,
     mapRowsDeps,
-    fetchRevision: dataplaneRevisionPoll?.fetchRevision,
+    fetchRevision: dataplaneRevisionPoll ? fetchRevisionStable : undefined,
     revisionPollSec: dataplaneRevisionPoll ? (dataplaneRevisionPoll.pollSec ?? defaultRevisionPollSec) : 0,
     dataplaneRefreshSec: dataplaneRevisionPoll
       ? (dataplaneRefreshSec ?? defaultDataplaneRefreshSec)

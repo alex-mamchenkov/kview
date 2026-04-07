@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Chip, Typography } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGet, apiGetWithContext } from "../../../api";
 import {
   type ApiNamespacesEnrichmentPoll,
   type ApiNamespacesListResponse,
@@ -13,6 +13,7 @@ import { namespacePhaseChipColor, namespaceRowSummaryStateColor } from "../../..
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
+import { useActiveContext } from "../../../activeContext";
 
 type Namespace = NonNullable<ApiNamespacesListResponse["items"]>[number];
 
@@ -166,12 +167,15 @@ export default function NamespacesTable({
   const [rowProjection, setRowProjection] = useState<ApiNamespacesListResponse["rowProjection"] | null>(null);
   const [enrichRows, setEnrichRows] = useState<ApiNamespacesEnrichmentPoll["updates"] | null>(null);
   const [enrichPoll, setEnrichPoll] = useState<ApiNamespacesEnrichmentPoll | null>(null);
+  const activeContext = useActiveContext();
 
-  const fetchRows = useCallback(async () => {
+  const fetchRows = useCallback(async (contextName?: string) => {
     // Do not clear enrichRows/enrichPoll here: clearing before the request completes drops merged
     // cells during loading and on every auto-refresh. mapRows only applies poll data when its
     // revision matches rowProjection.revision (after this fetch returns).
-    const res = await apiGet<ApiNamespacesListResponse>(listApiPath, token);
+    const res = contextName
+      ? await apiGetWithContext<ApiNamespacesListResponse>(listApiPath, token, contextName)
+      : await apiGet<ApiNamespacesListResponse>(listApiPath, token);
     setRowProjection(res.rowProjection ?? null);
     const items = res.items || [];
     return {
@@ -205,10 +209,10 @@ export default function NamespacesTable({
     const tick = async () => {
       if (cancelled) return;
       try {
-        const res = await apiGet<ApiNamespacesEnrichmentPoll>(
-          `/api/namespaces/enrichment?revision=${revision}`,
-          token,
-        );
+        const path = `/api/namespaces/enrichment?revision=${revision}`;
+        const res = activeContext
+          ? await apiGetWithContext<ApiNamespacesEnrichmentPoll>(path, token, activeContext)
+          : await apiGet<ApiNamespacesEnrichmentPoll>(path, token);
         if (cancelled || res.stale) return;
         setEnrichRows(res.updates ?? []);
         setEnrichPoll(res);
@@ -223,7 +227,7 @@ export default function NamespacesTable({
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [revision, token]);
+  }, [activeContext, revision, token]);
 
   const filterPredicate = useCallback((row: Row, q: string) => {
     const lc = q.toLowerCase();

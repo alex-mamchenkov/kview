@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import CronJobDrawer from "./CronJobDrawer";
 import { fmtAge, fmtTs } from "../../../utils/format";
@@ -91,10 +91,11 @@ export default function CronJobsTable({
   token: string;
   namespace: string;
 }) {
-  const fetchRows = useCallback(async () => {
-    const res = await apiGet<ApiDataplaneListResponse<CronJob>>(
+  const fetchRows = useCallback(async (contextName?: string) => {
+    const res = await apiGetWithContext<ApiDataplaneListResponse<CronJob>>(
       `/api/namespaces/${encodeURIComponent(namespace)}/cronjobs`,
       token,
+      contextName || "",
     );
     const items = res.items || [];
     return {

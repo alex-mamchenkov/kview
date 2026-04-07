@@ -16,40 +16,89 @@ export type ManifestResource = {
 export function parseManifestResources(manifest: string): ManifestResource[] {
   if (!manifest || !manifest.trim()) return [];
 
-  const docs = manifest.split(/\n---(?:\s*)(?:\n|$)/);
+  const docs = splitManifestDocuments(manifest);
   const resources: ManifestResource[] = [];
 
   for (const doc of docs) {
     const trimmed = doc.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
+    if (!trimmed) continue;
 
-    const kind = trimmed.match(/^kind:\s*(.+)$/m)?.[1]?.trim();
+    const kind = readTopLevelScalar(trimmed, "kind");
     if (!kind) continue;
 
-    const apiVersion = trimmed.match(/^apiVersion:\s*(.+)$/m)?.[1]?.trim();
-
-    // Extract metadata block fields.
-    // metadata: is at indent level 0, name/namespace are at indent level 1 (2 spaces).
-    const metadataMatch = trimmed.match(/^metadata:\s*\n((?:[ \t]+.+\n?)*)/m);
-    let name: string | undefined;
-    let namespace: string | undefined;
-
-    if (metadataMatch) {
-      const metaBlock = metadataMatch[1];
-      name = metaBlock.match(/^\s+name:\s*(.+)$/m)?.[1]?.trim();
-      namespace = metaBlock.match(/^\s+namespace:\s*(.+)$/m)?.[1]?.trim();
-    }
+    const apiVersion = readTopLevelScalar(trimmed, "apiVersion");
+    const metadata = readMetadataScalars(trimmed);
+    const name = metadata.name;
+    const namespace = metadata.namespace;
 
     if (!name) continue;
-
-    // Strip surrounding quotes if present
-    if (name.startsWith('"') && name.endsWith('"')) name = name.slice(1, -1);
-    if (namespace?.startsWith('"') && namespace?.endsWith('"')) namespace = namespace.slice(1, -1);
 
     resources.push({ kind, name, namespace, apiVersion });
   }
 
   return resources;
+}
+
+function splitManifestDocuments(manifest: string): string[] {
+  const normalized = manifest.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  return normalized.split(/^---[ \t]*(?:#.*)?$/m);
+}
+
+function readTopLevelScalar(doc: string, key: string): string | undefined {
+  const prefix = `${key}:`;
+  for (const line of doc.split("\n")) {
+    if (!line.startsWith(prefix)) continue;
+    return cleanYamlScalar(line.slice(prefix.length));
+  }
+  return undefined;
+}
+
+function readMetadataScalars(doc: string): { name?: string; namespace?: string } {
+  const out: { name?: string; namespace?: string } = {};
+  const lines = doc.split("\n");
+  let inMetadata = false;
+  let metadataIndent = 0;
+  let directChildIndent: number | undefined;
+
+  for (const line of lines) {
+    if (!inMetadata) {
+      if (line.trim() === "metadata:") {
+        inMetadata = true;
+        metadataIndent = countIndent(line);
+      }
+      continue;
+    }
+
+    if (line.trim() === "" || line.trimStart().startsWith("#")) continue;
+    const indent = countIndent(line);
+    if (indent <= metadataIndent) break;
+    if (directChildIndent === undefined) directChildIndent = indent;
+    if (indent !== directChildIndent) continue;
+
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("name:")) {
+      out.name = cleanYamlScalar(trimmed.slice("name:".length));
+    } else if (trimmed.startsWith("namespace:")) {
+      out.namespace = cleanYamlScalar(trimmed.slice("namespace:".length));
+    }
+  }
+
+  return out;
+}
+
+function countIndent(line: string): number {
+  return line.length - line.trimStart().length;
+}
+
+function cleanYamlScalar(value: string): string | undefined {
+  let out = value.trim();
+  if (!out) return undefined;
+  const commentIndex = out.search(/\s#/);
+  if (commentIndex >= 0) out = out.slice(0, commentIndex).trim();
+  if ((out.startsWith('"') && out.endsWith('"')) || (out.startsWith("'") && out.endsWith("'"))) {
+    out = out.slice(1, -1);
+  }
+  return out || undefined;
 }
 
 /**

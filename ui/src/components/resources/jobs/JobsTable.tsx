@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import JobDrawer from "./JobDrawer";
 import { fmtAge } from "../../../utils/format";
@@ -68,10 +68,11 @@ const columns: GridColDef<Row>[] = [
 ];
 
 export default function JobsTable({ token, namespace }: { token: string; namespace: string }) {
-  const fetchRows = useCallback(async () => {
-    const res = await apiGet<ApiDataplaneListResponse<Job>>(
+  const fetchRows = useCallback(async (contextName?: string) => {
+    const res = await apiGetWithContext<ApiDataplaneListResponse<Job>>(
       `/api/namespaces/${encodeURIComponent(namespace)}/jobs`,
       token,
+      contextName || "",
     );
     const items = res.items || [];
     return {

@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGetWithContext } from "../../../api";
 import NodeDrawer from "./NodeDrawer";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import { nodeStatusChipColor } from "../../../utils/k8sUi";
@@ -84,8 +84,8 @@ const columns: GridColDef<Row>[] = [
 ];
 
 export default function NodesTable({ token }: { token: string }) {
-  const fetchRows = useCallback(async () => {
-    const res = await apiGet<ApiDataplaneListResponse<Node>>("/api/nodes", token);
+  const fetchRows = useCallback(async (contextName?: string) => {
+    const res = await apiGetWithContext<ApiDataplaneListResponse<Node>>("/api/nodes", token, contextName || "");
     const items = res.items || [];
     return {
       rows: items.map((n) => ({ ...n, id: n.name })),

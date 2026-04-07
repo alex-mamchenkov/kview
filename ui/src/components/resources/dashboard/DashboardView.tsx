@@ -11,7 +11,7 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
-import { apiGet } from "../../../api";
+import { apiGet, apiGetWithContext } from "../../../api";
 import type { ApiDashboardClusterResponse } from "../../../types/api";
 import { namespaceRowSummaryStateColor } from "../../../utils/k8sUi";
 import { useActiveContext } from "../../../activeContext";
@@ -61,7 +61,9 @@ export default function DashboardView(props: Props) {
       }
       setErr(null);
       try {
-        const res = await apiGet<ApiDashboardClusterResponse>("/api/dashboard/cluster", props.token);
+        const res = activeContext
+          ? await apiGetWithContext<ApiDashboardClusterResponse>("/api/dashboard/cluster", props.token, activeContext)
+          : await apiGet<ApiDashboardClusterResponse>("/api/dashboard/cluster", props.token);
         if (!cancelled) setData(res);
       } catch {
         if (!cancelled) setErr("Failed to load cluster overview");

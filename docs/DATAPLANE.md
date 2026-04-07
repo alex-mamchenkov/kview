@@ -80,6 +80,7 @@ List rows for **pods**, **deployments**, and workload controllers can include sm
 ## List response metadata
 
 Dataplane-backed **list** handlers use a shared envelope pattern (`active`, `items`, `observed`, `meta` with `freshness`, `coverage`, `degradation`, `completeness`, `state`). Tests in `internal/server` cover response shaping where applicable.
+These read handlers accept optional `X-Kview-Context` so the UI can pin list and dashboard reads to the context that was active when the request was issued; missing headers fall back to the current active context.
 
 ---
 

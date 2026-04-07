@@ -74,6 +74,13 @@ func (s *Server) Sessions() session.Manager {
 	return s.sessions
 }
 
+func (s *Server) readContextName(r *http.Request) string {
+	if ctxName := strings.TrimSpace(r.Header.Get("X-Kview-Context")); ctxName != "" {
+		return ctxName
+	}
+	return s.mgr.ActiveContext()
+}
+
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
 
@@ -507,7 +514,7 @@ func (s *Server) Router() http.Handler {
 			ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 			defer cancel()
 
-			active := s.mgr.ActiveContext()
+			active := s.readContextName(r)
 
 			// Ensure observers are running for the active cluster so snapshots stay reasonably fresh.
 			s.dp.EnsureObservers(ctx, active)
@@ -525,7 +532,7 @@ func (s *Server) Router() http.Handler {
 			if !ok {
 				writeJSON(w, http.StatusBadRequest, map[string]any{
 					"error":  "unknown or missing kind query parameter",
-					"active": s.mgr.ActiveContext(),
+					"active": s.readContextName(r),
 				})
 				return
 			}
@@ -533,7 +540,7 @@ func (s *Server) Router() http.Handler {
 			if dataplane.ListRevisionKindNeedsNamespace(kind) && ns == "" {
 				writeJSON(w, http.StatusBadRequest, map[string]any{
 					"error":  "namespace query parameter is required for this kind",
-					"active": s.mgr.ActiveContext(),
+					"active": s.readContextName(r),
 				})
 				return
 			}
@@ -541,7 +548,7 @@ func (s *Server) Router() http.Handler {
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 			defer cancel()
 
-			active := s.mgr.ActiveContext()
+			active := s.readContextName(r)
 			s.dp.EnsureObservers(ctx, active)
 
 			env, err := s.dp.ListSnapshotRevision(ctx, active, kind, ns)
@@ -578,7 +585,7 @@ func (s *Server) Router() http.Handler {
 			ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 			defer cancel()
 
-			active := s.mgr.ActiveContext()
+			active := s.readContextName(r)
 
 			// Warm dataplane observers for the active cluster so snapshots stay reasonably fresh.
 			s.dp.EnsureObservers(ctx, active)
@@ -632,7 +639,7 @@ func (s *Server) Router() http.Handler {
 		})
 
 		api.Get("/namespaces/enrichment", func(w http.ResponseWriter, r *http.Request) {
-			active := s.mgr.ActiveContext()
+			active := s.readContextName(r)
 			revStr := r.URL.Query().Get("revision")
 			rev, err := strconv.ParseUint(revStr, 10, 64)
 			if err != nil || rev == 0 {
@@ -683,7 +690,7 @@ func (s *Server) Router() http.Handler {
 			ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 			defer cancel()
 
-			active := s.mgr.ActiveContext()
+			active := s.readContextName(r)
 
 			proj, err := s.dp.NamespaceSummaryProjection(ctx, active, name)
 			if err != nil {
@@ -2768,7 +2775,7 @@ func dataplaneClusterListHandler[I any](
 		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 		defer cancel()
 
-		active := s.mgr.ActiveContext()
+		active := s.readContextName(r)
 		s.dp.EnsureObservers(ctx, active)
 		snap, err := fetch(ctx, active)
 		if err != nil {
@@ -2794,7 +2801,7 @@ func dataplaneNamespacedListHandler[I any](
 		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 		defer cancel()
 
-		active := s.mgr.ActiveContext()
+		active := s.readContextName(r)
 		s.dp.EnsureObservers(ctx, active)
 		snap, err := fetch(ctx, active, ns)
 		if err != nil {

@@ -1,4 +1,4 @@
-import { apiGet } from "../api";
+import { apiGet, apiGetWithContext } from "../api";
 
 /** Default interval for GET /api/dataplane/revision polling (seconds). */
 export const defaultRevisionPollSec = 2;
@@ -19,12 +19,15 @@ export type ApiDataplaneRevisionResponse = {
  * Kind values match backend ResourceKind strings (e.g. "pods", "namespaces", "persistentvolumeclaims").
  */
 export function dataplaneRevisionFetcher(token: string, kind: string, namespace?: string | null) {
-  return async (): Promise<string> => {
+  return async (contextName?: string): Promise<string> => {
     const q = new URLSearchParams({ kind });
     if (namespace) {
       q.set("namespace", namespace);
     }
-    const res = await apiGet<ApiDataplaneRevisionResponse>(`/api/dataplane/revision?${q.toString()}`, token);
+    const path = `/api/dataplane/revision?${q.toString()}`;
+    const res = contextName
+      ? await apiGetWithContext<ApiDataplaneRevisionResponse>(path, token, contextName)
+      : await apiGet<ApiDataplaneRevisionResponse>(path, token);
     if (!res.known) {
       return "0";
     }

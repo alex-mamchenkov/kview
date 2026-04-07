@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import ConfigMapDrawer from "./ConfigMapDrawer";
@@ -55,10 +55,11 @@ export default function ConfigMapsTable({
   token: string;
   namespace: string;
 }) {
-  const fetchRows = useCallback(async () => {
-    const res = await apiGet<ApiDataplaneListResponse<ConfigMap>>(
+  const fetchRows = useCallback(async (contextName?: string) => {
+    const res = await apiGetWithContext<ApiDataplaneListResponse<ConfigMap>>(
       `/api/namespaces/${encodeURIComponent(namespace)}/configmaps`,
       token,
+      contextName || "",
     );
     const items = res.items || [];
     return {

@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import ReplicaSetDrawer from "./ReplicaSetDrawer";
 import { fmtAge } from "../../../utils/format";
@@ -69,10 +69,11 @@ export default function ReplicaSetsTable({
   token: string;
   namespace: string;
 }) {
-  const fetchRows = useCallback(async () => {
-    const res = await apiGet<ApiDataplaneListResponse<ReplicaSet>>(
+  const fetchRows = useCallback(async (contextName?: string) => {
+    const res = await apiGetWithContext<ApiDataplaneListResponse<ReplicaSet>>(
       `/api/namespaces/${encodeURIComponent(namespace)}/replicasets`,
       token,
+      contextName || "",
     );
     const items = res.items || [];
     return {

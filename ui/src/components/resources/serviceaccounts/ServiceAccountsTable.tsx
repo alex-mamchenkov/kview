@@ -1,6 +1,6 @@
 import React, { useCallback } from "react";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGetWithContext } from "../../../api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import ServiceAccountDrawer from "./ServiceAccountDrawer";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
@@ -56,10 +56,11 @@ export default function ServiceAccountsTable({
   token: string;
   namespace: string;
 }) {
-  const fetchRows = useCallback(async () => {
-    const res = await apiGet<ApiDataplaneListResponse<ServiceAccount>>(
+  const fetchRows = useCallback(async (contextName?: string) => {
+    const res = await apiGetWithContext<ApiDataplaneListResponse<ServiceAccount>>(
       `/api/namespaces/${encodeURIComponent(namespace)}/serviceaccounts`,
       token,
+      contextName || "",
     );
     const items = res.items || [];
     return {

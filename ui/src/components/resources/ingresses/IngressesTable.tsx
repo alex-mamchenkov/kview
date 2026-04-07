@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import { Chip, Typography } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import IngressDrawer from "./IngressDrawer";
@@ -82,10 +82,11 @@ export default function IngressesTable({
   token: string;
   namespace: string;
 }) {
-  const fetchRows = useCallback(async () => {
-    const res = await apiGet<ApiDataplaneListResponse<Ingress>>(
+  const fetchRows = useCallback(async (contextName?: string) => {
+    const res = await apiGetWithContext<ApiDataplaneListResponse<Ingress>>(
       `/api/namespaces/${encodeURIComponent(namespace)}/ingresses`,
       token,
+      contextName || "",
     );
     const items = res.items || [];
     return {
