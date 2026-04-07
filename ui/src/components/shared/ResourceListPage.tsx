@@ -12,6 +12,8 @@ import ResourceTableToolbar, { type ResourceTableToolbarProps } from "./Resource
 import DataplaneListMetaStrip from "./DataplaneListMetaStrip";
 import { useActiveContext } from "../../activeContext";
 
+const defaultDataplaneRefreshSec = 10;
+
 export type ResourceListPageDrawerProps<TRow extends { id: string } = { id: string }> = {
   selectedId: string | null;
   /** The row object when a row is selected (for drawers that need the full row, e.g. HelmChart). */
@@ -58,6 +60,8 @@ export type ResourceListPageProps<TRow extends { id: string }> = {
     fetchRevision: () => Promise<string>;
     pollSec?: number;
   };
+  /** Full dataplane-backed refetch cadence while toolbar refresh remains Off. Default 10s for dataplane lists. */
+  dataplaneRefreshSec?: number;
 };
 
 /**
@@ -84,6 +88,7 @@ export default function ResourceListPage<TRow extends { id: string }>({
   renderFooterExtra,
   getRowHeight,
   dataplaneRevisionPoll,
+  dataplaneRefreshSec,
 }: ResourceListPageProps<TRow>) {
   const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>([]);
   const selectedId = useMemo<string | null>(() => {
@@ -109,6 +114,9 @@ export default function ResourceListPage<TRow extends { id: string }>({
     mapRowsDeps,
     fetchRevision: dataplaneRevisionPoll?.fetchRevision,
     revisionPollSec: dataplaneRevisionPoll ? (dataplaneRevisionPoll.pollSec ?? defaultRevisionPollSec) : 0,
+    dataplaneRefreshSec: dataplaneRevisionPoll
+      ? (dataplaneRefreshSec ?? defaultDataplaneRefreshSec)
+      : 0,
   });
 
   const accessDenied = useEmptyListAccessCheck({

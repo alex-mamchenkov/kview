@@ -20,6 +20,8 @@ type Props = {
   token: string;
 };
 
+const dashboardRefreshMs = 10_000;
+
 function stateChipColor(state: string): "success" | "warning" | "error" | "default" {
   return namespaceRowSummaryStateColor(state) as "success" | "warning" | "error" | "default";
 }
@@ -36,11 +38,11 @@ function StatCell({ label, value }: { label: string; value: React.ReactNode }) {
 function completenessExplanation(v: string): string {
   switch (v) {
     case "complete":
-      return "Workload totals cover every visible namespace that has a cached pod list in the dataplane.";
+      return "Resource totals cover every visible namespace that has at least one cached dataplane list.";
     case "partial":
-      return "Workload totals cover only namespaces with cached pod lists; some visible namespaces are not included yet.";
+      return "Resource totals cover only namespaces with cached dataplane lists; some visible namespaces are not included yet.";
     default:
-      return "Workload totals are not available until the dataplane has cached pod lists for at least one visible namespace.";
+      return "Resource totals are not available until the dataplane has cached a list for at least one visible namespace.";
   }
 }
 
@@ -52,21 +54,26 @@ export default function DashboardView(props: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setErr(null);
-    setData(null);
-    (async () => {
+    const load = async (initial: boolean) => {
+      if (initial) {
+        setLoading(true);
+        setData(null);
+      }
+      setErr(null);
       try {
         const res = await apiGet<ApiDashboardClusterResponse>("/api/dashboard/cluster", props.token);
         if (!cancelled) setData(res);
       } catch {
         if (!cancelled) setErr("Failed to load cluster overview");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && initial) setLoading(false);
       }
-    })();
+    };
+    void load(true);
+    const id = window.setInterval(() => void load(false), dashboardRefreshMs);
     return () => {
       cancelled = true;
+      window.clearInterval(id);
     };
   }, [activeContext, props.token]);
 
@@ -216,7 +223,7 @@ export default function DashboardView(props: Props) {
                       size="small"
                       variant="outlined"
                       color={cov.resourceTotalsCompleteness === "unknown" ? "warning" : "default"}
-                      label={`Workload totals: ${cov.resourceTotalsCompleteness}`}
+                      label={`Resource totals: ${cov.resourceTotalsCompleteness}`}
                     />
                     <Chip
                       size="small"
@@ -252,8 +259,8 @@ export default function DashboardView(props: Props) {
                     4 · Resource totals (known namespaces)
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    Pods, deployments, services, ingresses, and PVCs summed only from namespaces where the dataplane already
-                    has cached list snapshots (typically from visiting those namespaces or enrichment).
+                    Dataplane-owned namespaced lists summed only from namespaces where the dataplane already has cached
+                    snapshots (typically from visiting those namespaces or enrichment).
                   </Typography>
                   {resources.note && (
                     <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
@@ -277,9 +284,18 @@ export default function DashboardView(props: Props) {
                     <TableBody>
                       <StatCell label="Pods" value={resources.pods} />
                       <StatCell label="Deployments" value={resources.deployments} />
+                      <StatCell label="DaemonSets" value={resources.daemonSets} />
+                      <StatCell label="StatefulSets" value={resources.statefulSets} />
+                      <StatCell label="ReplicaSets" value={resources.replicaSets} />
+                      <StatCell label="Jobs" value={resources.jobs} />
+                      <StatCell label="CronJobs" value={resources.cronJobs} />
                       <StatCell label="Services" value={resources.services} />
                       <StatCell label="Ingresses" value={resources.ingresses} />
                       <StatCell label="PVCs" value={resources.persistentVolumeClaims} />
+                      <StatCell label="ConfigMaps" value={resources.configMaps} />
+                      <StatCell label="Secrets" value={resources.secrets} />
+                      <StatCell label="ServiceAccounts" value={resources.serviceAccounts} />
+                      <StatCell label="Roles" value={resources.roles} />
                     </TableBody>
                   </Table>
                 </Paper>

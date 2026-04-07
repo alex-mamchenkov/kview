@@ -51,7 +51,7 @@ Notable projection:
 
 ## Dashboard summary
 
-`GET /api/dashboard/cluster` uses **`DashboardSummary`**: namespace and node snapshot blocks, trust copy, optional **bounded** workload hints (cross-namespace sampling is not cluster-complete). See response types in `internal/dataplane/dashboard.go`.
+`GET /api/dashboard/cluster` uses **`DashboardSummary`**: namespace and node snapshot blocks, trust copy, resource totals for all dataplane-owned namespaced list kinds from cached namespace snapshots, and optional **bounded** workload hints (cross-namespace sampling is not cluster-complete). See response types in `internal/dataplane/dashboard.go`.
 
 ---
 

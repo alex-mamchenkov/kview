@@ -36,6 +36,34 @@ const (
 	ResourceKindCronJobs        ResourceKind = "cronjobs"
 )
 
+func dataplaneNamespacedListResourceKinds() []ResourceKind {
+	return []ResourceKind{
+		ResourceKindPods,
+		ResourceKindDeployments,
+		ResourceKindDaemonSets,
+		ResourceKindStatefulSets,
+		ResourceKindReplicaSets,
+		ResourceKindJobs,
+		ResourceKindCronJobs,
+		ResourceKindServices,
+		ResourceKindIngresses,
+		ResourceKindPVCs,
+		ResourceKindConfigMaps,
+		ResourceKindSecrets,
+		ResourceKindServiceAccounts,
+		ResourceKindRoles,
+	}
+}
+
+func dataplaneNamespacedListResourceKindStrings() []string {
+	kinds := dataplaneNamespacedListResourceKinds()
+	out := make([]string, 0, len(kinds))
+	for _, kind := range kinds {
+		out = append(out, string(kind))
+	}
+	return out
+}
+
 // WorkPriority orders dataplane snapshot work. Smaller value = higher priority.
 type WorkPriority int
 

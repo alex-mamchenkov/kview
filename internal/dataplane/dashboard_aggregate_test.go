@@ -25,14 +25,14 @@ func TestResourceTotalsCompletenessLabel(t *testing.T) {
 	}
 }
 
-func TestVisibleNamespacesWithCachedPods(t *testing.T) {
+func TestVisibleNamespacesWithCachedDataplaneLists(t *testing.T) {
 	p := newClusterPlane("c", ProfileFocused, DiscoveryModeTargeted, ObservationScope{})
 	now := time.Now().UTC()
 	meta := SnapshotMetadata{ObservedAt: now}
-	setNamespacedSnapshot(&p.podsStore, "bravo", PodsSnapshot{Items: []dto.PodListItemDTO{{Name: "p1"}}, Meta: meta})
+	setNamespacedSnapshot(&p.rolesStore, "bravo", RolesSnapshot{Items: []dto.RoleListItemDTO{{Name: "r1"}}, Meta: meta})
 
 	vis := []string{"alpha", "bravo", "charlie"}
-	got := visibleNamespacesWithCachedPods(p, vis)
+	got := visibleNamespacesWithCachedDataplaneLists(p, vis)
 	if len(got) != 1 || got[0] != "bravo" {
 		t.Fatalf("got %#v", got)
 	}
@@ -54,13 +54,28 @@ func TestAggregateClusterDashboard_FromCachedPodsOnly(t *testing.T) {
 		},
 	})
 	setNamespacedSnapshot(&plane.depsStore, ns, DeploymentsSnapshot{Meta: meta, Items: nil})
+	setNamespacedSnapshot(&plane.dsStore, ns, DaemonSetsSnapshot{Meta: meta, Items: []dto.DaemonSetDTO{{Name: "ds", Namespace: ns}}})
+	setNamespacedSnapshot(&plane.stsStore, ns, StatefulSetsSnapshot{Meta: meta, Items: []dto.StatefulSetDTO{{Name: "sts", Namespace: ns}}})
+	setNamespacedSnapshot(&plane.rsStore, ns, ReplicaSetsSnapshot{Meta: meta, Items: []dto.ReplicaSetDTO{{Name: "rs", Namespace: ns}}})
+	setNamespacedSnapshot(&plane.jobsStore, ns, JobsSnapshot{Meta: meta, Items: []dto.JobDTO{{Name: "job", Namespace: ns}}})
+	setNamespacedSnapshot(&plane.cjStore, ns, CronJobsSnapshot{Meta: meta, Items: []dto.CronJobDTO{{Name: "cj", Namespace: ns}}})
 	setNamespacedSnapshot(&plane.svcsStore, ns, ServicesSnapshot{Meta: meta, Items: nil})
 	setNamespacedSnapshot(&plane.ingStore, ns, IngressesSnapshot{Meta: meta, Items: nil})
 	setNamespacedSnapshot(&plane.pvcsStore, ns, PVCsSnapshot{Meta: meta, Items: nil})
+	setNamespacedSnapshot(&plane.cmsStore, ns, ConfigMapsSnapshot{Meta: meta, Items: []dto.ConfigMapDTO{{Name: "cm", Namespace: ns}}})
+	setNamespacedSnapshot(&plane.secsStore, ns, SecretsSnapshot{Meta: meta, Items: []dto.SecretDTO{{Name: "sec", Namespace: ns}}})
+	setNamespacedSnapshot(&plane.saStore, ns, ServiceAccountsSnapshot{Meta: meta, Items: []dto.ServiceAccountListItemDTO{{Name: "sa", Namespace: ns}}})
+	setNamespacedSnapshot(&plane.rolesStore, ns, RolesSnapshot{Meta: meta, Items: []dto.RoleListItemDTO{{Name: "role", Namespace: ns}}})
 
 	res, hot, wh, cov := mm.aggregateClusterDashboard(plane, []string{ns}, 1, 0)
 	if res.Pods != 1 {
 		t.Fatalf("pods: %d", res.Pods)
+	}
+	if res.DaemonSets != 1 || res.StatefulSets != 1 || res.ReplicaSets != 1 || res.Jobs != 1 || res.CronJobs != 1 {
+		t.Fatalf("workload totals: %+v", res)
+	}
+	if res.ConfigMaps != 1 || res.Secrets != 1 || res.ServiceAccounts != 1 || res.Roles != 1 {
+		t.Fatalf("config/access totals: %+v", res)
 	}
 	if hot.PodsWithElevatedRestarts < 1 {
 		t.Fatalf("elevated: %d", hot.PodsWithElevatedRestarts)

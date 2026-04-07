@@ -82,6 +82,33 @@ describe("useListQuery revision polling", () => {
     await waitFor(() => expect(fetchItems).toHaveBeenCalledTimes(1));
   });
 
+  it("can refetch dataplane lists on a full refresh interval even when revision is unchanged", async () => {
+    const fetchItems = vi.fn().mockResolvedValue({ rows: [{ id: "1", name: "a" }] });
+    const fetchRevision = vi.fn().mockResolvedValue("5");
+
+    const { result } = renderHook(() =>
+      useListQuery({
+        enabled: true,
+        refreshSec: 0,
+        fetchItems,
+        fetchRevision,
+        revisionPollSec: 1,
+        dataplaneRefreshSec: 10,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(fetchItems).toHaveBeenCalledTimes(1);
+
+    fetchItems.mockClear();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_500);
+    });
+
+    expect(fetchItems).toHaveBeenCalledTimes(1);
+  });
+
   it("reloads when the query key changes", async () => {
     const fetchItems = vi.fn(async (id: string) => ({ rows: [{ id, name: id }] }));
 

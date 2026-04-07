@@ -197,9 +197,18 @@ export type ApiDashboardClusterResponse = {
     resources: {
       pods: number;
       deployments: number;
+      daemonSets: number;
+      statefulSets: number;
+      replicaSets: number;
+      jobs: number;
+      cronJobs: number;
       services: number;
       ingresses: number;
       persistentVolumeClaims: number;
+      configMaps: number;
+      secrets: number;
+      serviceAccounts: number;
+      roles: number;
       totalNamespaces: number;
       note?: string;
       aggregateFreshness?: string;

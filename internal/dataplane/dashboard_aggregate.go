@@ -10,15 +10,15 @@ const (
 	clusterDashboardHotspotMergeLimit = 10
 )
 
-// resourceTotalsCompletenessLabel returns complete | partial | unknown for visible vs cached pod-list namespaces.
-func resourceTotalsCompletenessLabel(visible, withCachedPods int) string {
+// resourceTotalsCompletenessLabel returns complete | partial | unknown for visible vs cached dataplane-list namespaces.
+func resourceTotalsCompletenessLabel(visible, withCachedDataplaneLists int) string {
 	if visible <= 0 {
 		return "unknown"
 	}
-	if withCachedPods <= 0 {
+	if withCachedDataplaneLists <= 0 {
 		return "unknown"
 	}
-	if withCachedPods >= visible {
+	if withCachedDataplaneLists >= visible {
 		return "complete"
 	}
 	return "partial"
@@ -30,7 +30,7 @@ func resourceTotalsCompletenessLabel(visible, withCachedPods int) string {
 func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted []string, nsTotal int, nsUnhealthy int) (ClusterDashboardResourcesPanel, ClusterDashboardHotspotsPanel, ClusterDashboardWorkloadHints, ClusterDashboardCoverage) {
 	cov := m.buildDashboardCoverage(plane.name, nsNamesSorted, nsTotal)
 
-	knownNS := visibleNamespacesWithCachedPods(plane, nsNamesSorted)
+	knownNS := visibleNamespacesWithCachedDataplaneLists(plane, nsNamesSorted)
 	cov.NamespacesInResourceTotals = len(knownNS)
 	cov.ResourceTotalsCompleteness = resourceTotalsCompletenessLabel(nsTotal, len(knownNS))
 
@@ -47,7 +47,7 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 
 	if nsTotal == 0 || len(knownNS) == 0 || plane == nil {
 		if nsTotal > 0 && len(knownNS) == 0 {
-			res.Note = "No cached workload list snapshots yet for visible namespaces; totals stay at zero until namespaces are opened or row enrichment fills caches."
+			res.Note = "No cached dataplane list snapshots yet for visible namespaces; totals stay at zero until namespaces are opened or row enrichment fills caches."
 			hot.Note = res.Note
 			cov.ResourceTotalsNote = res.Note
 		} else if nsTotal == 0 {
@@ -58,15 +58,15 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 	}
 
 	if cov.ResourceTotalsCompleteness == "partial" {
-		t := "Resource totals and hotspots sum only namespaces where the dataplane already has cached workload lists; some visible namespaces are not included yet."
+		t := "Resource totals and hotspots sum only namespaces where the dataplane already has cached list snapshots; some visible namespaces are not included yet."
 		res.Note = t
 		hot.Note = t
 		cov.ResourceTotalsNote = t
 	} else {
-		cov.ResourceTotalsNote = "Totals include every visible namespace that has a cached pod list snapshot."
+		cov.ResourceTotalsNote = "Totals include every visible namespace that has at least one cached dataplane list snapshot."
 	}
 
-	var podMetas []SnapshotMetadata
+	var aggregateMetas []SnapshotMetadata
 	var hotspotLists [][]dto.PodRestartHotspotDTO
 	type nsScore struct {
 		ns    string
@@ -77,14 +77,23 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 	for _, ns := range knownNS {
 		podsSnap, podsOK := plane.podsStore.getCached(ns)
 		depsSnap, depsOK := plane.depsStore.getCached(ns)
+		dsSnap, dsOK := plane.dsStore.getCached(ns)
+		stsSnap, stsOK := plane.stsStore.getCached(ns)
+		rsSnap, rsOK := plane.rsStore.getCached(ns)
+		jobsSnap, jobsOK := plane.jobsStore.getCached(ns)
+		cjSnap, cjOK := plane.cjStore.getCached(ns)
 		svcsSnap, svcsOK := plane.svcsStore.getCached(ns)
 		ingsSnap, ingsOK := plane.ingStore.getCached(ns)
 		pvcSnap, pvcOK := plane.pvcsStore.getCached(ns)
+		cmSnap, cmOK := plane.cmsStore.getCached(ns)
+		secSnap, secOK := plane.secsStore.getCached(ns)
+		saSnap, saOK := plane.saStore.getCached(ns)
+		rolesSnap, rolesOK := plane.rolesStore.getCached(ns)
 
 		if podsOK && podsSnap.Err == nil {
 			res.Pods += len(podsSnap.Items)
 			hot.PodsWithElevatedRestarts += CountPodsWithRestartThreshold(podsSnap, restartElevatedThreshold)
-			podMetas = append(podMetas, podsSnap.Meta)
+			aggregateMetas = append(aggregateMetas, podsSnap.Meta)
 			hList := ProjectRestartHotspotsFromPods(ns, podsSnap, defaultRestartHotspotLimit)
 			if len(hList.Items) > 0 {
 				hotspotLists = append(hotspotLists, hList.Items)
@@ -99,17 +108,53 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 				}
 			}
 		}
+		if dsOK && dsSnap.Err == nil {
+			res.DaemonSets += len(dsSnap.Items)
+			aggregateMetas = append(aggregateMetas, dsSnap.Meta)
+		}
+		if stsOK && stsSnap.Err == nil {
+			res.StatefulSets += len(stsSnap.Items)
+			aggregateMetas = append(aggregateMetas, stsSnap.Meta)
+		}
+		if rsOK && rsSnap.Err == nil {
+			res.ReplicaSets += len(rsSnap.Items)
+			aggregateMetas = append(aggregateMetas, rsSnap.Meta)
+		}
+		if jobsOK && jobsSnap.Err == nil {
+			res.Jobs += len(jobsSnap.Items)
+			aggregateMetas = append(aggregateMetas, jobsSnap.Meta)
+		}
+		if cjOK && cjSnap.Err == nil {
+			res.CronJobs += len(cjSnap.Items)
+			aggregateMetas = append(aggregateMetas, cjSnap.Meta)
+		}
 		if svcsOK && svcsSnap.Err == nil {
 			res.Services += len(svcsSnap.Items)
-			podMetas = append(podMetas, svcsSnap.Meta)
+			aggregateMetas = append(aggregateMetas, svcsSnap.Meta)
 		}
 		if ingsOK && ingsSnap.Err == nil {
 			res.Ingresses += len(ingsSnap.Items)
-			podMetas = append(podMetas, ingsSnap.Meta)
+			aggregateMetas = append(aggregateMetas, ingsSnap.Meta)
 		}
 		if pvcOK && pvcSnap.Err == nil {
 			res.PersistentVolumeClaims += len(pvcSnap.Items)
-			podMetas = append(podMetas, pvcSnap.Meta)
+			aggregateMetas = append(aggregateMetas, pvcSnap.Meta)
+		}
+		if cmOK && cmSnap.Err == nil {
+			res.ConfigMaps += len(cmSnap.Items)
+			aggregateMetas = append(aggregateMetas, cmSnap.Meta)
+		}
+		if secOK && secSnap.Err == nil {
+			res.Secrets += len(secSnap.Items)
+			aggregateMetas = append(aggregateMetas, secSnap.Meta)
+		}
+		if saOK && saSnap.Err == nil {
+			res.ServiceAccounts += len(saSnap.Items)
+			aggregateMetas = append(aggregateMetas, saSnap.Meta)
+		}
+		if rolesOK && rolesSnap.Err == nil {
+			res.Roles += len(rolesSnap.Items)
+			aggregateMetas = append(aggregateMetas, rolesSnap.Meta)
 		}
 
 		var probPods []dto.ProblematicResource
@@ -120,7 +165,18 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 		if depsOK && depsSnap.Err == nil {
 			probDeps = deploymentProblematicListUnbounded(depsSnap.Items)
 		}
-		pc := countUniqueProblematic(probPods, probDeps)
+		var probWorkloads []dto.ProblematicResource
+		if dsOK && dsSnap.Err == nil || stsOK && stsSnap.Err == nil || jobsOK && jobsSnap.Err == nil || cjOK && cjSnap.Err == nil {
+			probWorkloads = WorkloadProblematicCandidates(
+				nil,
+				dsSnap.Items,
+				stsSnap.Items,
+				jobsSnap.Items,
+				cjSnap.Items,
+				clusterDashboardHotspotMergeLimit,
+			)
+		}
+		pc := countUniqueProblematic(probPods, probDeps, probWorkloads)
 		hot.ProblematicResources += pc
 		if pc > 0 {
 			scores = append(scores, nsScore{ns: ns, score: pc})
@@ -147,9 +203,9 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 		}
 	}
 
-	if len(podMetas) > 0 {
-		wf := string(WorstFreshnessFromSnapshots(podMetas...))
-		wd := string(WorstDegradationFromSnapshots(podMetas...))
+	if len(aggregateMetas) > 0 {
+		wf := string(WorstFreshnessFromSnapshots(aggregateMetas...))
+		wd := string(WorstDegradationFromSnapshots(aggregateMetas...))
 		res.AggregateFreshness = wf
 		res.AggregateDegradation = wd
 		hot.AggregateFreshness = wf
@@ -165,17 +221,63 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 	return res, hot, wh, cov
 }
 
-func visibleNamespacesWithCachedPods(plane *clusterPlane, visibleSorted []string) []string {
+func visibleNamespacesWithCachedDataplaneLists(plane *clusterPlane, visibleSorted []string) []string {
 	if plane == nil || len(visibleSorted) == 0 {
 		return nil
 	}
 	out := make([]string, 0, len(visibleSorted))
 	for _, ns := range visibleSorted {
-		if _, ok := plane.podsStore.getCached(ns); ok {
+		if namespaceHasCachedDataplaneList(plane, ns) {
 			out = append(out, ns)
 		}
 	}
 	return out
+}
+
+func namespaceHasCachedDataplaneList(plane *clusterPlane, ns string) bool {
+	if _, ok := plane.podsStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.depsStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.dsStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.stsStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.rsStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.jobsStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.cjStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.svcsStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.ingStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.pvcsStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.cmsStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.secsStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.saStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.rolesStore.getCached(ns); ok {
+		return true
+	}
+	return false
 }
 
 func (m *manager) buildDashboardCoverage(cluster string, visibleSorted []string, visibleCount int) ClusterDashboardCoverage {

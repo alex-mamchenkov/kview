@@ -86,9 +86,18 @@ type ClusterDashboardCoverage struct {
 type ClusterDashboardResourcesPanel struct {
 	Pods                   int    `json:"pods"`
 	Deployments            int    `json:"deployments"`
+	DaemonSets             int    `json:"daemonSets"`
+	StatefulSets           int    `json:"statefulSets"`
+	ReplicaSets            int    `json:"replicaSets"`
+	Jobs                   int    `json:"jobs"`
+	CronJobs               int    `json:"cronJobs"`
 	Services               int    `json:"services"`
 	Ingresses              int    `json:"ingresses"`
 	PersistentVolumeClaims int    `json:"persistentVolumeClaims"`
+	ConfigMaps             int    `json:"configMaps"`
+	Secrets                int    `json:"secrets"`
+	ServiceAccounts        int    `json:"serviceAccounts"`
+	Roles                  int    `json:"roles"`
 	TotalNamespaces        int    `json:"totalNamespaces"`
 	Note                   string `json:"note,omitempty"`
 	AggregateFreshness     string `json:"aggregateFreshness,omitempty"`
@@ -168,14 +177,14 @@ func (m *manager) DashboardSummary(ctx context.Context, clusterName string) Clus
 	if len(scope.Namespaces) > 0 {
 		namespaceScope = strings.Join(scope.Namespaces, ",")
 	}
-	resourceScope := "first_wave_defaults"
+	resourceScope := strings.Join(dataplaneNamespacedListResourceKindStrings(), ",")
 	if len(scope.ResourceKinds) > 0 {
 		resourceScope = strings.Join(scope.ResourceKinds, ",")
 	}
 
 	resPanel, hotPanel, wh, cov := m.aggregateClusterDashboard(plane, nsNames, nsTotal, nsUnhealthy)
 
-	trust := "Namespace and node blocks reflect cluster-wide list snapshots. Workload totals and hotspots use only namespaces where the dataplane already has cached list snapshots (see coverage.resourceTotalsCompleteness and coverage.namespacesInResourceTotals)."
+	trust := "Namespace and node blocks reflect cluster-wide list snapshots. Resource totals and hotspots use only namespaces where the dataplane already has cached list snapshots (see coverage.resourceTotalsCompleteness and coverage.namespacesInResourceTotals)."
 
 	return ClusterDashboardSummary{
 		Plane: ClusterDashboardPlane{
