@@ -109,9 +109,12 @@ function normalizeAccessDenied(shape: ApiErrorShape): ApiErrorShape {
 }
 
 function shouldNotifyFailure(shape: ApiErrorShape): boolean {
-  // RBAC / auth failures are expected in many read-only views and should not
-  // be treated as connection-health regressions.
-  return shape.status !== 401 && shape.status !== 403;
+  // RBAC / auth failures and expected resource-level responses belong in the
+  // view that requested them. Reserve global toasts for likely infrastructure
+  // or service-side failures.
+  if (!shape.status) return true;
+  if (shape.status === 408 || shape.status === 429) return true;
+  return shape.status >= 500;
 }
 
 export function toApiError(error: unknown): ApiError {

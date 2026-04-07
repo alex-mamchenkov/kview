@@ -89,17 +89,15 @@ export function notifyApiFailure(kind: ConnectionIssueKind, message: string) {
     updateCluster({ ok: false, context: state.cluster?.context || "", message });
     return;
   }
-  if (state.health === "unhealthy" && state.activeIssue?.kind === "request") return;
   const now = Date.now();
-  state.health = "unhealthy";
-  state.backendHealth = "healthy";
-  state.activeIssue = {
-    kind,
-    message,
-    id: `issue-${now}`,
-    at: now,
-  };
-  state.lastTransitionAt = now;
+  if (state.activeIssue?.kind !== "request" || state.activeIssue.message !== message) {
+    state.activeIssue = {
+      kind,
+      message,
+      id: `issue-${now}`,
+      at: now,
+    };
+  }
   emitChange();
 }
 
