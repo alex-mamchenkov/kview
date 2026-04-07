@@ -14,11 +14,18 @@ export default function ConnectionBanner() {
     return null;
   }
 
-  const title = activeIssue.kind === "backend" ? "Backend unreachable" : "Refresh failed";
+  const title =
+    activeIssue.kind === "backend"
+      ? "Backend unreachable"
+      : activeIssue.kind === "cluster"
+        ? "Cluster unreachable"
+        : "Refresh failed";
   const description =
     activeIssue.kind === "backend"
       ? "The UI cannot reach the kview backend. We'll keep retrying in the background."
-      : "The latest refresh failed. We'll keep retrying in the background.";
+      : activeIssue.kind === "cluster"
+        ? "The backend cannot reach the active Kubernetes cluster. Actions and automatic refresh should be treated as unavailable until this recovers."
+        : "The latest refresh failed. We'll keep retrying in the background.";
 
   return (
     <Box sx={{ mb: 1 }}>

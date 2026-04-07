@@ -27,6 +27,8 @@ export type ResourceTableToolbarProps = {
   refreshSec: number;
   onRefreshChange: (value: number) => void;
   quickFilters: QuickFilter[];
+  disabled?: boolean;
+  showRefresh?: boolean;
 };
 
 export default function ResourceTableToolbar({
@@ -40,6 +42,8 @@ export default function ResourceTableToolbar({
   refreshSec,
   onRefreshChange,
   quickFilters,
+  disabled = false,
+  showRefresh = true,
 }: ResourceTableToolbarProps) {
   return (
     <GridToolbarContainer sx={{ display: "flex", flexDirection: "column", gap: 1, p: 1 }}>
@@ -50,6 +54,7 @@ export default function ResourceTableToolbar({
           value={filter}
           onChange={(e) => onFilterChange(e.target.value)}
           sx={{ minWidth: 340 }}
+          disabled={disabled}
           InputProps={{
             endAdornment: filter ? (
               <InputAdornment position="end">
@@ -60,23 +65,26 @@ export default function ResourceTableToolbar({
             ) : undefined,
           }}
         />
-        <FormControl size="small" sx={{ minWidth: 120 }}>
-          <InputLabel id="refresh-label">Refresh</InputLabel>
-          <Select
-            labelId="refresh-label"
-            label="Refresh"
-            value={refreshSec}
-            onChange={(e) => onRefreshChange(Number(e.target.value))}
-          >
-            {refreshOptions.map((o) => (
-              <MenuItem key={o.value} value={o.value}>
-                {o.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        {showRefresh ? (
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel id="refresh-label">Refresh</InputLabel>
+            <Select
+              labelId="refresh-label"
+              label="Refresh"
+              value={refreshSec}
+              onChange={(e) => onRefreshChange(Number(e.target.value))}
+              disabled={disabled}
+            >
+              {refreshOptions.map((o) => (
+                <MenuItem key={o.value} value={o.value}>
+                  {o.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        ) : null}
         <Box sx={{ flexGrow: 1 }} />
-        <Button variant="contained" onClick={onOpenSelected} disabled={!hasSelection}>
+        <Button variant="contained" onClick={onOpenSelected} disabled={disabled || !hasSelection}>
           Open
         </Button>
       </Box>
@@ -88,6 +96,7 @@ export default function ResourceTableToolbar({
               size="small"
               variant={selectedQuickFilter === q.value ? "contained" : "outlined"}
               onClick={() => onQuickFilterToggle(q.value)}
+              disabled={disabled}
             >
               {q.label}
             </Button>

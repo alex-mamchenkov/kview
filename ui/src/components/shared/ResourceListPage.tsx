@@ -11,6 +11,7 @@ import ListStateOverlay from "./ListStateOverlay";
 import ResourceTableToolbar, { type ResourceTableToolbarProps } from "./ResourceTableToolbar";
 import DataplaneListMetaStrip from "./DataplaneListMetaStrip";
 import { useActiveContext } from "../../activeContext";
+import { useConnectionState } from "../../connectionState";
 
 const defaultDataplaneRefreshSec = 10;
 
@@ -101,6 +102,8 @@ export default function ResourceListPage<TRow extends { id: string }>({
   const [drawerSelectedId, setDrawerSelectedId] = useState<string | null>(null);
   const [refreshSec, setRefreshSec] = useState<number>(initialRefreshSec);
   const activeContext = useActiveContext();
+  const { health } = useConnectionState();
+  const offline = health === "unhealthy";
 
   const fetchRowsStable = useCallback(() => fetchRows(activeContext), [activeContext, fetchRows]);
   const fetchRevisionStable = useCallback(
@@ -214,6 +217,8 @@ export default function ResourceListPage<TRow extends { id: string }>({
               refreshSec,
               onRefreshChange: setRefreshSec,
               quickFilters,
+              disabled: offline,
+              showRefresh: !dataplaneRevisionPoll,
             } as ResourceTableToolbarProps,
             noRowsOverlay: {
               error,

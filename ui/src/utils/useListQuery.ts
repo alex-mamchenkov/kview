@@ -53,7 +53,7 @@ export default function useListQuery<T>({
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-  const { retryNonce } = useConnectionState();
+  const { health, retryNonce } = useConnectionState();
 
   const onInitialResultRef = useRef(onInitialResult);
 
@@ -136,7 +136,7 @@ export default function useListQuery<T>({
   }, [enabled, loadInitial, retryNonce, ...(queryKey ?? [])]);
 
   useEffect(() => {
-    if (!enabled || refreshSec <= 0) return;
+    if (!enabled || health === "unhealthy" || refreshSec <= 0) return;
     const t = setInterval(async () => {
       const generation = generationRef.current;
       try {
@@ -161,10 +161,10 @@ export default function useListQuery<T>({
       }
     }, refreshSec * 1000);
     return () => clearInterval(t);
-  }, [enabled, refreshSec, fetchItems]);
+  }, [enabled, health, refreshSec, fetchItems]);
 
   useEffect(() => {
-    if (!enabled || loading) return;
+    if (!enabled || health === "unhealthy" || loading) return;
     if (refreshSec > 0) return;
     const fr = fetchRevisionRef.current;
     if (!fr || revisionPollSec <= 0) return;
@@ -195,10 +195,10 @@ export default function useListQuery<T>({
 
     const t = setInterval(() => void tick(), revisionPollSec * 1000);
     return () => clearInterval(t);
-  }, [enabled, loading, refreshSec, revisionPollSec, fetchRevision]);
+  }, [enabled, health, loading, refreshSec, revisionPollSec, fetchRevision]);
 
   useEffect(() => {
-    if (!enabled || loading) return;
+    if (!enabled || health === "unhealthy" || loading) return;
     if (refreshSec > 0) return;
     if (!fetchRevisionRef.current || dataplaneRefreshSec <= 0) return;
 
@@ -228,7 +228,7 @@ export default function useListQuery<T>({
 
     const t = setInterval(() => void tick(), dataplaneRefreshSec * 1000);
     return () => clearInterval(t);
-  }, [dataplaneRefreshSec, enabled, loading, refreshSec]);
+  }, [dataplaneRefreshSec, enabled, health, loading, refreshSec]);
 
   return { items, dataplaneMeta, error, loading, lastRefresh, refetch: loadInitial };
 }

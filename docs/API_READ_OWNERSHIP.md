@@ -114,7 +114,7 @@ For resources that have them, these remain **direct** `kube` reads:
 
 | Route | Substrate |
 |-------|-----------|
-| `GET /api/healthz`, `GET /api/contexts` | Server / cluster manager. |
+| `GET /api/healthz`, `GET /api/status`, `GET /api/contexts` | Server / cluster manager; `/api/status` additionally performs a lightweight discovery version check for active cluster reachability. |
 | `GET /api/activity`, `GET /api/activity/{id}/logs` | Runtime registry / logs. |
 | `GET /api/sessions`, `GET /api/sessions/{id}` | Session manager. |
 | `GET …/logs/ws`, `GET …/terminal/ws` | Streaming (not snapshot reads). |

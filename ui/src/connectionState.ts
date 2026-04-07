@@ -1,7 +1,25 @@
 import { useSyncExternalStore } from "react";
 
 export type ConnectionHealth = "healthy" | "unhealthy";
-export type ConnectionIssueKind = "backend" | "request";
+export type ConnectionIssueKind = "backend" | "cluster" | "request";
+
+export type ClusterConnectionStatus = {
+  ok: boolean;
+  context: string;
+  cluster?: string;
+  authInfo?: string;
+  namespace?: string;
+  serverVersion?: string;
+  message?: string;
+};
+
+export type AppStatus = {
+  ok: boolean;
+  activeContext: string;
+  backend: { ok: boolean };
+  cluster: ClusterConnectionStatus;
+  checkedAt: string;
+};
 
 export type ConnectionIssue = {
   kind: ConnectionIssueKind;
@@ -12,7 +30,10 @@ export type ConnectionIssue = {
 
 export type ConnectionState = {
   health: ConnectionHealth;
+  backendHealth: ConnectionHealth;
+  clusterHealth: ConnectionHealth;
   activeIssue?: ConnectionIssue;
+  cluster?: ClusterConnectionStatus;
   lastTransitionAt: number;
   retryNonce: number;
   lastRecoveryShownAt?: number;
@@ -20,18 +41,26 @@ export type ConnectionState = {
 
 const state: ConnectionState = {
   health: "healthy",
+  backendHealth: "healthy",
+  clusterHealth: "healthy",
   lastTransitionAt: Date.now(),
   retryNonce: 0,
 };
 
+let snapshot: ConnectionState = { ...state };
 const listeners = new Set<() => void>();
 
 function emitChange() {
+  snapshot = {
+    ...state,
+    activeIssue: state.activeIssue ? { ...state.activeIssue } : undefined,
+    cluster: state.cluster ? { ...state.cluster } : undefined,
+  };
   listeners.forEach((listener) => listener());
 }
 
 export function getConnectionState(): ConnectionState {
-  return state;
+  return snapshot;
 }
 
 export function subscribeConnectionState(listener: () => void) {
@@ -44,19 +73,26 @@ export function useConnectionState(): ConnectionState {
 }
 
 export function notifyApiSuccess() {
-  if (state.health === "healthy") return;
+  if (state.backendHealth === "healthy") return;
   const now = Date.now();
-  state.health = "healthy";
-  state.activeIssue = undefined;
-  state.lastTransitionAt = now;
-  state.lastRecoveryShownAt = now;
+  state.backendHealth = "healthy";
+  recomputeHealth(now);
   emitChange();
 }
 
 export function notifyApiFailure(kind: ConnectionIssueKind, message: string) {
-  if (state.health === "unhealthy") return;
+  if (kind === "backend") {
+    updateBackend(false, message);
+    return;
+  }
+  if (kind === "cluster") {
+    updateCluster({ ok: false, context: state.cluster?.context || "", message });
+    return;
+  }
+  if (state.health === "unhealthy" && state.activeIssue?.kind === "request") return;
   const now = Date.now();
   state.health = "unhealthy";
+  state.backendHealth = "healthy";
   state.activeIssue = {
     kind,
     message,
@@ -65,6 +101,79 @@ export function notifyApiFailure(kind: ConnectionIssueKind, message: string) {
   };
   state.lastTransitionAt = now;
   emitChange();
+}
+
+export function notifyStatus(status: AppStatus) {
+  const now = Date.now();
+  state.backendHealth = status.backend?.ok === false ? "unhealthy" : "healthy";
+  state.cluster = status.cluster;
+  state.clusterHealth = status.cluster?.ok ? "healthy" : "unhealthy";
+  recomputeHealth(now);
+  emitChange();
+}
+
+function updateBackend(ok: boolean, message: string) {
+  const now = Date.now();
+  state.backendHealth = ok ? "healthy" : "unhealthy";
+  if (!ok) {
+    if (state.activeIssue?.kind !== "backend" || state.activeIssue.message !== message) {
+      state.activeIssue = {
+        kind: "backend",
+        message,
+        id: `issue-${now}`,
+        at: now,
+      };
+    }
+    state.health = "unhealthy";
+    state.lastTransitionAt = now;
+  } else {
+    recomputeHealth(now);
+  }
+  emitChange();
+}
+
+function updateCluster(cluster: ClusterConnectionStatus) {
+  const now = Date.now();
+  state.cluster = cluster;
+  state.clusterHealth = cluster.ok ? "healthy" : "unhealthy";
+  recomputeHealth(now);
+  emitChange();
+}
+
+function recomputeHealth(now: number) {
+  const was = state.health;
+  if (state.backendHealth === "unhealthy") {
+    state.health = "unhealthy";
+    state.activeIssue = state.activeIssue?.kind === "backend"
+      ? state.activeIssue
+      : {
+          kind: "backend",
+          message: "The UI cannot reach the kview backend.",
+          id: `issue-${now}`,
+          at: now,
+        };
+  } else if (state.clusterHealth === "unhealthy") {
+    const message = state.cluster?.message || "The backend cannot reach the active Kubernetes cluster.";
+    state.health = "unhealthy";
+    if (state.activeIssue?.kind !== "cluster" || state.activeIssue.message !== message) {
+      state.activeIssue = {
+        kind: "cluster",
+        message,
+        id: `issue-${now}`,
+        at: now,
+      };
+    }
+  } else {
+    state.health = "healthy";
+    state.activeIssue = undefined;
+  }
+
+  if (state.health !== was) {
+    state.lastTransitionAt = now;
+    if (state.health === "healthy") {
+      state.lastRecoveryShownAt = now;
+    }
+  }
 }
 
 export function requestConnectionRetry() {

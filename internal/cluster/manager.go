@@ -192,6 +192,22 @@ func (m *Manager) ListContexts() []ContextInfo {
 	return out
 }
 
+func (m *Manager) ContextInfo(name string) (ContextInfo, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	ctx, ok := m.rawConfig.Contexts[name]
+	if !ok {
+		return ContextInfo{}, false
+	}
+	return ContextInfo{
+		Name:      name,
+		Cluster:   ctx.Cluster,
+		AuthInfo:  ctx.AuthInfo,
+		Namespace: ctx.Namespace,
+	}, true
+}
+
 func (m *Manager) ActiveContext() string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

@@ -38,7 +38,7 @@ import {
   type AppStateV1,
   type Section,
 } from "./state";
-import { useConnectionState } from "./connectionState";
+import { notifyApiFailure, notifyStatus, useConnectionState, type AppStatus } from "./connectionState";
 import ConnectionBanner from "./components/shared/ConnectionBanner";
 import DashboardView from "./components/resources/dashboard/DashboardView";
 import ActivityPanel from "./components/activity/ActivityPanel";
@@ -54,8 +54,10 @@ function getToken(): string {
 
 function AppInner() {
   const token = useMemo(() => getToken(), []);
-  const { lastRecoveryShownAt } = useConnectionState();
+  const { activeIssue, lastRecoveryShownAt, retryNonce } = useConnectionState();
   const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [criticalOpen, setCriticalOpen] = useState(false);
+  const [lastCriticalSeenId, setLastCriticalSeenId] = useState<string | null>(null);
   const [lastRecoverySeenAt, setLastRecoverySeenAt] = useState<number | null>(null);
   const [contexts, setContexts] = useState<Array<{ name: string }>>([]);
   const [activeContext, setActiveContext] = useState<string>("");
@@ -87,6 +89,46 @@ function AppInner() {
     setLastRecoverySeenAt(lastRecoveryShownAt);
     setRecoveryOpen(true);
   }, [lastRecoverySeenAt, lastRecoveryShownAt]);
+
+  useEffect(() => {
+    if (!activeIssue) return;
+    if (activeIssue.id === lastCriticalSeenId) return;
+    setLastCriticalSeenId(activeIssue.id);
+    setCriticalOpen(true);
+  }, [activeIssue, lastCriticalSeenId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const pollStatus = async () => {
+      try {
+        const res = await fetch("/api/status", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...(activeContext ? { "X-Kview-Context": activeContext } : {}),
+          },
+        });
+        if (!res.ok) {
+          const message = res.statusText || `Status check failed (${res.status})`;
+          if (!cancelled) notifyApiFailure(res.status >= 500 ? "backend" : "request", message);
+          return;
+        }
+        const status = (await res.json()) as AppStatus;
+        if (!cancelled) notifyStatus(status);
+      } catch (err) {
+        if (!cancelled) {
+          notifyApiFailure("backend", String((err as Error | undefined)?.message || err || "Network error"));
+        }
+      }
+    };
+
+    void pollStatus();
+    const id = window.setInterval(pollStatus, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [activeContext, retryNonce, token]);
 
   // initial bootstrap
   useEffect(() => {
@@ -331,6 +373,20 @@ function AppInner() {
           >
             <Alert severity="success" variant="filled" onClose={() => setRecoveryOpen(false)}>
               Connection restored
+            </Alert>
+          </Snackbar>
+          <Snackbar
+            open={criticalOpen && !!activeIssue}
+            autoHideDuration={6000}
+            onClose={() => setCriticalOpen(false)}
+            anchorOrigin={{ vertical: "top", horizontal: "center" }}
+          >
+            <Alert severity="error" variant="filled" onClose={() => setCriticalOpen(false)}>
+              {activeIssue?.kind === "cluster"
+                ? `Cluster connection failed${activeIssue.message ? `: ${activeIssue.message}` : ""}`
+                : activeIssue?.kind === "backend"
+                  ? `Backend connection failed${activeIssue.message ? `: ${activeIssue.message}` : ""}`
+                  : activeIssue?.message || "Request failed"}
             </Alert>
           </Snackbar>
           <ActivityPanel token={token} />

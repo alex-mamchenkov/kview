@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Box, Tabs, Tab, IconButton } from "@mui/material";
+import { Box, Tabs, Tab, IconButton, Tooltip, Typography } from "@mui/material";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ActivityTabs from "./ActivityTabs";
@@ -9,6 +9,7 @@ import {
   OPEN_TERMINAL_SESSION_EVENT,
   type OpenTerminalSessionEventDetail,
 } from "../../activityEvents";
+import { useConnectionState } from "../../connectionState";
 
 type Props = {
   token: string;
@@ -19,6 +20,7 @@ const MAX_PANEL_HEIGHT = 630;
 const HEADER_HEIGHT = 28;
 
 export default function ActivityPanel({ token }: Props) {
+  const { backendHealth, clusterHealth, cluster } = useConnectionState();
   const [open, setOpen] = useState(true);
   const [tab, setTab] = useState(0);
   const [height, setHeight] = useState(230);
@@ -153,6 +155,24 @@ export default function ActivityPanel({ token }: Props) {
           <Tab label="Logs" />
         </Tabs>
         <Box sx={{ flexGrow: 1 }} />
+        <Tooltip
+          title={`Backend: ${backendHealth}. Cluster: ${clusterHealth}${cluster?.message ? ` (${cluster.message})` : ""}`}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mr: 1 }}>
+            <StatusDot ok={backendHealth === "healthy"} label="Backend" />
+            <StatusDot ok={clusterHealth === "healthy"} label="Cluster" />
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              noWrap
+              sx={{ display: { xs: "none", md: "block" }, maxWidth: 280 }}
+            >
+              {cluster?.context || "no context"}
+              {cluster?.cluster ? ` / ${cluster.cluster}` : ""}
+              {cluster?.authInfo ? ` / ${cluster.authInfo}` : ""}
+            </Typography>
+          </Box>
+        </Tooltip>
         <IconButton
           size="small"
           onClick={() => setOpen((v) => !v)}
@@ -183,5 +203,22 @@ export default function ActivityPanel({ token }: Props) {
         />
       </Box>
     </Box>
+  );
+}
+
+function StatusDot({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <Box
+      component="span"
+      aria-label={`${label} ${ok ? "connected" : "disconnected"}`}
+      sx={{
+        width: 9,
+        height: 9,
+        borderRadius: "50%",
+        bgcolor: ok ? "success.main" : "error.main",
+        boxShadow: ok ? "0 0 0 2px rgba(46, 125, 50, 0.18)" : "0 0 0 2px rgba(211, 47, 47, 0.18)",
+        flexShrink: 0,
+      }}
+    />
   );
 }

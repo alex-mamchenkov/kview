@@ -38,6 +38,8 @@ type Server struct {
 	sessions       session.Manager
 	deniedLogMu    sync.Mutex
 	deniedLogUntil map[string]time.Time
+	statusLogMu    sync.Mutex
+	clusterOnline  map[string]bool
 }
 
 func New(mgr *cluster.Manager, rt runtime.RuntimeManager, token string) *Server {
@@ -54,6 +56,7 @@ func New(mgr *cluster.Manager, rt runtime.RuntimeManager, token string) *Server 
 		dp:             dpMgr,
 		sessions:       session.NewInMemoryManager(rt.Registry()),
 		deniedLogUntil: map[string]time.Time{},
+		clusterOnline:  map[string]bool{},
 	}
 	// Best-effort runtime manager startup; failures are logged via regular logs.
 	_ = s.rt.Start(context.Background())
@@ -508,6 +511,11 @@ func (s *Server) Router() http.Handler {
 				"ok":            true,
 				"activeContext": s.mgr.ActiveContext(),
 			})
+		})
+
+		api.Get("/status", func(w http.ResponseWriter, r *http.Request) {
+			status := s.buildStatus(r.Context(), s.readContextName(r))
+			writeJSON(w, http.StatusOK, status)
 		})
 
 		api.Get("/dashboard/cluster", func(w http.ResponseWriter, r *http.Request) {
@@ -2693,9 +2701,9 @@ func isWebSocketUpgradeRequest(r *http.Request) bool {
 
 func (s *Server) dataplaneUserActivityMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Namespace enrichment idle gate: polling this route must not count as "activity".
+		// Namespace enrichment idle gate: background polling routes must not count as "activity".
 		p := strings.TrimSuffix(r.URL.Path, "/")
-		if p != "/api/namespaces/enrichment" {
+		if p != "/api/namespaces/enrichment" && p != "/api/status" {
 			s.dp.NoteUserActivity()
 		}
 		next.ServeHTTP(w, r)
@@ -2878,6 +2886,96 @@ func sanitizeErrorMessage(status int) string {
 	default:
 		return "request failed"
 	}
+}
+
+type statusBackendDTO struct {
+	OK bool `json:"ok"`
+}
+
+type statusClusterDTO struct {
+	OK            bool   `json:"ok"`
+	Context       string `json:"context"`
+	Cluster       string `json:"cluster,omitempty"`
+	AuthInfo      string `json:"authInfo,omitempty"`
+	Namespace     string `json:"namespace,omitempty"`
+	ServerVersion string `json:"serverVersion,omitempty"`
+	Message       string `json:"message,omitempty"`
+}
+
+type statusDTO struct {
+	OK            bool             `json:"ok"`
+	ActiveContext string           `json:"activeContext"`
+	Backend       statusBackendDTO `json:"backend"`
+	Cluster       statusClusterDTO `json:"cluster"`
+	CheckedAt     time.Time        `json:"checkedAt"`
+}
+
+func (s *Server) buildStatus(parent context.Context, contextName string) statusDTO {
+	checkedAt := time.Now().UTC()
+	clusterStatus := statusClusterDTO{Context: contextName}
+	if info, ok := s.mgr.ContextInfo(contextName); ok {
+		clusterStatus.Cluster = info.Cluster
+		clusterStatus.AuthInfo = info.AuthInfo
+		clusterStatus.Namespace = info.Namespace
+	}
+
+	ctx, cancel := context.WithTimeout(parent, 3*time.Second)
+	defer cancel()
+
+	clients, active, err := s.mgr.GetClientsForContext(ctx, contextName)
+	if active != "" {
+		clusterStatus.Context = active
+	}
+	if err == nil {
+		version, versionErr := clients.Discovery.ServerVersion()
+		if versionErr != nil {
+			err = versionErr
+		} else {
+			clusterStatus.OK = true
+			clusterStatus.ServerVersion = version.GitVersion
+		}
+	}
+	if err != nil {
+		clusterStatus.OK = false
+		clusterStatus.Message = err.Error()
+	}
+
+	s.logClusterStatusTransition(clusterStatus)
+
+	return statusDTO{
+		OK:            clusterStatus.OK,
+		ActiveContext: clusterStatus.Context,
+		Backend:       statusBackendDTO{OK: true},
+		Cluster:       clusterStatus,
+		CheckedAt:     checkedAt,
+	}
+}
+
+func (s *Server) logClusterStatusTransition(clusterStatus statusClusterDTO) {
+	contextName := clusterStatus.Context
+	if contextName == "" {
+		contextName = "(none)"
+	}
+
+	s.statusLogMu.Lock()
+	prev, seen := s.clusterOnline[contextName]
+	if seen && prev == clusterStatus.OK {
+		s.statusLogMu.Unlock()
+		return
+	}
+	s.clusterOnline[contextName] = clusterStatus.OK
+	s.statusLogMu.Unlock()
+
+	if clusterStatus.OK {
+		logStructured(s.rt, runtime.LogLevelInfo, "connectivity", "success",
+			fmt.Sprintf("cluster connection restored for context %s", contextName),
+			"context", contextName, "cluster", clusterStatus.Cluster, "version", clusterStatus.ServerVersion)
+		return
+	}
+
+	logStructured(s.rt, runtime.LogLevelError, "connectivity", "failure",
+		fmt.Sprintf("cluster connection failed for context %s: %s", contextName, clusterStatus.Message),
+		"context", contextName, "cluster", clusterStatus.Cluster)
 }
 
 // logStructured writes a runtime log with a consistent key=value prefix for observability.
