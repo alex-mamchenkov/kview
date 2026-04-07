@@ -88,6 +88,7 @@ export default function ServiceAccountsTable({
       filterPredicate={filterPredicate}
       filterLabel="Filter (name)"
       resourceLabel={resourceLabel}
+      resourceKey="serviceaccounts"
       accessResource={listResourceAccess.serviceaccounts}
       namespace={namespace}
       renderDrawer={({ selectedId, open, onClose }) => {

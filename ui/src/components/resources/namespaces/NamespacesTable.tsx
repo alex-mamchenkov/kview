@@ -289,6 +289,7 @@ export default function NamespacesTable({
       filterPredicate={filterPredicate}
       filterLabel="Filter (name, status, workload state, counts)"
       resourceLabel={resourceLabel}
+      resourceKey="namespaces"
       accessResource={listResourceAccess.namespaces}
       namespace={null}
       renderDrawer={({ selectedId, open, onClose }) => (

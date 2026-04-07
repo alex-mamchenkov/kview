@@ -100,6 +100,23 @@ Actions must:
 
 ---
 
+# User Settings
+
+kview exposes a full-page Settings view from the header, next to the theme selector.
+
+Settings are browser-local and separate from navigation state. The profile currently owns:
+
+- frontend list and dashboard refresh defaults
+- initial Activity Panel state
+- smart-filter enablement and scoped smart-filter rules
+- JSON import/export for the settings profile only
+
+Settings import/export must not include active context, active namespace, favourite namespaces, recent namespace history, or theme.
+
+Future command/action presets and namespace enrichment tuning can use placeholder sections until their behavior is implemented. Backend dataplane tuning must be documented in DATAPLANE.md when it becomes real behavior.
+
+---
+
 # Cross‑Resource Navigation
 
 Navigation between related resources should be first‑class.

@@ -105,6 +105,7 @@ export default function ServicesTable({ token, namespace }: { token: string; nam
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/type/clusterIP)"
       resourceLabel={resourceLabel}
+      resourceKey="services"
       accessResource={listResourceAccess.services}
       namespace={namespace}
       renderDrawer={({ selectedId, open, onClose }) => {

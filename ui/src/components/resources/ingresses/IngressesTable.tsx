@@ -118,6 +118,7 @@ export default function IngressesTable({
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/class/host/address)"
       resourceLabel={resourceLabel}
+      resourceKey="ingresses"
       accessResource={listResourceAccess.ingresses}
       namespace={namespace}
       renderDrawer={({ selectedId, open, onClose }) => {

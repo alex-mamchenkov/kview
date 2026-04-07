@@ -121,6 +121,7 @@ export default function DeploymentsTable({
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/strategy)"
       resourceLabel={resourceLabel}
+      resourceKey="deployments"
       accessResource={listResourceAccess.deployments}
       namespace={namespace}
       renderDrawer={({ selectedId, open, onClose }) => {

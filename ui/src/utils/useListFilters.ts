@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadListTextFilter, loadQuickFilterSelection, saveListTextFilter, saveQuickFilterSelection } from "../state";
-import type { QuickFilter, QuickFilterPattern } from "./listFilters";
-import { buildQuickFilters, defaultQuickFilterPatterns } from "./listFilters";
+import { useUserSettings } from "../settingsContext";
+import type { SmartFilterMatchContext } from "../settings";
+import type { QuickFilter } from "./listFilters";
+import { buildQuickFilters } from "./listFilters";
 
 type UseListFiltersOptions<T> = {
   rows: T[];
   lastRefresh: Date | null;
   filterPredicate: (row: T, query: string) => boolean;
   getQuickFilterKey?: (row: T) => string;
-  quickFilterPatterns?: QuickFilterPattern[];
-  minQuickFilterCount?: number;
+  smartFilterContext: SmartFilterMatchContext;
 };
 
 type UseListFiltersResult<T> = {
@@ -27,15 +28,28 @@ export default function useListFilters<T>({
   lastRefresh,
   filterPredicate,
   getQuickFilterKey = (row: T) => String((row as { name?: string })?.name ?? ""),
-  quickFilterPatterns = defaultQuickFilterPatterns,
-  minQuickFilterCount = 3,
+  smartFilterContext,
 }: UseListFiltersOptions<T>): UseListFiltersResult<T> {
   const [filter, setFilterRaw] = useState<string>(() => loadListTextFilter());
+  const { settings } = useUserSettings();
 
-  const quickFilters = useMemo(
-    () => buildQuickFilters(rows, getQuickFilterKey, quickFilterPatterns, minQuickFilterCount),
-    [rows, getQuickFilterKey, quickFilterPatterns, minQuickFilterCount],
-  );
+  const quickFilters = useMemo(() => {
+    if (!settings.appearance.smartFiltersEnabled) return [];
+    return buildQuickFilters(
+      rows,
+      getQuickFilterKey,
+      settings.smartFilters.rules,
+      smartFilterContext,
+      settings.smartFilters.minCount,
+    );
+  }, [
+    rows,
+    getQuickFilterKey,
+    settings.appearance.smartFiltersEnabled,
+    settings.smartFilters.rules,
+    settings.smartFilters.minCount,
+    smartFilterContext,
+  ]);
 
   // Derive: quick filter is highlighted iff filter exactly equals its value
   const selectedQuickFilter = useMemo(() => {

@@ -135,6 +135,7 @@ export default function HelmReleasesTable({
       filterPredicate={filterPredicate}
       filterLabel="Filter (name / chart / version)"
       resourceLabel={resourceLabel}
+      resourceKey="helm"
       accessResource={listResourceAccess.helm}
       namespace={namespace}
       renderFooterExtra={(refetch) => (

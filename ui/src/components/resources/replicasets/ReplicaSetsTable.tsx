@@ -103,6 +103,7 @@ export default function ReplicaSetsTable({
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/owner)"
       resourceLabel={resourceLabel}
+      resourceKey="replicasets"
       accessResource={listResourceAccess.replicasets}
       namespace={namespace}
       renderDrawer={({ selectedId, open, onClose }) => {

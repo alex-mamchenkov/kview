@@ -97,6 +97,7 @@ export default function PersistentVolumesTable({ token }: { token: string }) {
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/status/storageClass/claim)"
       resourceLabel={resourceLabel}
+      resourceKey="persistentvolumes"
       accessResource={listResourceAccess.persistentvolumes}
       namespace={null}
       renderDrawer={({ selectedId, open, onClose }) => (

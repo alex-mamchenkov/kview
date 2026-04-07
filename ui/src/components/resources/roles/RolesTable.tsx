@@ -79,6 +79,7 @@ export default function RolesTable({
       filterPredicate={filterPredicate}
       filterLabel="Filter (name)"
       resourceLabel={resourceLabel}
+      resourceKey="roles"
       accessResource={listResourceAccess.roles}
       namespace={namespace}
       renderDrawer={({ selectedId, open, onClose }) => {

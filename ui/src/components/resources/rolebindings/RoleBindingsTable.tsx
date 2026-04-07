@@ -92,6 +92,7 @@ export default function RoleBindingsTable({
       filterPredicate={filterPredicate}
       filterLabel="Filter (name)"
       resourceLabel={resourceLabel}
+      resourceKey="rolebindings"
       accessResource={listResourceAccess.rolebindings}
       namespace={namespace}
       renderDrawer={({ selectedId, open, onClose }) => {

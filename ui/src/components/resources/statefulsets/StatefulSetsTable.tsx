@@ -98,6 +98,7 @@ export default function StatefulSetsTable({
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/service)"
       resourceLabel={resourceLabel}
+      resourceKey="statefulsets"
       accessResource={listResourceAccess.statefulsets}
       namespace={namespace}
       renderDrawer={({ selectedId, open, onClose }) => {

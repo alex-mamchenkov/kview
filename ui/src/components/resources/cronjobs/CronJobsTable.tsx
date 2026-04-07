@@ -124,6 +124,7 @@ export default function CronJobsTable({
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/schedule)"
       resourceLabel={resourceLabel}
+      resourceKey="cronjobs"
       accessResource={listResourceAccess.cronjobs}
       namespace={namespace}
       renderDrawer={({ selectedId, open, onClose }) => {

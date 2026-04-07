@@ -10,18 +10,21 @@ import {
   type OpenTerminalSessionEventDetail,
 } from "../../activityEvents";
 import { useConnectionState } from "../../connectionState";
+import { useUserSettings } from "../../settingsContext";
 
 type Props = {
   token: string;
+  covered?: boolean;
 };
 
 const MIN_PANEL_HEIGHT = 160;
 const MAX_PANEL_HEIGHT = 630;
 const HEADER_HEIGHT = 28;
 
-export default function ActivityPanel({ token }: Props) {
+export default function ActivityPanel({ token, covered = false }: Props) {
   const { backendHealth, clusterHealth, cluster } = useConnectionState();
-  const [open, setOpen] = useState(true);
+  const { settings } = useUserSettings();
+  const [open, setOpen] = useState(() => settings.appearance.activityPanelInitiallyOpen);
   const [tab, setTab] = useState(0);
   const [height, setHeight] = useState(230);
   const [dragging, setDragging] = useState(false);
@@ -113,7 +116,7 @@ export default function ActivityPanel({ token }: Props) {
         bgcolor: "var(--bg-elevated)",
         color: "var(--text-primary)",
         // Keep the panel above drawers and main content.
-        zIndex: 1400,
+        zIndex: covered ? 1100 : 1400,
       }}
     >
       {open && (

@@ -93,6 +93,7 @@ export default function CustomResourceDefinitionsTable({ token }: { token: strin
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/group/kind/scope)"
       resourceLabel={resourceLabel}
+      resourceKey="customresourcedefinitions"
       accessResource={listResourceAccess.customresourcedefinitions}
       namespace={null}
       renderDrawer={({ selectedId, open, onClose }) => (

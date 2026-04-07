@@ -15,12 +15,11 @@ import { apiGet, apiGetWithContext } from "../../../api";
 import type { ApiDashboardClusterResponse } from "../../../types/api";
 import { namespaceRowSummaryStateColor } from "../../../utils/k8sUi";
 import { useActiveContext } from "../../../activeContext";
+import { useUserSettings } from "../../../settingsContext";
 
 type Props = {
   token: string;
 };
-
-const dashboardRefreshMs = 10_000;
 
 function stateChipColor(state: string): "success" | "warning" | "error" | "default" {
   return namespaceRowSummaryStateColor(state) as "success" | "warning" | "error" | "default";
@@ -51,6 +50,8 @@ export default function DashboardView(props: Props) {
   const [data, setData] = useState<ApiDashboardClusterResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const activeContext = useActiveContext();
+  const { settings } = useUserSettings();
+  const dashboardRefreshSec = settings.appearance.dashboardRefreshSec;
 
   useEffect(() => {
     let cancelled = false;
@@ -72,12 +73,17 @@ export default function DashboardView(props: Props) {
       }
     };
     void load(true);
-    const id = window.setInterval(() => void load(false), dashboardRefreshMs);
+    if (dashboardRefreshSec <= 0) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    const id = window.setInterval(() => void load(false), dashboardRefreshSec * 1000);
     return () => {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [activeContext, props.token]);
+  }, [activeContext, dashboardRefreshSec, props.token]);
 
   return (
     <Box

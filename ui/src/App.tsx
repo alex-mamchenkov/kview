@@ -3,6 +3,7 @@ import { Box, CssBaseline, AppBar, Toolbar, Typography, Snackbar, Alert, IconBut
 import Brightness7Icon from "@mui/icons-material/Brightness7";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import BrightnessAutoIcon from "@mui/icons-material/BrightnessAuto";
+import ConstructionIcon from "@mui/icons-material/Construction";
 import Sidebar from "./components/Sidebar";
 import NodesTable from "./components/resources/nodes/NodesTable";
 import NamespacesTable from "./components/resources/namespaces/NamespacesTable";
@@ -45,6 +46,8 @@ import ActivityPanel from "./components/activity/ActivityPanel";
 import { ActiveContextProvider } from "./activeContext";
 import MutationProvider from "./components/mutations/MutationProvider";
 import { ThemeProvider, useThemeMode } from "./theme/ThemeProvider";
+import { UserSettingsProvider } from "./settingsContext";
+import SettingsView from "./components/settings/SettingsView";
 import "./styles/theme.css";
 
 function getToken(): string {
@@ -67,6 +70,7 @@ function AppInner() {
   const [namespace, setNamespace] = useState<string>("");
 
   const [section, setSection] = useState<Section>("pods");
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [favourites, setFavourites] = useState<string[]>([]);
 
@@ -254,13 +258,15 @@ function AppInner() {
   }
 
   function onSelectSection(sec: Section) {
+    setSettingsOpen(false);
     setSection(sec);
     setAppState((s) => ({ ...s, activeSection: sec }));
   }
 
   return (
     <ActiveContextProvider value={activeContext}>
-      <MutationProvider>
+      <UserSettingsProvider>
+        <MutationProvider>
         <Box
           sx={{
             display: "flex",
@@ -276,26 +282,29 @@ function AppInner() {
           <AppBar position="fixed" sx={{ zIndex: 1201 }}>
             <Toolbar>
               <Typography variant="h6" noWrap component="div">
-                kview — {activeContext || "no context"}
+                {settingsOpen ? "kview — Settings" : `kview — ${activeContext || "no context"}`}
               </Typography>
               <Box sx={{ flexGrow: 1 }} />
+              <SettingsSelector open={settingsOpen} onToggle={() => setSettingsOpen((v) => !v)} />
               <ThemeSelector />
             </Toolbar>
           </AppBar>
 
-          <Sidebar
-            contexts={contexts}
-            activeContext={activeContext}
-            onSelectContext={onSelectContext}
-            namespaces={namespaces}
-            namespace={namespace}
-            onSelectNamespace={onSelectNamespace}
-            nsLimited={nsLimited}
-            favourites={favourites}
-            onToggleFavourite={onToggleFavourite}
-            section={section}
-            onSelectSection={onSelectSection}
-          />
+          {!settingsOpen ? (
+            <Sidebar
+              contexts={contexts}
+              activeContext={activeContext}
+              onSelectContext={onSelectContext}
+              namespaces={namespaces}
+              namespace={namespace}
+              onSelectNamespace={onSelectNamespace}
+              nsLimited={nsLimited}
+              favourites={favourites}
+              onToggleFavourite={onToggleFavourite}
+              section={section}
+              onSelectSection={onSelectSection}
+            />
+          ) : null}
 
           <Box
             component="main"
@@ -303,7 +312,9 @@ function AppInner() {
               flexGrow: 1,
               minWidth: 0,
               minHeight: 0,
-              pb: "var(--bottom-panel-offset, 32px)",
+              position: "relative",
+              zIndex: settingsOpen ? 1300 : "auto",
+              pb: settingsOpen ? 0 : "var(--bottom-panel-offset, 32px)",
               backgroundColor: "var(--bg-primary)",
               color: "var(--text-primary)",
               display: "flex",
@@ -314,9 +325,18 @@ function AppInner() {
             <ConnectionBanner />
             {/* Single bounded main column: children fill width/height; dashboard scrolls here; tables scroll inside Paper/DataGrid */}
             <Box className="kview-main-content" sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-              {section === "dashboard" ? <DashboardView token={token} /> : null}
-              {section === "nodes" ? <NodesTable token={token} /> : null}
-              {section === "namespaces" ? (
+              {settingsOpen ? (
+                <SettingsView
+                  contexts={contexts}
+                  namespaces={namespaces}
+                  activeContext={activeContext}
+                  activeNamespace={namespace}
+                  onClose={() => setSettingsOpen(false)}
+                />
+              ) : null}
+              {!settingsOpen && section === "dashboard" ? <DashboardView token={token} /> : null}
+              {!settingsOpen && section === "nodes" ? <NodesTable token={token} /> : null}
+              {!settingsOpen && section === "namespaces" ? (
                 <NamespacesTable
                   token={token}
                   listApiPath={namespacesListPath}
@@ -326,43 +346,43 @@ function AppInner() {
                   }}
                 />
               ) : null}
-              {section === "pods" && namespace ? <PodsTable token={token} namespace={namespace} /> : null}
-              {section === "deployments" && namespace ? (
+              {!settingsOpen && section === "pods" && namespace ? <PodsTable token={token} namespace={namespace} /> : null}
+              {!settingsOpen && section === "deployments" && namespace ? (
                 <DeploymentsTable token={token} namespace={namespace} />
               ) : null}
-              {section === "daemonsets" && namespace ? (
+              {!settingsOpen && section === "daemonsets" && namespace ? (
                 <DaemonSetsTable token={token} namespace={namespace} />
               ) : null}
-              {section === "statefulsets" && namespace ? (
+              {!settingsOpen && section === "statefulsets" && namespace ? (
                 <StatefulSetsTable token={token} namespace={namespace} />
               ) : null}
-              {section === "replicasets" && namespace ? (
+              {!settingsOpen && section === "replicasets" && namespace ? (
                 <ReplicaSetsTable token={token} namespace={namespace} />
               ) : null}
-              {section === "jobs" && namespace ? <JobsTable token={token} namespace={namespace} /> : null}
-              {section === "cronjobs" && namespace ? <CronJobsTable token={token} namespace={namespace} /> : null}
-              {section === "services" && namespace ? <ServicesTable token={token} namespace={namespace} /> : null}
-              {section === "ingresses" && namespace ? <IngressesTable token={token} namespace={namespace} /> : null}
-              {section === "configmaps" && namespace ? <ConfigMapsTable token={token} namespace={namespace} /> : null}
-              {section === "secrets" && namespace ? <SecretsTable token={token} namespace={namespace} /> : null}
-              {section === "serviceaccounts" && namespace ? (
+              {!settingsOpen && section === "jobs" && namespace ? <JobsTable token={token} namespace={namespace} /> : null}
+              {!settingsOpen && section === "cronjobs" && namespace ? <CronJobsTable token={token} namespace={namespace} /> : null}
+              {!settingsOpen && section === "services" && namespace ? <ServicesTable token={token} namespace={namespace} /> : null}
+              {!settingsOpen && section === "ingresses" && namespace ? <IngressesTable token={token} namespace={namespace} /> : null}
+              {!settingsOpen && section === "configmaps" && namespace ? <ConfigMapsTable token={token} namespace={namespace} /> : null}
+              {!settingsOpen && section === "secrets" && namespace ? <SecretsTable token={token} namespace={namespace} /> : null}
+              {!settingsOpen && section === "serviceaccounts" && namespace ? (
                 <ServiceAccountsTable token={token} namespace={namespace} />
               ) : null}
-              {section === "roles" && namespace ? <RolesTable token={token} namespace={namespace} /> : null}
-              {section === "rolebindings" && namespace ? <RoleBindingsTable token={token} namespace={namespace} /> : null}
-              {section === "clusterroles" ? <ClusterRolesTable token={token} /> : null}
-              {section === "clusterrolebindings" ? <ClusterRoleBindingsTable token={token} /> : null}
-              {section === "persistentvolumes" ? <PersistentVolumesTable token={token} /> : null}
-              {section === "persistentvolumeclaims" && namespace ? (
+              {!settingsOpen && section === "roles" && namespace ? <RolesTable token={token} namespace={namespace} /> : null}
+              {!settingsOpen && section === "rolebindings" && namespace ? <RoleBindingsTable token={token} namespace={namespace} /> : null}
+              {!settingsOpen && section === "clusterroles" ? <ClusterRolesTable token={token} /> : null}
+              {!settingsOpen && section === "clusterrolebindings" ? <ClusterRoleBindingsTable token={token} /> : null}
+              {!settingsOpen && section === "persistentvolumes" ? <PersistentVolumesTable token={token} /> : null}
+              {!settingsOpen && section === "persistentvolumeclaims" && namespace ? (
                 <PersistentVolumeClaimsTable token={token} namespace={namespace} />
               ) : null}
-              {section === "customresourcedefinitions" ? (
+              {!settingsOpen && section === "customresourcedefinitions" ? (
                 <CustomResourceDefinitionsTable token={token} />
               ) : null}
-              {section === "helm" && namespace ? (
+              {!settingsOpen && section === "helm" && namespace ? (
                 <HelmReleasesTable token={token} namespace={namespace} />
               ) : null}
-              {section === "helmcharts" ? <HelmChartsTable token={token} /> : null}
+              {!settingsOpen && section === "helmcharts" ? <HelmChartsTable token={token} /> : null}
             </Box>
           </Box>
           <Snackbar
@@ -389,10 +409,21 @@ function AppInner() {
                   : activeIssue?.message || "Request failed"}
             </Alert>
           </Snackbar>
-          <ActivityPanel token={token} />
+          <ActivityPanel token={token} covered={settingsOpen} />
         </Box>
-      </MutationProvider>
+        </MutationProvider>
+      </UserSettingsProvider>
     </ActiveContextProvider>
+  );
+}
+
+function SettingsSelector({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <Tooltip title={open ? "Return to resources" : "Settings"}>
+      <IconButton size="small" color="inherit" onClick={onToggle}>
+        <ConstructionIcon fontSize="small" />
+      </IconButton>
+    </Tooltip>
   );
 }
 

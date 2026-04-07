@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Paper, Typography, Box } from "@mui/material";
 import { DataGrid, GridColDef, GridRowSelectionModel } from "@mui/x-data-grid";
 import useListQuery from "../../utils/useListQuery";
@@ -6,12 +6,14 @@ import { defaultRevisionPollSec } from "../../utils/dataplaneRevisionPoll";
 import useEmptyListAccessCheck from "../../utils/useEmptyListAccessCheck";
 import useListFilters from "../../utils/useListFilters";
 import type { AccessReviewResource } from "../../utils/k8sResources";
+import type { ListResourceKey } from "../../utils/k8sResources";
 import type { ResourceListFetchResult } from "../../types/api";
 import ListStateOverlay from "./ListStateOverlay";
 import ResourceTableToolbar, { type ResourceTableToolbarProps } from "./ResourceTableToolbar";
 import DataplaneListMetaStrip from "./DataplaneListMetaStrip";
 import { useActiveContext } from "../../activeContext";
 import { useConnectionState } from "../../connectionState";
+import { useUserSettings } from "../../settingsContext";
 
 const defaultDataplaneRefreshSec = 10;
 
@@ -39,6 +41,7 @@ export type ResourceListPageProps<TRow extends { id: string }> = {
   filterPredicate: (row: TRow, query: string) => boolean;
   filterLabel: string;
   resourceLabel: string;
+  resourceKey: ListResourceKey;
   accessResource: AccessReviewResource;
   namespace?: string | null;
   defaultSortField?: string;
@@ -78,10 +81,11 @@ export default function ResourceListPage<TRow extends { id: string }>({
   filterPredicate,
   filterLabel,
   resourceLabel,
+  resourceKey,
   accessResource,
   namespace = null,
   defaultSortField = "name",
-  initialRefreshSec = 0,
+  initialRefreshSec,
   dataplaneMetaPrefix,
   mapRows,
   mapRowsDeps,
@@ -100,10 +104,17 @@ export default function ResourceListPage<TRow extends { id: string }>({
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Id of the row shown in the drawer (set when opening via Open or double-click). */
   const [drawerSelectedId, setDrawerSelectedId] = useState<string | null>(null);
-  const [refreshSec, setRefreshSec] = useState<number>(initialRefreshSec);
+  const { settings } = useUserSettings();
+  const effectiveInitialRefreshSec = initialRefreshSec ?? settings.appearance.defaultListRefreshSec;
+  const [refreshSec, setRefreshSec] = useState<number>(effectiveInitialRefreshSec);
   const activeContext = useActiveContext();
   const { health } = useConnectionState();
   const offline = health === "unhealthy";
+
+  useEffect(() => {
+    if (initialRefreshSec != null) return;
+    setRefreshSec(settings.appearance.defaultListRefreshSec);
+  }, [initialRefreshSec, settings.appearance.defaultListRefreshSec]);
 
   const fetchRowsStable = useCallback(() => fetchRows(activeContext), [activeContext, fetchRows]);
   const fetchRevisionStable = useCallback(
@@ -135,11 +146,21 @@ export default function ResourceListPage<TRow extends { id: string }>({
     namespace,
   });
 
+  const smartFilterContext = useMemo(
+    () => ({
+      contextName: activeContext,
+      namespace,
+      resourceKey,
+    }),
+    [activeContext, namespace, resourceKey],
+  );
+
   const { filter, setFilter, selectedQuickFilter, toggleQuickFilter, quickFilters, filteredRows } =
     useListFilters<TRow>({
       rows,
       lastRefresh,
       filterPredicate,
+      smartFilterContext,
     });
 
   const openSelected = useCallback(() => {

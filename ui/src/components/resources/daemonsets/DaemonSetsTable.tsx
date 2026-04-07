@@ -111,6 +111,7 @@ export default function DaemonSetsTable({
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/strategy)"
       resourceLabel={resourceLabel}
+      resourceKey="daemonsets"
       accessResource={listResourceAccess.daemonsets}
       namespace={namespace}
       renderDrawer={({ selectedId, open, onClose }) => {

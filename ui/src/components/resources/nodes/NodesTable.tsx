@@ -115,6 +115,7 @@ export default function NodesTable({ token }: { token: string }) {
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/role/status)"
       resourceLabel={resourceLabel}
+      resourceKey="nodes"
       accessResource={listResourceAccess.nodes}
       namespace={null}
       renderDrawer={({ selectedId, open, onClose }) => (

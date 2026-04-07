@@ -87,6 +87,7 @@ export default function HelmChartsTable({ token }: { token: string }) {
       filterPredicate={filterPredicate}
       filterLabel="Filter (chart / version)"
       resourceLabel={resourceLabel}
+      resourceKey="helmcharts"
       accessResource={listResourceAccess.helmcharts}
       namespace={null}
       defaultSortField="chartName"

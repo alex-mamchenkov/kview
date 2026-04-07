@@ -84,6 +84,7 @@ export default function ConfigMapsTable({
       filterPredicate={filterPredicate}
       filterLabel="Filter (name)"
       resourceLabel={resourceLabel}
+      resourceKey="configmaps"
       accessResource={listResourceAccess.configmaps}
       namespace={namespace}
       renderDrawer={({ selectedId, open, onClose }) => {

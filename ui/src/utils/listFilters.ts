@@ -1,29 +1,22 @@
+import type { SmartFilterMatchContext, SmartFilterRule } from "../settings";
+import { labelForSmartFilterRules, refreshIntervalOptions } from "../settings";
+
 export type QuickFilter = { id: string; label: string; value: string };
-
-export type QuickFilterPattern = { re: RegExp; label: (m: RegExpMatchArray) => string };
-
-export const defaultQuickFilterPatterns: QuickFilterPattern[] = [
-  { re: /^(master|release|test|dev).*$/i, label: (m) => m[1].toLowerCase() },
-  { re: /^([^\s-]+-[^\s-]+)-.+$/, label: (m) => m[1] },
-];
 
 export function buildQuickFilters<T>(
   rows: T[],
   getKey: (row: T) => string,
-  patterns: QuickFilterPattern[] = defaultQuickFilterPatterns,
+  rules: SmartFilterRule[],
+  matchContext: SmartFilterMatchContext,
   minCount = 3,
 ): QuickFilter[] {
   const counts = new Map<string, number>();
 
   for (const row of rows) {
     const name = getKey(row) || "";
-    for (const pattern of patterns) {
-      const match = name.match(pattern.re);
-      if (match) {
-        const key = pattern.label(match);
-        if (key) counts.set(key, (counts.get(key) || 0) + 1);
-        break;
-      }
+    const key = labelForSmartFilterRules(name, rules, matchContext);
+    if (key) {
+      counts.set(key, (counts.get(key) || 0) + 1);
     }
   }
 
@@ -33,11 +26,4 @@ export function buildQuickFilters<T>(
     .map(([k, c]) => ({ id: k, label: `${k} (${c})`, value: k }));
 }
 
-export const refreshOptions = [
-  { label: "Off", value: 0 },
-  { label: "3s", value: 3 },
-  { label: "5s", value: 5 },
-  { label: "10s", value: 10 },
-  { label: "30s", value: 30 },
-  { label: "60s", value: 60 },
-];
+export const refreshOptions = refreshIntervalOptions;

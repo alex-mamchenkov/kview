@@ -91,6 +91,7 @@ export default function SecretsTable({
       filterPredicate={filterPredicate}
       filterLabel="Filter (name)"
       resourceLabel={resourceLabel}
+      resourceKey="secrets"
       accessResource={listResourceAccess.secrets}
       namespace={namespace}
       renderDrawer={({ selectedId, open, onClose }) => {

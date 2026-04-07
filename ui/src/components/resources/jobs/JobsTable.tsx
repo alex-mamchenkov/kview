@@ -101,6 +101,7 @@ export default function JobsTable({ token, namespace }: { token: string; namespa
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/status)"
       resourceLabel={resourceLabel}
+      resourceKey="jobs"
       accessResource={listResourceAccess.jobs}
       namespace={namespace}
       renderDrawer={({ selectedId, open, onClose }) => {

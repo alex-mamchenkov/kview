@@ -126,6 +126,7 @@ export default function PodsTable({ token, namespace }: { token: string; namespa
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/node/status)"
       resourceLabel={resourceLabel}
+      resourceKey="pods"
       accessResource={listResourceAccess.pods}
       namespace={namespace}
       renderDrawer={({ selectedId, open, onClose }) => {

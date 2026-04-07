@@ -68,6 +68,7 @@ export default function ClusterRoleBindingsTable({ token }: { token: string }) {
       filterPredicate={filterPredicate}
       filterLabel="Filter (name)"
       resourceLabel={resourceLabel}
+      resourceKey="clusterrolebindings"
       accessResource={listResourceAccess.clusterrolebindings}
       namespace={null}
       renderDrawer={({ selectedId, open, onClose }) => (

@@ -55,6 +55,7 @@ export default function ClusterRolesTable({ token }: { token: string }) {
       filterPredicate={filterPredicate}
       filterLabel="Filter (name)"
       resourceLabel={resourceLabel}
+      resourceKey="clusterroles"
       accessResource={listResourceAccess.clusterroles}
       namespace={null}
       renderDrawer={({ selectedId, open, onClose }) => (
