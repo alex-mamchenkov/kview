@@ -92,6 +92,7 @@ func main() {
 	srv.Actions().Register("namespaces.delete", kube.HandleNamespaceDelete)
 
 	srv.Actions().Register("customresourcedefinitions.delete", kube.HandleCRDDelete)
+	srv.Actions().Register("custom.workload", kube.HandleCustomWorkloadAction)
 
 	url := fmt.Sprintf("http://%s/?token=%s", *addr, token)
 	log.Printf("kview listening on http://%s", *addr)

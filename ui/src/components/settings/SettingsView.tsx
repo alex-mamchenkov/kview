@@ -22,14 +22,23 @@ import {
 } from "@mui/material";
 import type { SelectChangeEvent } from "@mui/material/Select";
 import CloseIcon from "@mui/icons-material/Close";
+import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import {
   allListResourceKeys,
+  customActionResourceKeys,
   exportUserSettingsJSON,
+  newCustomActionDefinition,
   newCustomCommandDefinition,
   newSmartFilterRule,
   parseUserSettingsJSON,
   refreshIntervalOptions,
   sanitizeRegexFlags,
+  type CustomActionDefinition,
+  type CustomActionKind,
+  type CustomActionPatchType,
+  type CustomActionTarget,
   type CustomCommandDefinition,
   type CustomCommandOutputType,
   type CustomCommandSafety,
@@ -61,6 +70,48 @@ const sections: Array<{ id: SettingsSection; label: string }> = [
   { id: "importExport", label: "Import / Export" },
 ];
 
+const headerRowSx = { display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" };
+
+function ReorderButtons({
+  label,
+  index,
+  lastIndex,
+  onUp,
+  onDown,
+  onRemove,
+}: {
+  label: string;
+  index: number;
+  lastIndex: number;
+  onUp: () => void;
+  onDown: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <Box sx={{ display: "flex", gap: 0.25 }}>
+      <Tooltip title={`Move ${label} up`}>
+        <span>
+          <IconButton size="small" onClick={onUp} disabled={index === 0} aria-label={`Move ${label} up`}>
+            <ArrowUpwardIcon fontSize="inherit" />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Tooltip title={`Move ${label} down`}>
+        <span>
+          <IconButton size="small" onClick={onDown} disabled={index === lastIndex} aria-label={`Move ${label} down`}>
+            <ArrowDownwardIcon fontSize="inherit" />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Tooltip title={`Remove ${label}`}>
+        <IconButton size="small" color="error" onClick={onRemove} aria-label={`Remove ${label}`}>
+          <DeleteOutlineIcon fontSize="inherit" />
+        </IconButton>
+      </Tooltip>
+    </Box>
+  );
+}
+
 function updateAppearance(
   settings: KviewUserSettingsV1,
   patch: Partial<KviewUserSettingsV1["appearance"]>,
@@ -91,6 +142,16 @@ function updateCustomCommands(
   };
 }
 
+function updateCustomActions(
+  settings: KviewUserSettingsV1,
+  patch: Partial<KviewUserSettingsV1["customActions"]>,
+): KviewUserSettingsV1 {
+  return {
+    ...settings,
+    customActions: { ...settings.customActions, ...patch },
+  };
+}
+
 function rulePatternError(rule: SmartFilterRule): string | null {
   if (!rule.pattern.trim()) return "Pattern is required.";
   try {
@@ -108,6 +169,27 @@ function commandPatternError(command: CustomCommandDefinition): string | null {
     return null;
   } catch (err) {
     return (err as Error).message || "Invalid regex.";
+  }
+}
+
+function actionPatternError(action: CustomActionDefinition): string | null {
+  if (!action.containerPattern.trim()) return null;
+  try {
+    new RegExp(action.containerPattern);
+    return null;
+  } catch (err) {
+    return (err as Error).message || "Invalid regex.";
+  }
+}
+
+function actionPatchError(action: CustomActionDefinition): string | null {
+  if (action.action !== "patch") return null;
+  if (!action.patchBody.trim()) return "Patch body is required.";
+  try {
+    JSON.parse(action.patchBody);
+    return null;
+  } catch (err) {
+    return (err as Error).message || "Invalid JSON patch body.";
   }
 }
 
@@ -152,6 +234,15 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
     });
   };
 
+  const setAction = (index: number, patch: Partial<CustomActionDefinition>) => {
+    setSettings((prev) => {
+      const actions = prev.customActions.actions.map((action, i) =>
+        i === index ? { ...action, ...patch } : action,
+      );
+      return updateCustomActions(prev, { actions });
+    });
+  };
+
   const importSettingsText = (text: string) => {
     try {
       const imported = parseUserSettingsJSON(text);
@@ -175,9 +266,9 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
   };
 
   const renderAppearance = () => (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
       <Typography variant="h6">Appearance</Typography>
-      <Paper variant="outlined" sx={{ p: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+      <Paper variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1.25 }}>
         <TextField
           select
           size="small"
@@ -252,34 +343,29 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
   const renderRule = (rule: SmartFilterRule, index: number) => {
     const error = rulePatternError(rule);
     return (
-      <Paper key={rule.id} variant="outlined" sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+      <Paper key={rule.id} variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
+        <Box sx={headerRowSx}>
           <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
             Rule {index + 1}
           </Typography>
-          <Button size="small" onClick={() => setSettings((prev) => updateSmartFilters(prev, { rules: moveItem(prev.smartFilters.rules, index, -1) }))} disabled={index === 0}>
-            Up
-          </Button>
-          <Button size="small" onClick={() => setSettings((prev) => updateSmartFilters(prev, { rules: moveItem(prev.smartFilters.rules, index, 1) }))} disabled={index === settings.smartFilters.rules.length - 1}>
-            Down
-          </Button>
-          <Button
-            size="small"
-            color="error"
-            onClick={() =>
+          <ReorderButtons
+            label={`rule ${index + 1}`}
+            index={index}
+            lastIndex={settings.smartFilters.rules.length - 1}
+            onUp={() => setSettings((prev) => updateSmartFilters(prev, { rules: moveItem(prev.smartFilters.rules, index, -1) }))}
+            onDown={() => setSettings((prev) => updateSmartFilters(prev, { rules: moveItem(prev.smartFilters.rules, index, 1) }))}
+            onRemove={() =>
               setSettings((prev) =>
                 updateSmartFilters(prev, { rules: prev.smartFilters.rules.filter((_, i) => i !== index) }),
               )
             }
-          >
-            Remove
-          </Button>
+          />
         </Box>
         <FormControlLabel
           control={<Switch checked={rule.enabled} onChange={(e) => setRule(index, { enabled: e.target.checked })} />}
           label="Enabled"
         />
-        <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+        <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
           <TextField
             select
             size="small"
@@ -355,7 +441,7 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
             </Select>
           </FormControl>
         ) : null}
-        <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "minmax(260px, 2fr) minmax(120px, 0.6fr) minmax(180px, 1fr)" }}>
+        <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "minmax(260px, 2fr) minmax(120px, 0.6fr) minmax(180px, 1fr)" }}>
           <TextField
             size="small"
             label="Regex match pattern"
@@ -384,7 +470,7 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
   };
 
   const renderSmartFilters = () => (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <Box sx={{ flexGrow: 1 }}>
           <Typography variant="h6">Smart Filters</Typography>
@@ -403,7 +489,7 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
           Add rule
         </Button>
       </Box>
-      <Paper variant="outlined" sx={{ p: 2, display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
+      <Paper variant="outlined" sx={{ p: 1.25, display: "flex", gap: 1.25, alignItems: "center", flexWrap: "wrap" }}>
         <TextField
           size="small"
           type="number"
@@ -429,50 +515,37 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
   const renderCommand = (command: CustomCommandDefinition, index: number) => {
     const patternError = commandPatternError(command);
     return (
-      <Paper key={command.id} variant="outlined" sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+      <Paper key={command.id} variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
+        <Box sx={headerRowSx}>
           <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
             Command {index + 1}
           </Typography>
-          <Button
-            size="small"
-            onClick={() =>
+          <ReorderButtons
+            label={`command ${index + 1}`}
+            index={index}
+            lastIndex={settings.customCommands.commands.length - 1}
+            onUp={() =>
               setSettings((prev) =>
                 updateCustomCommands(prev, {
                   commands: moveItem(prev.customCommands.commands, index, -1),
                 }),
               )
             }
-            disabled={index === 0}
-          >
-            Up
-          </Button>
-          <Button
-            size="small"
-            onClick={() =>
+            onDown={() =>
               setSettings((prev) =>
                 updateCustomCommands(prev, {
                   commands: moveItem(prev.customCommands.commands, index, 1),
                 }),
               )
             }
-            disabled={index === settings.customCommands.commands.length - 1}
-          >
-            Down
-          </Button>
-          <Button
-            size="small"
-            color="error"
-            onClick={() =>
+            onRemove={() =>
               setSettings((prev) =>
                 updateCustomCommands(prev, {
                   commands: prev.customCommands.commands.filter((_, i) => i !== index),
                 }),
               )
             }
-          >
-            Remove
-          </Button>
+          />
         </Box>
         <FormControlLabel
           control={
@@ -480,7 +553,7 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
           }
           label="Enabled"
         />
-        <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+        <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
           <TextField
             size="small"
             label="Name"
@@ -513,7 +586,7 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
           helperText="Executed with /bin/sh -lc inside the selected container."
           fullWidth
         />
-        <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+        <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
           <TextField
             select
             size="small"
@@ -570,7 +643,7 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
   };
 
   const renderCustomCommands = () => (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <Box sx={{ flexGrow: 1 }}>
           <Typography variant="h6">Custom Commands</Typography>
@@ -603,8 +676,181 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
     </Box>
   );
 
+  const renderAction = (action: CustomActionDefinition, index: number) => {
+    const patternError = actionPatternError(action);
+    const patchError = actionPatchError(action);
+    return (
+      <Paper key={action.id} variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
+        <Box sx={headerRowSx}>
+          <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
+            Action {index + 1}
+          </Typography>
+          <ReorderButtons
+            label={`action ${index + 1}`}
+            index={index}
+            lastIndex={settings.customActions.actions.length - 1}
+            onUp={() => setSettings((prev) => updateCustomActions(prev, { actions: moveItem(prev.customActions.actions, index, -1) }))}
+            onDown={() => setSettings((prev) => updateCustomActions(prev, { actions: moveItem(prev.customActions.actions, index, 1) }))}
+            onRemove={() => setSettings((prev) => updateCustomActions(prev, { actions: prev.customActions.actions.filter((_, i) => i !== index) }))}
+          />
+        </Box>
+        <FormControlLabel
+          control={<Switch checked={action.enabled} onChange={(e) => setAction(index, { enabled: e.target.checked })} />}
+          label="Enabled"
+        />
+        <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          <TextField size="small" label="Name" value={action.name} onChange={(e) => setAction(index, { name: e.target.value })} />
+          <TextField
+            select
+            size="small"
+            label="Action"
+            value={action.action}
+            onChange={(e) => {
+              const nextAction = e.target.value as CustomActionKind;
+              setAction(index, {
+                action: nextAction,
+                ...(nextAction === "unset" && action.target === "image" ? { target: "env" as const } : {}),
+              });
+            }}
+          >
+            <MenuItem value="set">Set</MenuItem>
+            <MenuItem value="unset">Unset</MenuItem>
+            <MenuItem value="patch">Patch</MenuItem>
+          </TextField>
+          <TextField
+            select
+            size="small"
+            label="Safety"
+            value={action.safety}
+            onChange={(e) => setAction(index, { safety: e.target.value as CustomCommandSafety })}
+          >
+            <MenuItem value="safe">Safe: simple confirmation</MenuItem>
+            <MenuItem value="dangerous">Dangerous: typed confirmation</MenuItem>
+          </TextField>
+        </Box>
+        <FormControl size="small">
+          <InputLabel id={`action-resources-${action.id}`}>Resources</InputLabel>
+          <Select
+            labelId={`action-resources-${action.id}`}
+            multiple
+            label="Resources"
+            value={action.resources}
+            onChange={(e: SelectChangeEvent<ListResourceKey[]>) => {
+              const value = e.target.value;
+              setAction(index, { resources: typeof value === "string" ? [value as ListResourceKey] : value });
+            }}
+            renderValue={(selected) => selected.map((key) => getResourceLabel(key)).join(", ")}
+          >
+            {customActionResourceKeys.map((key) => (
+              <MenuItem key={key} value={key}>
+                <Checkbox checked={action.resources.includes(key)} />
+                <ListItemText primary={getResourceLabel(key)} />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        {action.action === "patch" ? (
+          <>
+            <TextField
+              select
+              size="small"
+              label="Patch type"
+              value={action.patchType}
+              onChange={(e) => setAction(index, { patchType: e.target.value as CustomActionPatchType })}
+              sx={{ maxWidth: 240 }}
+            >
+              <MenuItem value="merge">Merge patch</MenuItem>
+              <MenuItem value="json">JSON patch</MenuItem>
+            </TextField>
+            <TextField
+              size="small"
+              label="Patch body JSON"
+              value={action.patchBody}
+              onChange={(e) => setAction(index, { patchBody: e.target.value })}
+              error={Boolean(patchError)}
+              helperText={patchError ?? "Use JSON. JSON patch expects an array of operations; merge patch expects an object."}
+              multiline
+              minRows={8}
+              fullWidth
+              InputProps={{ sx: { fontFamily: "monospace", fontSize: "0.85rem" } }}
+            />
+          </>
+        ) : (
+          <>
+            <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+              <TextField
+                select
+                size="small"
+                label="Target"
+                value={action.target}
+                onChange={(e) => setAction(index, { target: e.target.value as CustomActionTarget })}
+              >
+                <MenuItem value="env">Environment variable</MenuItem>
+                <MenuItem value="image" disabled={action.action === "unset"}>Container image</MenuItem>
+              </TextField>
+              {action.target === "env" ? (
+                <TextField size="small" label="Env key" value={action.key} onChange={(e) => setAction(index, { key: e.target.value })} />
+              ) : null}
+              <TextField
+                size="small"
+                label="Container pattern"
+                value={action.containerPattern}
+                onChange={(e) => setAction(index, { containerPattern: e.target.value })}
+                error={Boolean(patternError)}
+                helperText={patternError ?? "Optional regex. Leave blank for all containers."}
+              />
+            </Box>
+            {action.action === "set" ? (
+              <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "minmax(220px, 1fr) auto" }}>
+                <TextField
+                  size="small"
+                  label={action.target === "image" ? "Image" : "Value"}
+                  value={action.value}
+                  onChange={(e) => setAction(index, { value: e.target.value })}
+                  disabled={action.runtimeValue}
+                />
+                <FormControlLabel
+                  control={<Switch checked={action.runtimeValue} onChange={(e) => setAction(index, { runtimeValue: e.target.checked })} />}
+                  label="Ask at runtime"
+                />
+              </Box>
+            ) : null}
+          </>
+        )}
+      </Paper>
+    );
+  };
+
+  const renderCustomActions = () => (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Box sx={{ flexGrow: 1 }}>
+          <Typography variant="h6">Custom Actions</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Actions are browser-local presets for patch-capable workload resources.
+          </Typography>
+        </Box>
+        <Button
+          variant="contained"
+          onClick={() => setSettings((prev) => updateCustomActions(prev, { actions: [...prev.customActions.actions, newCustomActionDefinition()] }))}
+        >
+          Add action
+        </Button>
+      </Box>
+      {settings.customActions.actions.length === 0 ? (
+        <Paper variant="outlined" sx={panelBoxSx}>
+          <Typography variant="body2" color="text.secondary">
+            No custom actions are defined.
+          </Typography>
+        </Paper>
+      ) : (
+        settings.customActions.actions.map(renderAction)
+      )}
+    </Box>
+  );
+
   const renderPlaceholder = (title: string, text: string) => (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
       <Typography variant="h6">{title}</Typography>
       <Paper variant="outlined" sx={panelBoxSx}>
         <Typography variant="body2" color="text.secondary">
@@ -615,9 +861,9 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
   );
 
   const renderImportExport = () => (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
       <Typography variant="h6">Import / Export</Typography>
-      <Paper variant="outlined" sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
+      <Paper variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
         <Typography variant="body2" color="text.secondary">
           This exports user settings only. Active context, namespace history, favourites, and theme are not included.
         </Typography>
@@ -710,8 +956,8 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
           ))}
         </List>
       </Paper>
-      <Box sx={{ flex: 1, minWidth: 0, overflow: "auto", p: 2 }}>
-        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 2 }}>
+      <Box sx={{ flex: 1, minWidth: 0, overflow: "auto", p: 1.25 }}>
+        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.25, mb: 1.25 }}>
           <Box sx={{ flexGrow: 1 }}>
             <Typography variant="body2" color="text.secondary">
               Changes are saved automatically in this browser profile.
@@ -726,9 +972,7 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
         {section === "appearance" ? renderAppearance() : null}
         {section === "smartFilters" ? renderSmartFilters() : null}
         {section === "commands" ? renderCustomCommands() : null}
-        {section === "actions"
-          ? renderPlaceholder("Custom Actions", "Planned for kube action presets.")
-          : null}
+        {section === "actions" ? renderCustomActions() : null}
         {section === "nsEnrichment"
           ? renderPlaceholder(
               "NS Enrichment",

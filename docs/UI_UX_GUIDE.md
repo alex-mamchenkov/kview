@@ -110,13 +110,16 @@ Settings are browser-local and separate from navigation state. The profile curre
 - initial Activity Panel state
 - smart-filter enablement and scoped smart-filter rules
 - custom container command presets
+- custom workload action presets
 - JSON import/export for the settings profile only
 
 Settings import/export must not include active context, active namespace, favourite namespaces, recent namespace history, or theme.
 
-Custom container commands must appear only on matching Pod containers. Safe commands require simple confirmation; dangerous commands require typed confirmation before execution. Command output should render according to the configured output type: free text, key-value, code-highlighted text, or downloadable file.
+Custom container commands must appear only on matching Pod containers. Safe commands require simple confirmation; dangerous commands require typed confirmation before execution. Command output should render according to the configured output type: free text, key-value, CSV/delimited table, code-highlighted text, or downloadable file.
 
-Future custom kube actions and namespace enrichment tuning can use placeholder sections until their behavior is implemented. Backend dataplane tuning must be documented in DATAPLANE.md when it becomes real behavior.
+Custom workload actions must appear only on matching patch-capable workload resources. Safe actions require simple confirmation; dangerous actions require typed confirmation before execution. The first action pack is workload-scoped and supports set/unset env, set image, and raw JSON/merge patch presets for Deployments, StatefulSets, DaemonSets, and ReplicaSets.
+
+Future namespace enrichment tuning can use placeholder sections until its behavior is implemented. Backend dataplane tuning must be documented in DATAPLANE.md when it becomes real behavior.
 
 ---
 

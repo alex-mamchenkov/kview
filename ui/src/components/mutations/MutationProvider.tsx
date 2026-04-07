@@ -13,6 +13,7 @@ export type OpenMutationParams = {
   onSuccess?: (result: ExecuteActionResult) => void;
   /** Close the confirmation dialog immediately after successful execution. */
   closeOnSuccess?: boolean;
+  params?: Record<string, unknown>;
   /** Pre-populated values for paramSpecs fields. */
   initialParams?: Record<string, string | boolean>;
 };
@@ -75,6 +76,7 @@ export default function MutationProvider({
           execute={active.params.execute}
           onSuccess={active.params.onSuccess}
           closeOnSuccess={active.params.closeOnSuccess}
+          baseParams={active.params.params}
           initialParams={active.params.initialParams}
         />
       )}

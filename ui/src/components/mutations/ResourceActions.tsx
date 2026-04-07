@@ -1,7 +1,9 @@
-import React from "react";
-import { Box } from "@mui/material";
+import React, { useState } from "react";
+import { Box, Button, Menu, MenuItem } from "@mui/material";
 import { useActiveContext } from "../../activeContext";
 import ActionButton from "./ActionButton";
+import { useMutationDialog } from "./useMutationDialog";
+import { useUserSettings } from "../../settingsContext";
 import {
   useResourceCapabilities,
   canPatchOrUpdate,
@@ -12,6 +14,111 @@ import {
   buildRestartDescriptor,
   buildScaleDescriptor,
 } from "../../lib/actions/builders";
+import { customActionsForResource, type CustomActionDefinition } from "../../settings";
+import type { ListResourceKey } from "../../utils/k8sResources";
+
+function runtimeParamSpec(action: CustomActionDefinition) {
+  if (!action.runtimeValue || action.action !== "set") return undefined;
+  return [
+    {
+      kind: "string" as const,
+      key: "value",
+      label: action.target === "image" ? "Image" : "Value",
+      required: true,
+      defaultValue: action.value,
+    },
+  ];
+}
+
+function useCustomActionMenu(opts: {
+  token: string;
+  namespace: string;
+  name: string;
+  resourceKey: ListResourceKey;
+  group: string;
+  resource: string;
+  kind: string;
+  apiVersion: string;
+  onSuccess: () => void;
+}) {
+  const activeContext = useActiveContext();
+  const { settings } = useUserSettings();
+  const { open } = useMutationDialog();
+  const [anchor, setAnchor] = useState<null | HTMLElement>(null);
+  const caps = useResourceCapabilities({
+    token: opts.token,
+    group: opts.group,
+    resource: opts.resource,
+    namespace: opts.namespace,
+    name: opts.name,
+  });
+  const canPatch = canPatchOrUpdate(caps);
+  const actions = customActionsForResource(settings.customActions.actions, opts.resourceKey);
+  if (actions.length === 0) return null;
+
+  const run = (action: CustomActionDefinition) => {
+    setAnchor(null);
+    const title = action.name || "Custom action";
+    open({
+      token: opts.token,
+      targetRef: {
+        context: activeContext,
+        kind: opts.kind,
+        name: opts.name,
+        namespace: opts.namespace,
+        apiVersion: opts.apiVersion,
+      },
+      descriptor: {
+        id: "custom.workload",
+        title,
+        description:
+          action.action === "patch"
+            ? `Runs a ${action.patchType} patch on ${opts.kind}/${opts.name}.`
+            : `${action.action === "unset" ? "Unsets" : "Sets"} ${action.target} on matching workload containers.`,
+        group: opts.group,
+        resource: opts.resource,
+        apiVersion: opts.apiVersion,
+        risk: action.safety === "dangerous" ? "high" : "medium",
+        confirmSpec:
+          action.safety === "dangerous"
+            ? { mode: "typed", requiredValue: opts.name }
+            : { mode: "simple" },
+        paramSpecs: runtimeParamSpec(action),
+      },
+      params: {
+        op: action.action,
+        target: action.target,
+        key: action.key,
+        value: action.value,
+        containerPattern: action.containerPattern,
+        patchType: action.patchType,
+        patchBody: action.patchBody,
+      },
+      initialParams: action.runtimeValue ? { value: action.value } : undefined,
+      onSuccess: opts.onSuccess,
+    });
+  };
+
+  return (
+    <>
+      <Button
+        size="small"
+        variant="outlined"
+        disabled={!canPatch}
+        onClick={(e) => setAnchor(e.currentTarget)}
+      >
+        Custom actions
+      </Button>
+      <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
+        {actions.map((action) => (
+          <MenuItem key={action.id} onClick={() => run(action)}>
+            {action.name}
+          </MenuItem>
+        ))}
+      </Menu>
+    </>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Namespaced or cluster-scoped delete-only actions
@@ -129,6 +236,17 @@ export function WorkloadScaleRestartDeleteActions({
   config,
 }: WorkloadScaleRestartDeleteProps) {
   const activeContext = useActiveContext();
+  const custom = useCustomActionMenu({
+    token,
+    namespace,
+    name,
+    resourceKey: config.resource as ListResourceKey,
+    group: config.group,
+    resource: config.resource,
+    kind: config.kind,
+    apiVersion: config.apiVersion,
+    onSuccess: onRefresh,
+  });
   const caps = useResourceCapabilities({
     token,
     group: config.group,
@@ -168,6 +286,8 @@ export function WorkloadScaleRestartDeleteActions({
         initialParams={{ replicas: String(currentReplicas) }}
         onSuccess={onRefresh}
       />
+
+      {custom}
 
       <ActionButton
         label="Restart"
@@ -241,6 +361,17 @@ export function WorkloadRestartDeleteActions({
   config,
 }: WorkloadRestartDeleteProps) {
   const activeContext = useActiveContext();
+  const custom = useCustomActionMenu({
+    token,
+    namespace,
+    name,
+    resourceKey: config.resource as ListResourceKey,
+    group: config.group,
+    resource: config.resource,
+    kind: config.kind,
+    apiVersion: config.apiVersion,
+    onSuccess: onRefresh,
+  });
   const caps = useResourceCapabilities({
     token,
     group: config.group,
@@ -277,6 +408,8 @@ export function WorkloadRestartDeleteActions({
         disabledReason={!canRestart && caps ? RBAC_DISABLED_REASON : ""}
         onSuccess={onRefresh}
       />
+
+      {custom}
 
       <ActionButton
         label="Delete"
@@ -336,6 +469,17 @@ export function WorkloadScaleDeleteActions({
   config,
 }: WorkloadScaleDeleteProps) {
   const activeContext = useActiveContext();
+  const custom = useCustomActionMenu({
+    token,
+    namespace,
+    name,
+    resourceKey: config.resource as ListResourceKey,
+    group: config.group,
+    resource: config.resource,
+    kind: config.kind,
+    apiVersion: config.apiVersion,
+    onSuccess: onRefresh,
+  });
   const caps = useResourceCapabilities({
     token,
     group: config.group,
@@ -374,6 +518,8 @@ export function WorkloadScaleDeleteActions({
         initialParams={{ replicas: String(currentReplicas) }}
         onSuccess={onRefresh}
       />
+
+      {custom}
 
       <ActionButton
         label="Delete"

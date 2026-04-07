@@ -5,6 +5,7 @@ import {
   defaultUserSettings,
   exportUserSettingsJSON,
   customCommandsForContainer,
+  customActionsForResource,
   labelForSmartFilterRules,
   loadUserSettings,
   parseUserSettingsJSON,
@@ -103,6 +104,27 @@ describe("user settings", () => {
     expect(customCommandsForContainer(settings.customCommands.commands, "app")).toHaveLength(1);
   });
 
+  it("provides default deployment DEBUG custom actions", () => {
+    const settings = defaultUserSettings();
+    expect(settings.customActions.actions).toHaveLength(2);
+    expect(settings.customActions.actions[0]).toMatchObject({
+      name: "Enable DEBUG",
+      resources: ["deployments"],
+      action: "set",
+      target: "env",
+      key: "DEBUG",
+      value: "true",
+    });
+    expect(settings.customActions.actions[1]).toMatchObject({
+      name: "Disable DEBUG",
+      resources: ["deployments"],
+      action: "unset",
+      target: "env",
+      key: "DEBUG",
+    });
+    expect(customActionsForResource(settings.customActions.actions, "deployments")).toHaveLength(2);
+  });
+
   it("validates custom command imports and rejects invalid patterns", () => {
     const parsed = validateUserSettings({
       ...defaultUserSettings(),
@@ -139,6 +161,38 @@ describe("user settings", () => {
         customCommands: { commands: [{ command: "/bin/env", containerPattern: "(" }] },
       }),
     ).toBeNull();
+  });
+
+  it("validates custom action imports and matches workload resources", () => {
+    const parsed = validateUserSettings({
+      ...defaultUserSettings(),
+      customActions: {
+        actions: [
+          {
+            id: "debug-env",
+            enabled: true,
+            name: "Enable debug",
+            resources: ["deployments", "not-a-resource"],
+            action: "set",
+            target: "env",
+            key: "DEBUG",
+            value: "true",
+            runtimeValue: false,
+            containerPattern: "",
+            patchType: "merge",
+            patchBody: "{}",
+            safety: "safe",
+          },
+        ],
+      },
+    });
+    expect(parsed?.customActions.actions[0]).toMatchObject({
+      id: "debug-env",
+      resources: ["deployments"],
+      key: "DEBUG",
+    });
+    expect(customActionsForResource(parsed?.customActions.actions || [], "deployments")).toHaveLength(1);
+    expect(customActionsForResource(parsed?.customActions.actions || [], "daemonsets")).toHaveLength(0);
   });
 
   it("matches ordered scoped smart filter rules and uses JS replacement templates", () => {

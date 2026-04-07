@@ -116,6 +116,8 @@ export type MutationActionDescriptor = {
   group?: string;
   /** Kubernetes resource type (e.g. "deployments"). Forwarded to /api/actions. */
   resource?: string;
+  /** Kubernetes API version (e.g. "apps/v1"). Forwarded to /api/actions when needed. */
+  apiVersion?: string;
   /** Optional input fields rendered inside the dialog. */
   paramSpecs?: ParamSpec[];
 };
@@ -129,6 +131,7 @@ export type ExecuteActionRequest = {
   group?: string;
   /** Forwarded from MutationActionDescriptor. */
   resource?: string;
+  apiVersion?: string;
 };
 
 /** Result returned by executeAction(). Never throws — errors are encoded here. */

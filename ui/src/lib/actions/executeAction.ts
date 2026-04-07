@@ -29,6 +29,7 @@ export async function executeAction(
       {
         group: request.group ?? "",
         resource: request.resource ?? "",
+        apiVersion: request.apiVersion ?? request.targetRef.apiVersion ?? "",
         namespace: request.targetRef.namespace ?? "",
         name: request.targetRef.name,
         action: request.actionId,

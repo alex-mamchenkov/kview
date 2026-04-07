@@ -14,12 +14,13 @@ var ErrUnknownAction = errors.New("unknown action")
 
 // ActionRequest describes a mutation action to perform on a resource.
 type ActionRequest struct {
-	Group     string         `json:"group"`
-	Resource  string         `json:"resource"`
-	Namespace string         `json:"namespace"`
-	Name      string         `json:"name"`
-	Action    string         `json:"action"`
-	Params    map[string]any `json:"params,omitempty"`
+	Group      string         `json:"group"`
+	Resource   string         `json:"resource"`
+	APIVersion string         `json:"apiVersion"`
+	Namespace  string         `json:"namespace"`
+	Name       string         `json:"name"`
+	Action     string         `json:"action"`
+	Params     map[string]any `json:"params,omitempty"`
 }
 
 // ActionResult describes the outcome of an action.

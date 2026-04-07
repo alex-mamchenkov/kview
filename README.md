@@ -25,7 +25,7 @@ Important current behaviors:
 - List views and the cluster dashboard refresh in the background without requiring a page reload.
 - Namespace summaries are projection-backed from dataplane snapshots and return usable partial/degraded payloads instead of hard-failing when only part of the namespace is visible.
 - Namespace list row enrichment is scoped to current, recent, and favourite namespaces; it is idle-gated and preserves previously enriched rows across refreshes.
-- User settings are browser-local and include refresh defaults, smart-filter rules, custom container commands, and JSON import/export. They do not change backend dataplane configuration yet.
+- User settings are browser-local and include refresh defaults, smart-filter rules, custom container commands, custom workload actions, and JSON import/export. They do not change backend dataplane configuration yet.
 - Dataplane-backed read APIs accept optional `X-Kview-Context` so the UI can pin reads to the context that was active when the request was issued.
 - Mutations remain on the shared action framework and are not part of the dataplane.
 
@@ -159,9 +159,9 @@ The Activity Panel shows runtime and operational activity, including:
 
 ### User Settings
 
-The Settings view is opened from the header and stores a browser-local settings profile in `localStorage`. The current profile controls frontend refresh defaults, initial Activity Panel state, scoped smart-filter chip generation, and custom container command presets. Import/export covers only this settings profile; active context, active namespace, favourites, recent namespace history, and theme remain separate.
+The Settings view is opened from the header and stores a browser-local settings profile in `localStorage`. The current profile controls frontend refresh defaults, initial Activity Panel state, scoped smart-filter chip generation, custom container command presets, and custom workload action presets. Import/export covers only this settings profile; active context, active namespace, favourites, recent namespace history, and theme remain separate.
 
-Custom container commands are shown on matching Pod containers and run through short-lived non-interactive pod exec requests. The default command is `Environment`, which runs `/bin/env` and renders stdout as key-value output. Namespace enrichment tuning and custom kube actions are visible as placeholders for later feature packs.
+Custom container commands are shown on matching Pod containers and run through short-lived non-interactive pod exec requests. The default command is `Environment`, which runs `/bin/env` and renders stdout as key-value output. Custom workload actions are shown on patch-capable Deployments, StatefulSets, DaemonSets, and ReplicaSets, and support set/unset env, set image, and raw JSON/merge patches. Namespace enrichment tuning remains a placeholder for a later feature pack.
 
 ---
 

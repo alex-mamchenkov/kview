@@ -4,6 +4,9 @@ export type SettingsScopeMode = "all" | "cluster" | "namespace";
 export type SettingsResourceScopeMode = "any" | "selected";
 export type CustomCommandOutputType = "text" | "keyValue" | "csv" | "code" | "file";
 export type CustomCommandSafety = "safe" | "dangerous";
+export type CustomActionKind = "set" | "unset" | "patch";
+export type CustomActionTarget = "env" | "image";
+export type CustomActionPatchType = "json" | "merge";
 
 export type SmartFilterRule = {
   id: string;
@@ -33,6 +36,9 @@ export type KviewUserSettingsV1 = {
   customCommands: {
     commands: CustomCommandDefinition[];
   };
+  customActions: {
+    actions: CustomActionDefinition[];
+  };
 };
 
 export type SmartFilterMatchContext = {
@@ -55,6 +61,22 @@ export type CustomCommandDefinition = {
   safety: CustomCommandSafety;
 };
 
+export type CustomActionDefinition = {
+  id: string;
+  enabled: boolean;
+  name: string;
+  resources: ListResourceKey[];
+  action: CustomActionKind;
+  target: CustomActionTarget;
+  key: string;
+  value: string;
+  runtimeValue: boolean;
+  containerPattern: string;
+  patchType: CustomActionPatchType;
+  patchBody: string;
+  safety: CustomCommandSafety;
+};
+
 export const USER_SETTINGS_KEY = "kview:userSettings:v1";
 
 export const refreshIntervalOptions = [
@@ -71,6 +93,10 @@ const allowedScopes = new Set<SettingsScopeMode>(["all", "cluster", "namespace"]
 const allowedResourceScopes = new Set<SettingsResourceScopeMode>(["any", "selected"]);
 const allowedCommandOutputTypes = new Set<CustomCommandOutputType>(["text", "keyValue", "csv", "code", "file"]);
 const allowedCommandSafety = new Set<CustomCommandSafety>(["safe", "dangerous"]);
+const allowedActionKinds = new Set<CustomActionKind>(["set", "unset", "patch"]);
+const allowedActionTargets = new Set<CustomActionTarget>(["env", "image"]);
+const allowedActionPatchTypes = new Set<CustomActionPatchType>(["json", "merge"]);
+const customActionResourceKeys: ListResourceKey[] = ["deployments", "daemonsets", "statefulsets", "replicasets"];
 
 export function defaultUserSettings(): KviewUserSettingsV1 {
   return {
@@ -127,6 +153,40 @@ export function defaultUserSettings(): KviewUserSettingsV1 {
         },
       ],
     },
+    customActions: {
+      actions: [
+        {
+          id: "default-enable-debug-env",
+          enabled: true,
+          name: "Enable DEBUG",
+          resources: ["deployments"],
+          action: "set",
+          target: "env",
+          key: "DEBUG",
+          value: "true",
+          runtimeValue: false,
+          containerPattern: "",
+          patchType: "merge",
+          patchBody: "{}",
+          safety: "safe",
+        },
+        {
+          id: "default-disable-debug-env",
+          enabled: true,
+          name: "Disable DEBUG",
+          resources: ["deployments"],
+          action: "unset",
+          target: "env",
+          key: "DEBUG",
+          value: "",
+          runtimeValue: false,
+          containerPattern: "",
+          patchType: "merge",
+          patchBody: "{}",
+          safety: "safe",
+        },
+      ],
+    },
   };
 }
 
@@ -166,6 +226,24 @@ export function newCustomCommandDefinition(): CustomCommandDefinition {
     codeLanguage: "",
     fileName: "",
     compress: false,
+    safety: "safe",
+  };
+}
+
+export function newCustomActionDefinition(): CustomActionDefinition {
+  return {
+    id: `action-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    enabled: true,
+    name: "New action",
+    resources: ["deployments", "daemonsets", "statefulsets"],
+    action: "set",
+    target: "env",
+    key: "",
+    value: "",
+    runtimeValue: false,
+    containerPattern: "",
+    patchType: "merge",
+    patchBody: "{\n  \"spec\": {\n    \"template\": {\n      \"spec\": {}\n    }\n  }\n}",
     safety: "safe",
   };
 }
@@ -262,6 +340,64 @@ function normalizeCustomCommand(input: unknown, fallbackId: string): CustomComma
   };
 }
 
+function normalizeCustomAction(input: unknown, fallbackId: string): CustomActionDefinition | null {
+  if (!input || typeof input !== "object") return null;
+  const raw = input as Partial<CustomActionDefinition>;
+  const action = allowedActionKinds.has(raw.action as CustomActionKind) ? (raw.action as CustomActionKind) : "set";
+  const target = allowedActionTargets.has(raw.target as CustomActionTarget) ? (raw.target as CustomActionTarget) : "env";
+  const patchType = allowedActionPatchTypes.has(raw.patchType as CustomActionPatchType)
+    ? (raw.patchType as CustomActionPatchType)
+    : "merge";
+  const safety = allowedCommandSafety.has(raw.safety as CustomCommandSafety)
+    ? (raw.safety as CustomCommandSafety)
+    : "safe";
+  const resources: ListResourceKey[] = Array.isArray(raw.resources)
+    ? Array.from(new Set(raw.resources.filter((value): value is ListResourceKey => customActionResourceKeys.includes(value as ListResourceKey))))
+    : ["deployments", "daemonsets", "statefulsets"];
+  if (resources.length === 0) return null;
+
+  const key = typeof raw.key === "string" ? raw.key.trim() : "";
+  const value = typeof raw.value === "string" ? raw.value : "";
+  const patchBody = typeof raw.patchBody === "string" ? raw.patchBody.trim() : "";
+  if (action === "patch") {
+    if (!patchBody) return null;
+    try {
+      JSON.parse(patchBody);
+    } catch {
+      return null;
+    }
+  } else if (target === "env" && !key) {
+    return null;
+  } else if (action === "set" && !raw.runtimeValue && !value.trim()) {
+    return null;
+  }
+
+  const containerPattern = typeof raw.containerPattern === "string" ? raw.containerPattern.trim() : "";
+  if (containerPattern) {
+    try {
+      new RegExp(containerPattern);
+    } catch {
+      return null;
+    }
+  }
+
+  return {
+    id: typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : fallbackId,
+    enabled: typeof raw.enabled === "boolean" ? raw.enabled : true,
+    name: typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : "Custom action",
+    resources,
+    action,
+    target,
+    key,
+    value,
+    runtimeValue: typeof raw.runtimeValue === "boolean" ? raw.runtimeValue : false,
+    containerPattern,
+    patchType,
+    patchBody,
+    safety,
+  };
+}
+
 export function validateUserSettings(input: unknown): KviewUserSettingsV1 | null {
   if (!input || typeof input !== "object") return null;
   const raw = input as Partial<KviewUserSettingsV1>;
@@ -271,6 +407,7 @@ export function validateUserSettings(input: unknown): KviewUserSettingsV1 | null
   const rawAppearance = (raw.appearance ?? {}) as Partial<KviewUserSettingsV1["appearance"]>;
   const rawSmartFilters = (raw.smartFilters ?? {}) as Partial<KviewUserSettingsV1["smartFilters"]>;
   const rawCustomCommands = (raw.customCommands ?? {}) as Partial<KviewUserSettingsV1["customCommands"]>;
+  const rawCustomActions = (raw.customActions ?? {}) as Partial<KviewUserSettingsV1["customActions"]>;
   const rulesProvided = Array.isArray(rawSmartFilters.rules);
   const rawRules: unknown[] = rulesProvided ? (rawSmartFilters.rules as unknown[]) : [];
   const normalizedRules = rawRules
@@ -283,6 +420,12 @@ export function validateUserSettings(input: unknown): KviewUserSettingsV1 | null
     .map((cmd: unknown, index: number) => normalizeCustomCommand(cmd, `imported-command-${index + 1}`))
     .filter((cmd): cmd is CustomCommandDefinition => Boolean(cmd));
   if (commandsProvided && normalizedCommands.length !== rawCommands.length) return null;
+  const actionsProvided = Array.isArray(rawCustomActions.actions);
+  const rawActions: unknown[] = actionsProvided ? (rawCustomActions.actions as unknown[]) : [];
+  const normalizedActions = rawActions
+    .map((action: unknown, index: number) => normalizeCustomAction(action, `imported-action-${index + 1}`))
+    .filter((action): action is CustomActionDefinition => Boolean(action));
+  if (actionsProvided && normalizedActions.length !== rawActions.length) return null;
 
   return {
     v: 1,
@@ -310,6 +453,9 @@ export function validateUserSettings(input: unknown): KviewUserSettingsV1 | null
     },
     customCommands: {
       commands: commandsProvided ? normalizedCommands : defaults.customCommands.commands,
+    },
+    customActions: {
+      actions: actionsProvided ? normalizedActions : defaults.customActions.actions,
     },
   };
 }
@@ -421,6 +567,15 @@ export function customCommandsForContainer(
 ): CustomCommandDefinition[] {
   return commands.filter((command) => customCommandMatchesContainer(command, containerName));
 }
+
+export function customActionsForResource(
+  actions: CustomActionDefinition[],
+  resourceKey: ListResourceKey,
+): CustomActionDefinition[] {
+  return actions.filter((action) => action.enabled && action.resources.includes(resourceKey));
+}
+
+export { customActionResourceKeys };
 
 export const allListResourceKeys: ListResourceKey[] = [
   "pods",

@@ -37,6 +37,7 @@ export type MutationDialogProps = {
   execute?: (params?: Record<string, unknown>) => Promise<ExecuteActionResult>;
   onSuccess?: (result: ExecuteActionResult) => void;
   closeOnSuccess?: boolean;
+  baseParams?: Record<string, unknown>;
   /** Pre-populated values for paramSpecs fields (keyed by spec.key). */
   initialParams?: Record<string, string | boolean>;
 };
@@ -72,6 +73,7 @@ export default function MutationDialog({
   execute,
   onSuccess,
   closeOnSuccess,
+  baseParams,
   initialParams,
 }: MutationDialogProps) {
   const { health } = useConnectionState();
@@ -128,9 +130,9 @@ export default function MutationDialog({
     setPhase("running");
 
     // Collect params to pass to the backend.
-    let execParams: Record<string, unknown> | undefined;
+    let execParams: Record<string, unknown> | undefined = baseParams ? { ...baseParams } : undefined;
     if (descriptor.paramSpecs && descriptor.paramSpecs.length > 0) {
-      execParams = {};
+      execParams = execParams || {};
       for (const spec of descriptor.paramSpecs) {
         const value = params[spec.key];
         if (spec.kind === "numeric") {
@@ -154,6 +156,7 @@ export default function MutationDialog({
           targetRef,
           group: descriptor.group,
           resource: descriptor.resource,
+          apiVersion: descriptor.apiVersion,
           params: execParams,
         });
     setResult(res);
