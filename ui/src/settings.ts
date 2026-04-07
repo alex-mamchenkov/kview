@@ -2,6 +2,8 @@ import type { ListResourceKey } from "./utils/k8sResources";
 
 export type SettingsScopeMode = "all" | "cluster" | "namespace";
 export type SettingsResourceScopeMode = "any" | "selected";
+export type CustomCommandOutputType = "text" | "keyValue" | "csv" | "code" | "file";
+export type CustomCommandSafety = "safe" | "dangerous";
 
 export type SmartFilterRule = {
   id: string;
@@ -28,12 +30,29 @@ export type KviewUserSettingsV1 = {
     minCount: number;
     rules: SmartFilterRule[];
   };
+  customCommands: {
+    commands: CustomCommandDefinition[];
+  };
 };
 
 export type SmartFilterMatchContext = {
   contextName: string;
   namespace?: string | null;
   resourceKey?: ListResourceKey | null;
+};
+
+export type CustomCommandDefinition = {
+  id: string;
+  enabled: boolean;
+  name: string;
+  containerPattern: string;
+  workdir: string;
+  command: string;
+  outputType: CustomCommandOutputType;
+  codeLanguage: string;
+  fileName: string;
+  compress: boolean;
+  safety: CustomCommandSafety;
 };
 
 export const USER_SETTINGS_KEY = "kview:userSettings:v1";
@@ -50,6 +69,8 @@ export const refreshIntervalOptions = [
 const allowedRegexFlags = new Set(["d", "g", "i", "m", "s", "u", "v", "y"]);
 const allowedScopes = new Set<SettingsScopeMode>(["all", "cluster", "namespace"]);
 const allowedResourceScopes = new Set<SettingsResourceScopeMode>(["any", "selected"]);
+const allowedCommandOutputTypes = new Set<CustomCommandOutputType>(["text", "keyValue", "csv", "code", "file"]);
+const allowedCommandSafety = new Set<CustomCommandSafety>(["safe", "dangerous"]);
 
 export function defaultUserSettings(): KviewUserSettingsV1 {
   return {
@@ -89,6 +110,23 @@ export function defaultUserSettings(): KviewUserSettingsV1 {
         },
       ],
     },
+    customCommands: {
+      commands: [
+        {
+          id: "default-env",
+          enabled: true,
+          name: "Environment",
+          containerPattern: "",
+          workdir: "",
+          command: "/bin/env",
+          outputType: "keyValue",
+          codeLanguage: "",
+          fileName: "env.txt",
+          compress: false,
+          safety: "safe",
+        },
+      ],
+    },
   };
 }
 
@@ -114,6 +152,22 @@ export function sanitizeRegexFlags(input: string): string {
     out.push(ch);
   }
   return out.join("");
+}
+
+export function newCustomCommandDefinition(): CustomCommandDefinition {
+  return {
+    id: `command-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    enabled: true,
+    name: "New command",
+    containerPattern: "",
+    workdir: "",
+    command: "",
+    outputType: "text",
+    codeLanguage: "",
+    fileName: "",
+    compress: false,
+    safety: "safe",
+  };
 }
 
 function validRefreshSec(value: unknown, fallback: number): number {
@@ -166,6 +220,48 @@ function normalizeRule(input: unknown, fallbackId: string): SmartFilterRule | nu
   };
 }
 
+function normalizeCustomCommand(input: unknown, fallbackId: string): CustomCommandDefinition | null {
+  if (!input || typeof input !== "object") return null;
+  const raw = input as Partial<CustomCommandDefinition>;
+  const command = typeof raw.command === "string" ? raw.command.trim() : "";
+  if (!command) return null;
+
+  const containerPattern = typeof raw.containerPattern === "string" ? raw.containerPattern.trim() : "";
+  if (containerPattern) {
+    try {
+      new RegExp(containerPattern);
+    } catch {
+      return null;
+    }
+  }
+
+  const outputType = allowedCommandOutputTypes.has(raw.outputType as CustomCommandOutputType)
+    ? (raw.outputType as CustomCommandOutputType)
+    : "text";
+  const safety = allowedCommandSafety.has(raw.safety as CustomCommandSafety)
+    ? (raw.safety as CustomCommandSafety)
+    : "safe";
+
+  return {
+    id: typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : fallbackId,
+    enabled: typeof raw.enabled === "boolean" ? raw.enabled : true,
+    name:
+      typeof raw.name === "string" && raw.name.trim()
+        ? raw.name.trim()
+        : command.length > 40
+          ? `${command.slice(0, 37)}...`
+          : command,
+    containerPattern,
+    workdir: typeof raw.workdir === "string" ? raw.workdir.trim() : "",
+    command,
+    outputType,
+    codeLanguage: typeof raw.codeLanguage === "string" ? raw.codeLanguage.trim() : "",
+    fileName: typeof raw.fileName === "string" ? raw.fileName.trim() : "",
+    compress: typeof raw.compress === "boolean" ? raw.compress : false,
+    safety,
+  };
+}
+
 export function validateUserSettings(input: unknown): KviewUserSettingsV1 | null {
   if (!input || typeof input !== "object") return null;
   const raw = input as Partial<KviewUserSettingsV1>;
@@ -174,12 +270,19 @@ export function validateUserSettings(input: unknown): KviewUserSettingsV1 | null
   const defaults = defaultUserSettings();
   const rawAppearance = (raw.appearance ?? {}) as Partial<KviewUserSettingsV1["appearance"]>;
   const rawSmartFilters = (raw.smartFilters ?? {}) as Partial<KviewUserSettingsV1["smartFilters"]>;
+  const rawCustomCommands = (raw.customCommands ?? {}) as Partial<KviewUserSettingsV1["customCommands"]>;
   const rulesProvided = Array.isArray(rawSmartFilters.rules);
   const rawRules: unknown[] = rulesProvided ? (rawSmartFilters.rules as unknown[]) : [];
   const normalizedRules = rawRules
     .map((rule: unknown, index: number) => normalizeRule(rule, `imported-rule-${index + 1}`))
     .filter((rule): rule is SmartFilterRule => Boolean(rule));
   if (rulesProvided && normalizedRules.length !== rawRules.length) return null;
+  const commandsProvided = Array.isArray(rawCustomCommands.commands);
+  const rawCommands: unknown[] = commandsProvided ? (rawCustomCommands.commands as unknown[]) : [];
+  const normalizedCommands = rawCommands
+    .map((cmd: unknown, index: number) => normalizeCustomCommand(cmd, `imported-command-${index + 1}`))
+    .filter((cmd): cmd is CustomCommandDefinition => Boolean(cmd));
+  if (commandsProvided && normalizedCommands.length !== rawCommands.length) return null;
 
   return {
     v: 1,
@@ -204,6 +307,9 @@ export function validateUserSettings(input: unknown): KviewUserSettingsV1 | null
     smartFilters: {
       minCount: validMinCount(rawSmartFilters.minCount, defaults.smartFilters.minCount),
       rules: rulesProvided ? normalizedRules : defaults.smartFilters.rules,
+    },
+    customCommands: {
+      commands: commandsProvided ? normalizedCommands : defaults.customCommands.commands,
     },
   };
 }
@@ -296,6 +402,24 @@ export function labelForSmartFilterRules(
     if (label) return label;
   }
   return null;
+}
+
+export function customCommandMatchesContainer(command: CustomCommandDefinition, containerName: string): boolean {
+  if (!command.enabled || !command.command.trim()) return false;
+  const pattern = command.containerPattern.trim();
+  if (!pattern) return true;
+  try {
+    return new RegExp(pattern).test(containerName);
+  } catch {
+    return false;
+  }
+}
+
+export function customCommandsForContainer(
+  commands: CustomCommandDefinition[],
+  containerName: string,
+): CustomCommandDefinition[] {
+  return commands.filter((command) => customCommandMatchesContainer(command, containerName));
 }
 
 export const allListResourceKeys: ListResourceKey[] = [

@@ -316,6 +316,52 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, map[string]any{"item": created})
 		})
 
+		api.Post("/container-commands/run", func(w http.ResponseWriter, r *http.Request) {
+			ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+			defer cancel()
+
+			var body kube.ContainerCommandRequest
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid body"})
+				return
+			}
+			if strings.TrimSpace(body.Namespace) == "" ||
+				strings.TrimSpace(body.Pod) == "" ||
+				strings.TrimSpace(body.Container) == "" ||
+				strings.TrimSpace(body.Command) == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "namespace, pod, container, and command are required"})
+				return
+			}
+
+			contextName := s.readContextName(r)
+			clients, clusterName, err := s.mgr.GetClientsForContext(ctx, contextName)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get Kubernetes client"})
+				return
+			}
+
+			runner := kube.ContainerCommandClient{
+				Clientset:  clients.Clientset,
+				RestConfig: clients.RestConfig,
+			}
+			result, err := runner.Run(ctx, body)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+				return
+			}
+
+			status := "success"
+			level := runtime.LogLevelInfo
+			if result.ExitCode != 0 {
+				status = "failed"
+				level = runtime.LogLevelWarn
+			}
+			logStructured(s.rt, level, "container-commands", status,
+				fmt.Sprintf("ran container command for pod %s/%s (container=%s, exit=%d)", body.Namespace, body.Pod, body.Container, result.ExitCode),
+				"context", clusterName, "namespace", body.Namespace, "name", body.Pod, "container", body.Container, "exitCode", fmt.Sprintf("%d", result.ExitCode))
+			writeJSON(w, http.StatusOK, map[string]any{"item": result})
+		})
+
 		api.Post("/sessions/portforward", func(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 			defer cancel()

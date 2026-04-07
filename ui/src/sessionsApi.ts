@@ -1,4 +1,5 @@
-import { apiPost } from "./api";
+import { apiPost, apiPostWithContext } from "./api";
+import type { CustomCommandOutputType } from "./settings";
 
 export async function apiDelete(path: string, token: string): Promise<void> {
   const res = await fetch(path, {
@@ -76,3 +77,42 @@ export async function createPortForwardSession(
   return apiPost<PortForwardSessionResponse>("/api/sessions/portforward", token, req);
 }
 
+export type RunContainerCommandRequest = {
+  namespace: string;
+  pod: string;
+  container: string;
+  command: string;
+  workdir?: string;
+  outputType: CustomCommandOutputType;
+  fileName?: string;
+  compress?: boolean;
+};
+
+export type RunContainerCommandResult = {
+  stdout?: string;
+  stderr?: string;
+  outputBase64?: string;
+  exitCode: number;
+  durationMs: number;
+  fileName?: string;
+  compressed?: boolean;
+  error?: string;
+};
+
+type RunContainerCommandResponse = {
+  item: RunContainerCommandResult;
+};
+
+export async function runContainerCommand(
+  req: RunContainerCommandRequest,
+  token: string,
+  contextName: string,
+): Promise<RunContainerCommandResult> {
+  const res = await apiPostWithContext<RunContainerCommandResponse>(
+    "/api/container-commands/run",
+    token,
+    contextName,
+    req,
+  );
+  return res.item;
+}

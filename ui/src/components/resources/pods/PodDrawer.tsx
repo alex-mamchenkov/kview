@@ -23,9 +23,16 @@ import {
   TableRow,
   Tooltip,
   Button,
+  IconButton,
   Menu,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Alert,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import CloseIcon from "@mui/icons-material/Close";
 import { apiGet, toApiError, type ApiError } from "../../../api";
 import { useConnectionState } from "../../../connectionState";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -64,8 +71,13 @@ import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import WarningsSection, { type Warning } from "../../shared/WarningsSection";
 import PortForwardDialog, { type PortForwardOption } from "../../shared/PortForwardDialog";
 import PortForwardCreatedSnackbar from "../../shared/PortForwardCreatedSnackbar";
-import { createTerminalSession, createPortForwardSession } from "../../../sessionsApi";
+import { createTerminalSession, createPortForwardSession, runContainerCommand, type RunContainerCommandResult } from "../../../sessionsApi";
 import { emitFocusPortForwardsTab, emitOpenTerminalSession } from "../../../activityEvents";
+import { useActiveContext } from "../../../activeContext";
+import { useUserSettings } from "../../../settingsContext";
+import { customCommandsForContainer, type CustomCommandDefinition } from "../../../settings";
+import { useMutationDialog } from "../../mutations/useMutationDialog";
+import type { ExecuteActionResult } from "../../../lib/actions/types";
 
 type PodDetails = {
   summary: PodSummary;
@@ -323,6 +335,122 @@ function formatPretty(lines: string[]): string {
   return out.join("\n");
 }
 
+function parseKeyValueOutput(text: string): { rows: Array<{ key: string; value: string }>; parseable: boolean } {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const rows: Array<{ key: string; value: string }> = [];
+  let parsedCount = 0;
+  for (const line of lines) {
+    const delimiterMatch = line.match(/^([^=:\s,]+)\s*(=|:|,|\s)\s*(.+)$/);
+    if (!delimiterMatch) continue;
+    parsedCount += 1;
+    rows.push({ key: delimiterMatch[1], value: delimiterMatch[3] ?? "" });
+  }
+  return {
+    rows,
+    parseable: lines.length > 0 && parsedCount / lines.length >= 0.8,
+  };
+}
+
+function splitDelimitedLine(line: string, delimiter: string): string[] {
+  const cells: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (ch === delimiter && !inQuotes) {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function parseDelimitedOutput(text: string): {
+  delimiter: string;
+  rows: string[][];
+  parseable: boolean;
+} {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const delimiters = [",", ";", "\t", "|"];
+  let best = { delimiter: ",", rows: [] as string[][], score: 0 };
+  for (const delimiter of delimiters) {
+    const rows = lines.map((line) => splitDelimitedLine(line, delimiter));
+    const multiColumnRows = rows.filter((row) => row.length > 1);
+    const widthCounts = new Map<number, number>();
+    for (const row of multiColumnRows) {
+      widthCounts.set(row.length, (widthCounts.get(row.length) || 0) + 1);
+    }
+    const consistency = Math.max(0, ...Array.from(widthCounts.values()));
+    const score = multiColumnRows.length + consistency;
+    if (score > best.score) best = { delimiter, rows, score };
+  }
+  const parseable = lines.length > 0 && best.rows.filter((row) => row.length > 1).length / lines.length >= 0.8;
+  return { delimiter: best.delimiter, rows: best.rows, parseable };
+}
+
+function detectCodeLanguage(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "text";
+  try {
+    JSON.parse(trimmed);
+    return "json";
+  } catch {
+    // keep checking
+  }
+  if (/^---(?:\s|$)/.test(trimmed) || /^[\w.-]+\s*:\s+.+$/m.test(trimmed)) {
+    return "yaml";
+  }
+  if (/^<\?xml\b|<[\w:-]+(?:\s|>)/.test(trimmed)) return "markup";
+  if (/^<\?php\b|\bnamespace\s+[\w\\]+;|\buse\s+[\w\\]+;/.test(trimmed)) return "php";
+  if (/\b(import\s+[\w.*{}\s,]+\s+from\s+['"]|const\s+\w+\s*=|let\s+\w+\s*=|function\s+\w+\s*\()/m.test(trimmed)) return "javascript";
+  if (/\b(public|private|protected)\s+(class|interface|enum)\s+\w+|\bSystem\.out\.println\(/.test(trimmed)) return "java";
+  if (/\bpackage\s+main\b|\bfunc\s+\w+\s*\(|\bfmt\.Print/.test(trimmed)) return "go";
+  if (/\b(def\s+\w+\s*\(|import\s+\w+|from\s+\w+\s+import\s+|if\s+__name__\s*==\s*["']__main__["'])/m.test(trimmed)) return "python";
+  if (/^\s*\[[^\]]+\]\s*$/m.test(trimmed) || /^[\w.-]+\s*=\s*.+$/m.test(trimmed)) return "ini";
+  if (parseDelimitedOutput(trimmed).parseable) return "csv";
+  if (/^\s*(#!\/bin\/(?:ba)?sh|set -e\b|export\s+\w+=)/m.test(trimmed)) return "bash";
+  return "text";
+}
+
+function downloadCommandOutput(result: RunContainerCommandResult, fallbackName: string) {
+  const fileName = result.fileName || fallbackName || "container-command-output.txt";
+  let blob: Blob;
+  if (result.outputBase64) {
+    const raw = window.atob(result.outputBase64);
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i += 1) {
+      bytes[i] = raw.charCodeAt(i);
+    }
+    blob = new Blob([bytes], { type: result.compressed ? "application/gzip" : "application/octet-stream" });
+  } else {
+    blob = new Blob([result.stdout || ""], { type: "text/plain" });
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function PodDrawer(props: {
   open: boolean;
   onClose: () => void;
@@ -331,6 +459,9 @@ export default function PodDrawer(props: {
   podName: string | null;
 }) {
   const { health, retryNonce } = useConnectionState();
+  const activeContext = useActiveContext();
+  const { settings } = useUserSettings();
+  const { open: openMutationDialog } = useMutationDialog();
   const offline = health === "unhealthy";
   const offlineReason = "Cluster connection is unavailable";
   const [tab, setTab] = useState(0);
@@ -380,6 +511,15 @@ export default function PodDrawer(props: {
   const [creatingPortForward, setCreatingPortForward] = useState(false);
   const [terminalContainer, setTerminalContainer] = useState<string>("");
   const [terminalMenuAnchor, setTerminalMenuAnchor] = useState<null | HTMLElement>(null);
+  const [commandMenuAnchor, setCommandMenuAnchor] = useState<null | HTMLElement>(null);
+  const [commandMenuContainer, setCommandMenuContainer] = useState<string>("");
+  const [runningCommand, setRunningCommand] = useState(false);
+  const [commandResult, setCommandResult] = useState<{
+    command: CustomCommandDefinition;
+    container: string;
+    result: RunContainerCommandResult;
+  } | null>(null);
+  const [commandOutputFilter, setCommandOutputFilter] = useState("");
   const [portForwardDialogOpen, setPortForwardDialogOpen] = useState(false);
   const [portForwardRemotePort, setPortForwardRemotePort] = useState<string>("");
   const [portForwardLocalPort, setPortForwardLocalPort] = useState<string>("");
@@ -390,6 +530,27 @@ export default function PodDrawer(props: {
     if (!name) return "";
     return `/api/namespaces/${encodeURIComponent(ns)}/pods/${encodeURIComponent(name)}/logs/ws`;
   }, [name, ns]);
+  const commandContainers = useMemo(
+    () =>
+      (details?.containers || [])
+        .map((c) => c.name)
+        .filter((containerName): containerName is string => Boolean(containerName)),
+    [details],
+  );
+  const matchingCommandsByContainer = useMemo(() => {
+    const out: Record<string, CustomCommandDefinition[]> = {};
+    for (const containerName of commandContainers) {
+      out[containerName] = customCommandsForContainer(settings.customCommands.commands, containerName);
+    }
+    return out;
+  }, [commandContainers, settings.customCommands.commands]);
+  const overviewCommandItems = useMemo(
+    () =>
+      commandContainers.flatMap((containerName) =>
+        (matchingCommandsByContainer[containerName] || []).map((command) => ({ containerName, command })),
+      ),
+    [commandContainers, matchingCommandsByContainer],
+  );
 
   function stopLogs() {
     setFollowing(false);
@@ -478,6 +639,76 @@ export default function PodDrawer(props: {
     } finally {
       setCreatingTerminal(false);
     }
+  };
+
+  const runConfiguredCommand = async (containerName: string, command: CustomCommandDefinition) => {
+    if (!name || !containerName || offline || runningCommand) return;
+    const label = command.name || command.command;
+    openMutationDialog({
+      token: props.token,
+      targetRef: {
+        context: activeContext,
+        kind: "Container",
+        namespace: ns,
+        name: `${name}/${containerName}`,
+      },
+      descriptor: {
+        id: `container-command:${command.id}`,
+        title: `Run ${label}`,
+        description: [
+          `Executes inside container ${containerName}.`,
+          command.workdir ? `Workdir: ${command.workdir}.` : "Uses the container default workdir.",
+          `Command: ${command.command}`,
+        ].join(" "),
+        risk: command.safety === "dangerous" ? "high" : "low",
+        confirmSpec:
+          command.safety === "dangerous"
+            ? { mode: "typed", requiredValue: label }
+            : { mode: "simple" },
+      },
+      execute: async (): Promise<ExecuteActionResult> => {
+        try {
+          setRunningCommand(true);
+          const result = await runContainerCommand(
+            {
+              namespace: ns,
+              pod: name,
+              container: containerName,
+              command: command.command,
+              workdir: command.workdir,
+              outputType: command.outputType,
+              fileName: command.fileName,
+              compress: command.compress,
+            },
+            props.token,
+            activeContext,
+          );
+          return {
+            success: true,
+            message:
+              result.exitCode === 0
+                ? "Command completed successfully."
+                : `Command completed with exit code ${result.exitCode}.`,
+            details: result,
+          };
+        } catch (e) {
+          return {
+            success: false,
+            message: (e as Error | undefined)?.message || "Failed to run command.",
+            details: e,
+          };
+        } finally {
+          setRunningCommand(false);
+        }
+      },
+      onSuccess: (res) => {
+        const result = res.details as RunContainerCommandResult | undefined;
+        if (!result || typeof result.exitCode !== "number") return;
+        setCommandOutputFilter("");
+        setCommandResult({ command, container: containerName, result });
+      },
+      closeOnSuccess: true,
+    });
   };
 
   const handleOpenPortForwardDialog = () => {
@@ -925,6 +1156,147 @@ export default function PodDrawer(props: {
     networkingServicesErr?.status === 401 || networkingServicesErr?.status === 403;
   const ingressesAccessDenied =
     networkingIngressesErr?.status === 401 || networkingIngressesErr?.status === 403;
+  const commandMenuItems = commandMenuContainer
+    ? (matchingCommandsByContainer[commandMenuContainer] || []).map((command) => ({
+        containerName: commandMenuContainer,
+        command,
+      }))
+    : overviewCommandItems;
+  const selectedCommand = commandResult?.command;
+  const selectedResult = commandResult?.result;
+  const commandOutput = selectedResult?.stdout || "";
+  const normalizedCommandFilter = commandOutputFilter.trim().toLowerCase();
+  const filteredCommandOutput = normalizedCommandFilter
+    ? commandOutput
+        .split(/\r?\n/)
+        .filter((line) => line.toLowerCase().includes(normalizedCommandFilter))
+        .join("\n")
+    : commandOutput;
+  const renderCommandOutput = () => {
+    if (!selectedCommand || !selectedResult) return null;
+    if (selectedCommand.outputType === "file") {
+      return (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            Output is ready to download{selectedResult.compressed ? " as a gzip file" : ""}.
+          </Typography>
+          <Button
+            variant="contained"
+            onClick={() => downloadCommandOutput(selectedResult, selectedCommand.fileName || selectedCommand.name)}
+          >
+            Download output
+          </Button>
+        </Box>
+      );
+    }
+    if (selectedCommand.outputType === "keyValue") {
+      const parsed = parseKeyValueOutput(commandOutput);
+      if (!parsed.parseable) {
+        return (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <Alert severity="info">
+              Output did not look like key-value data, so it is shown as free text.
+            </Alert>
+            {normalizedCommandFilter && !filteredCommandOutput ? (
+              <EmptyState message="No output lines match the filter." />
+            ) : (
+              <CodeBlock code={filteredCommandOutput} language="text" />
+            )}
+          </Box>
+        );
+      }
+      const rows = parsed.rows.filter((row) => {
+        if (!normalizedCommandFilter) return true;
+        return (
+          row.key.toLowerCase().includes(normalizedCommandFilter) ||
+          row.value.toLowerCase().includes(normalizedCommandFilter)
+        );
+      });
+      if (rows.length === 0) {
+        return (
+          <EmptyState
+            message={parsed.rows.length === 0 ? "Command produced no stdout." : "No output rows match the filter."}
+          />
+        );
+      }
+      return (
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Key</TableCell>
+              <TableCell>Value</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((row, idx) => (
+              <TableRow key={`${row.key}-${idx}`}>
+                <TableCell sx={{ fontFamily: "monospace", whiteSpace: "nowrap" }}>{row.key}</TableCell>
+                <TableCell sx={{ fontFamily: "monospace", wordBreak: "break-word" }}>{row.value}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      );
+    }
+    if (selectedCommand.outputType === "csv") {
+      const parsed = parseDelimitedOutput(commandOutput);
+      if (!parsed.parseable) {
+        return (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <Alert severity="info">
+              Output did not look like delimited table data, so it is shown as free text.
+            </Alert>
+            {normalizedCommandFilter && !filteredCommandOutput ? (
+              <EmptyState message="No output lines match the filter." />
+            ) : (
+              <CodeBlock code={filteredCommandOutput} language="text" />
+            )}
+          </Box>
+        );
+      }
+      const rows = parsed.rows.filter((row) => {
+        if (!normalizedCommandFilter) return true;
+        return row.some((cell) => cell.toLowerCase().includes(normalizedCommandFilter));
+      });
+      if (rows.length === 0) return <EmptyState message="No table rows match the filter." />;
+      const [header, ...bodyRows] = rows;
+      return (
+        <Box sx={{ overflow: "auto" }}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+            Detected delimiter: {parsed.delimiter === "\t" ? "tab" : parsed.delimiter}
+          </Typography>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                {header.map((cell, idx) => (
+                  <TableCell key={`${cell}-${idx}`} sx={{ fontFamily: "monospace" }}>
+                    {cell || `Column ${idx + 1}`}
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {bodyRows.map((row, rowIdx) => (
+                <TableRow key={`row-${rowIdx}`}>
+                  {header.map((_, cellIdx) => (
+                    <TableCell key={`cell-${rowIdx}-${cellIdx}`} sx={{ fontFamily: "monospace", wordBreak: "break-word" }}>
+                      {row[cellIdx] ?? ""}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      );
+    }
+    if (selectedCommand.outputType === "code") {
+      if (normalizedCommandFilter && !filteredCommandOutput) return <EmptyState message="No output lines match the filter." />;
+      return <CodeBlock code={filteredCommandOutput} language={selectedCommand.codeLanguage || detectCodeLanguage(commandOutput)} />;
+    }
+    if (normalizedCommandFilter && !filteredCommandOutput) return <EmptyState message="No output lines match the filter." />;
+    return <CodeBlock code={filteredCommandOutput} language="text" />;
+  };
 
   return (
     <RightDrawer open={props.open} onClose={props.onClose}>
@@ -954,7 +1326,6 @@ export default function PodDrawer(props: {
               <Tab label="YAML" />
               <Tab label="Logs" />
             </Tabs>
-
             <Box sx={{ ...drawerBodySx, mt: 3 }}>
               {/* OVERVIEW */}
               {tab === 0 && (
@@ -986,6 +1357,14 @@ export default function PodDrawer(props: {
                           onClick={handleOpenPortForwardDialog}
                         >
                           Port forward
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          disabled={offline || runningCommand || overviewCommandItems.length === 0}
+                          onClick={(e) => setCommandMenuAnchor(e.currentTarget)}
+                        >
+                          Commands
                         </Button>
                       </Box>
                       <Menu
@@ -1151,6 +1530,25 @@ export default function PodDrawer(props: {
                                 }}
                               >
                                 Terminal
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                disabled={
+                                  offline ||
+                                  runningCommand ||
+                                  !ctn.name ||
+                                  (matchingCommandsByContainer[ctn.name] || []).length === 0
+                                }
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (!ctn.name) return;
+                                  setCommandMenuContainer(ctn.name);
+                                  setCommandMenuAnchor(e.currentTarget);
+                                }}
+                              >
+                                Commands
                               </Button>
                             </Box>
                           </AccordionSummary>
@@ -1900,6 +2298,82 @@ export default function PodDrawer(props: {
         message={portForwardCreatedMsg}
         onClose={() => setPortForwardCreatedMsg("")}
       />
+      <Menu
+        anchorEl={commandMenuAnchor}
+        open={!!commandMenuAnchor}
+        onClose={() => {
+          setCommandMenuAnchor(null);
+          setCommandMenuContainer("");
+        }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+        transformOrigin={{ vertical: "top", horizontal: "left" }}
+      >
+        {commandMenuItems.map(({ containerName, command }) => (
+          <MenuItem
+            key={`${containerName}-${command.id}`}
+            disabled={offline || runningCommand}
+            onClick={() => {
+              setCommandMenuAnchor(null);
+              setCommandMenuContainer("");
+              void runConfiguredCommand(containerName, command);
+            }}
+          >
+            {commandMenuContainer ? command.name || command.command : `${containerName}: ${command.name || command.command}`}
+          </MenuItem>
+        ))}
+      </Menu>
+      <Dialog open={!!commandResult} onClose={() => setCommandResult(null)} fullWidth maxWidth="md">
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, pr: 1 }}>
+          <Box sx={{ flexGrow: 1 }}>{selectedCommand?.name || "Command output"}</Box>
+          <Tooltip title="Close">
+            <IconButton aria-label="Close command output" size="small" onClick={() => setCommandResult(null)}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </DialogTitle>
+        <DialogContent dividers sx={{ display: "flex", flexDirection: "column", gap: 2, minHeight: 260 }}>
+          {commandResult ? (
+            <KeyValueTable
+              columns={3}
+              rows={[
+                { label: "Container", value: commandResult.container },
+                { label: "Exit code", value: selectedResult?.exitCode ?? "-" },
+                { label: "Duration", value: selectedResult ? `${selectedResult.durationMs} ms` : "-" },
+              ]}
+            />
+          ) : null}
+          {selectedResult?.error || selectedResult?.stderr ? (
+            <Alert severity={selectedResult.exitCode === 0 ? "warning" : "error"}>
+              {selectedResult.error ? <Typography variant="body2">{selectedResult.error}</Typography> : null}
+              {selectedResult.stderr ? (
+                <Box sx={{ mt: selectedResult.error ? 1 : 0 }}>
+                  <CodeBlock code={selectedResult.stderr} language="text" showCopy={false} />
+                </Box>
+              ) : null}
+            </Alert>
+          ) : null}
+          {selectedCommand && selectedCommand.outputType !== "file" ? (
+            <TextField
+              size="small"
+              label="Filter output"
+              value={commandOutputFilter}
+              onChange={(e) => setCommandOutputFilter(e.target.value)}
+              placeholder={
+                selectedCommand.outputType === "keyValue"
+                  ? "Filter by key or value"
+                  : selectedCommand.outputType === "csv"
+                    ? "Filter table rows"
+                  : "Filter output lines"
+              }
+              fullWidth
+            />
+          ) : null}
+          <Box sx={{ flex: 1, minHeight: 0 }}>{renderCommandOutput()}</Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCommandResult(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
             <ServiceDrawer
               open={!!drawerService}
               onClose={() => setDrawerService(null)}

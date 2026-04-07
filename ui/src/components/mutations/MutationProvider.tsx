@@ -1,14 +1,18 @@
 import React, { createContext, useCallback, useContext, useState } from "react";
 import MutationDialog from "./MutationDialog";
-import type { MutationActionDescriptor, TargetRef } from "../../lib/actions/types";
+import type { ExecuteActionResult, MutationActionDescriptor, TargetRef } from "../../lib/actions/types";
 
 /** Parameters passed to useMutationDialog().open(). */
 export type OpenMutationParams = {
   descriptor: MutationActionDescriptor;
   targetRef: TargetRef;
   token: string;
+  /** Optional custom executor for non-/api/actions operations that still use the shared confirmation UI. */
+  execute?: (params?: Record<string, unknown>) => Promise<ExecuteActionResult>;
   /** Called immediately after a successful execution (before user closes). */
-  onSuccess?: () => void;
+  onSuccess?: (result: ExecuteActionResult) => void;
+  /** Close the confirmation dialog immediately after successful execution. */
+  closeOnSuccess?: boolean;
   /** Pre-populated values for paramSpecs fields. */
   initialParams?: Record<string, string | boolean>;
 };
@@ -68,7 +72,9 @@ export default function MutationProvider({
           descriptor={active.params.descriptor}
           targetRef={active.params.targetRef}
           token={active.params.token}
+          execute={active.params.execute}
           onSuccess={active.params.onSuccess}
+          closeOnSuccess={active.params.closeOnSuccess}
           initialParams={active.params.initialParams}
         />
       )}

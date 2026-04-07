@@ -4,6 +4,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import {
   defaultUserSettings,
   exportUserSettingsJSON,
+  customCommandsForContainer,
   labelForSmartFilterRules,
   loadUserSettings,
   parseUserSettingsJSON,
@@ -62,6 +63,11 @@ describe("user settings", () => {
       flags: "i",
       resources: ["pods"],
     });
+    expect(parsed?.customCommands.commands[0]).toMatchObject({
+      id: "default-env",
+      command: "/bin/env",
+      outputType: "keyValue",
+    });
   });
 
   it("rejects invalid imported JSON", () => {
@@ -82,6 +88,57 @@ describe("user settings", () => {
     const settings = defaultUserSettings();
     const exported = exportUserSettingsJSON(settings);
     expect(parseUserSettingsJSON(exported)).toEqual(settings);
+  });
+
+  it("provides and matches default custom commands", () => {
+    const settings = defaultUserSettings();
+    expect(settings.customCommands.commands[0]).toMatchObject({
+      enabled: true,
+      name: "Environment",
+      containerPattern: "",
+      command: "/bin/env",
+      outputType: "keyValue",
+      safety: "safe",
+    });
+    expect(customCommandsForContainer(settings.customCommands.commands, "app")).toHaveLength(1);
+  });
+
+  it("validates custom command imports and rejects invalid patterns", () => {
+    const parsed = validateUserSettings({
+      ...defaultUserSettings(),
+      customCommands: {
+        commands: [
+          {
+            id: "artisan",
+            enabled: true,
+            name: "Laravel status",
+            containerPattern: "^php",
+            workdir: "/app",
+            command: "php artisan about",
+            outputType: "csv",
+            codeLanguage: "text",
+            fileName: "",
+            compress: false,
+            safety: "dangerous",
+          },
+        ],
+      },
+    });
+    expect(parsed?.customCommands.commands[0]).toMatchObject({
+      id: "artisan",
+      enabled: true,
+      outputType: "csv",
+      safety: "dangerous",
+    });
+    expect(customCommandsForContainer(parsed?.customCommands.commands || [], "php-fpm")).toHaveLength(1);
+    expect(customCommandsForContainer(parsed?.customCommands.commands || [], "nginx")).toHaveLength(0);
+
+    expect(
+      validateUserSettings({
+        ...defaultUserSettings(),
+        customCommands: { commands: [{ command: "/bin/env", containerPattern: "(" }] },
+      }),
+    ).toBeNull();
   });
 
   it("matches ordered scoped smart filter rules and uses JS replacement templates", () => {

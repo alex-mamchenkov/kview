@@ -25,10 +25,14 @@ import CloseIcon from "@mui/icons-material/Close";
 import {
   allListResourceKeys,
   exportUserSettingsJSON,
+  newCustomCommandDefinition,
   newSmartFilterRule,
   parseUserSettingsJSON,
   refreshIntervalOptions,
   sanitizeRegexFlags,
+  type CustomCommandDefinition,
+  type CustomCommandOutputType,
+  type CustomCommandSafety,
   type KviewUserSettingsV1,
   type SettingsResourceScopeMode,
   type SettingsScopeMode,
@@ -77,6 +81,16 @@ function updateSmartFilters(
   };
 }
 
+function updateCustomCommands(
+  settings: KviewUserSettingsV1,
+  patch: Partial<KviewUserSettingsV1["customCommands"]>,
+): KviewUserSettingsV1 {
+  return {
+    ...settings,
+    customCommands: { ...settings.customCommands, ...patch },
+  };
+}
+
 function rulePatternError(rule: SmartFilterRule): string | null {
   if (!rule.pattern.trim()) return "Pattern is required.";
   try {
@@ -87,10 +101,20 @@ function rulePatternError(rule: SmartFilterRule): string | null {
   }
 }
 
-function moveRule(rules: SmartFilterRule[], index: number, direction: -1 | 1): SmartFilterRule[] {
+function commandPatternError(command: CustomCommandDefinition): string | null {
+  if (!command.containerPattern.trim()) return null;
+  try {
+    new RegExp(command.containerPattern);
+    return null;
+  } catch (err) {
+    return (err as Error).message || "Invalid regex.";
+  }
+}
+
+function moveItem<T>(items: T[], index: number, direction: -1 | 1): T[] {
   const nextIndex = index + direction;
-  if (nextIndex < 0 || nextIndex >= rules.length) return rules;
-  const next = rules.slice();
+  if (nextIndex < 0 || nextIndex >= items.length) return items;
+  const next = items.slice();
   const current = next[index];
   next[index] = next[nextIndex];
   next[nextIndex] = current;
@@ -116,6 +140,15 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
     setSettings((prev) => {
       const rules = prev.smartFilters.rules.map((rule, i) => (i === index ? { ...rule, ...patch } : rule));
       return updateSmartFilters(prev, { rules });
+    });
+  };
+
+  const setCommand = (index: number, patch: Partial<CustomCommandDefinition>) => {
+    setSettings((prev) => {
+      const commands = prev.customCommands.commands.map((command, i) =>
+        i === index ? { ...command, ...patch } : command,
+      );
+      return updateCustomCommands(prev, { commands });
     });
   };
 
@@ -224,10 +257,10 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
           <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
             Rule {index + 1}
           </Typography>
-          <Button size="small" onClick={() => setSettings((prev) => updateSmartFilters(prev, { rules: moveRule(prev.smartFilters.rules, index, -1) }))} disabled={index === 0}>
+          <Button size="small" onClick={() => setSettings((prev) => updateSmartFilters(prev, { rules: moveItem(prev.smartFilters.rules, index, -1) }))} disabled={index === 0}>
             Up
           </Button>
-          <Button size="small" onClick={() => setSettings((prev) => updateSmartFilters(prev, { rules: moveRule(prev.smartFilters.rules, index, 1) }))} disabled={index === settings.smartFilters.rules.length - 1}>
+          <Button size="small" onClick={() => setSettings((prev) => updateSmartFilters(prev, { rules: moveItem(prev.smartFilters.rules, index, 1) }))} disabled={index === settings.smartFilters.rules.length - 1}>
             Down
           </Button>
           <Button
@@ -393,6 +426,183 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
     </Box>
   );
 
+  const renderCommand = (command: CustomCommandDefinition, index: number) => {
+    const patternError = commandPatternError(command);
+    return (
+      <Paper key={command.id} variant="outlined" sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+          <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
+            Command {index + 1}
+          </Typography>
+          <Button
+            size="small"
+            onClick={() =>
+              setSettings((prev) =>
+                updateCustomCommands(prev, {
+                  commands: moveItem(prev.customCommands.commands, index, -1),
+                }),
+              )
+            }
+            disabled={index === 0}
+          >
+            Up
+          </Button>
+          <Button
+            size="small"
+            onClick={() =>
+              setSettings((prev) =>
+                updateCustomCommands(prev, {
+                  commands: moveItem(prev.customCommands.commands, index, 1),
+                }),
+              )
+            }
+            disabled={index === settings.customCommands.commands.length - 1}
+          >
+            Down
+          </Button>
+          <Button
+            size="small"
+            color="error"
+            onClick={() =>
+              setSettings((prev) =>
+                updateCustomCommands(prev, {
+                  commands: prev.customCommands.commands.filter((_, i) => i !== index),
+                }),
+              )
+            }
+          >
+            Remove
+          </Button>
+        </Box>
+        <FormControlLabel
+          control={
+            <Switch checked={command.enabled} onChange={(e) => setCommand(index, { enabled: e.target.checked })} />
+          }
+          label="Enabled"
+        />
+        <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          <TextField
+            size="small"
+            label="Name"
+            value={command.name}
+            onChange={(e) => setCommand(index, { name: e.target.value })}
+            helperText="Shown in the container command menu."
+          />
+          <TextField
+            size="small"
+            label="Container pattern"
+            value={command.containerPattern}
+            onChange={(e) => setCommand(index, { containerPattern: e.target.value })}
+            error={Boolean(patternError)}
+            helperText={patternError ?? "Optional regex matched against the container name."}
+          />
+          <TextField
+            size="small"
+            label="Workdir"
+            value={command.workdir}
+            onChange={(e) => setCommand(index, { workdir: e.target.value })}
+            helperText="Optional. Leave blank to use the container default."
+          />
+        </Box>
+        <TextField
+          size="small"
+          label="Command"
+          value={command.command}
+          onChange={(e) => setCommand(index, { command: e.target.value })}
+          error={!command.command.trim()}
+          helperText="Executed with /bin/sh -lc inside the selected container."
+          fullWidth
+        />
+        <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          <TextField
+            select
+            size="small"
+            label="Output type"
+            value={command.outputType}
+            onChange={(e) => setCommand(index, { outputType: e.target.value as CustomCommandOutputType })}
+          >
+            <MenuItem value="text">Free text</MenuItem>
+            <MenuItem value="keyValue">Key-value</MenuItem>
+            <MenuItem value="csv">CSV / delimited table</MenuItem>
+            <MenuItem value="code">Code / JSON / YAML</MenuItem>
+            <MenuItem value="file">File download</MenuItem>
+          </TextField>
+          {command.outputType === "code" ? (
+            <TextField
+              size="small"
+              label="Code language"
+              value={command.codeLanguage}
+              onChange={(e) => setCommand(index, { codeLanguage: e.target.value })}
+              helperText="Examples: json, yaml, php, shell. Leave blank to auto-detect common formats."
+            />
+          ) : null}
+          {command.outputType === "file" ? (
+            <>
+              <TextField
+                size="small"
+                label="File name"
+                value={command.fileName}
+                onChange={(e) => setCommand(index, { fileName: e.target.value })}
+                helperText="Used for the downloaded output."
+              />
+              <FormControlLabel
+                control={
+                  <Switch checked={command.compress} onChange={(e) => setCommand(index, { compress: e.target.checked })} />
+                }
+                label="Compress with gzip"
+              />
+            </>
+          ) : null}
+          <TextField
+            select
+            size="small"
+            label="Safety"
+            value={command.safety}
+            onChange={(e) => setCommand(index, { safety: e.target.value as CustomCommandSafety })}
+            helperText="Dangerous commands require typed confirmation before execution."
+          >
+            <MenuItem value="safe">Safe: simple confirmation</MenuItem>
+            <MenuItem value="dangerous">Dangerous: typed confirmation</MenuItem>
+          </TextField>
+        </Box>
+      </Paper>
+    );
+  };
+
+  const renderCustomCommands = () => (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Box sx={{ flexGrow: 1 }}>
+          <Typography variant="h6">Custom Commands</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Commands are stored in this browser profile and become available on matching Pod containers.
+          </Typography>
+        </Box>
+        <Button
+          variant="contained"
+          onClick={() =>
+            setSettings((prev) =>
+              updateCustomCommands(prev, {
+                commands: [...prev.customCommands.commands, newCustomCommandDefinition()],
+              }),
+            )
+          }
+        >
+          Add command
+        </Button>
+      </Box>
+      {settings.customCommands.commands.length === 0 ? (
+        <Paper variant="outlined" sx={panelBoxSx}>
+          <Typography variant="body2" color="text.secondary">
+            No custom commands are defined.
+          </Typography>
+        </Paper>
+      ) : (
+        settings.customCommands.commands.map(renderCommand)
+      )}
+    </Box>
+  );
+
   const renderPlaceholder = (title: string, text: string) => (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       <Typography variant="h6">{title}</Typography>
@@ -515,9 +725,7 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
         </Box>
         {section === "appearance" ? renderAppearance() : null}
         {section === "smartFilters" ? renderSmartFilters() : null}
-        {section === "commands"
-          ? renderPlaceholder("Custom Commands", "Planned for container command presets.")
-          : null}
+        {section === "commands" ? renderCustomCommands() : null}
         {section === "actions"
           ? renderPlaceholder("Custom Actions", "Planned for kube action presets.")
           : null}

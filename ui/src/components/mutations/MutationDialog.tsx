@@ -34,7 +34,9 @@ export type MutationDialogProps = {
   descriptor: MutationActionDescriptor;
   targetRef: TargetRef;
   token: string;
-  onSuccess?: () => void;
+  execute?: (params?: Record<string, unknown>) => Promise<ExecuteActionResult>;
+  onSuccess?: (result: ExecuteActionResult) => void;
+  closeOnSuccess?: boolean;
   /** Pre-populated values for paramSpecs fields (keyed by spec.key). */
   initialParams?: Record<string, string | boolean>;
 };
@@ -67,7 +69,9 @@ export default function MutationDialog({
   descriptor,
   targetRef,
   token,
+  execute,
   onSuccess,
+  closeOnSuccess,
   initialParams,
 }: MutationDialogProps) {
   const { health } = useConnectionState();
@@ -143,17 +147,20 @@ export default function MutationDialog({
       }
     }
 
-    const res = await executeAction(token, targetRef.context, {
-      actionId: descriptor.id,
-      targetRef,
-      group: descriptor.group,
-      resource: descriptor.resource,
-      params: execParams,
-    });
+    const res = execute
+      ? await execute(execParams)
+      : await executeAction(token, targetRef.context, {
+          actionId: descriptor.id,
+          targetRef,
+          group: descriptor.group,
+          resource: descriptor.resource,
+          params: execParams,
+        });
     setResult(res);
     if (res.success) {
       setPhase("success");
-      onSuccess?.();
+      onSuccess?.(res);
+      if (closeOnSuccess) onClose();
     } else {
       setPhase("error");
     }

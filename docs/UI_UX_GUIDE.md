@@ -109,11 +109,14 @@ Settings are browser-local and separate from navigation state. The profile curre
 - frontend list and dashboard refresh defaults
 - initial Activity Panel state
 - smart-filter enablement and scoped smart-filter rules
+- custom container command presets
 - JSON import/export for the settings profile only
 
 Settings import/export must not include active context, active namespace, favourite namespaces, recent namespace history, or theme.
 
-Future command/action presets and namespace enrichment tuning can use placeholder sections until their behavior is implemented. Backend dataplane tuning must be documented in DATAPLANE.md when it becomes real behavior.
+Custom container commands must appear only on matching Pod containers. Safe commands require simple confirmation; dangerous commands require typed confirmation before execution. Command output should render according to the configured output type: free text, key-value, code-highlighted text, or downloadable file.
+
+Future custom kube actions and namespace enrichment tuning can use placeholder sections until their behavior is implemented. Backend dataplane tuning must be documented in DATAPLANE.md when it becomes real behavior.
 
 ---
 
