@@ -39,6 +39,7 @@ type Manager struct {
 	clients map[string]*Clients
 
 	kubeconfigFiles []string
+	kubeconfigSet   bool
 
 	logger Logger
 }
@@ -65,15 +66,18 @@ func defaultKubeconfigPath() string {
 	return filepath.Join(home, ".kube", "config")
 }
 
-func kubeconfigLocations() []string {
-	envValue := os.Getenv("KUBECONFIG")
-	if envValue == "" {
-		return []string{defaultKubeconfigPath()}
+func kubeconfigLocations(configPath string) ([]string, bool) {
+	value := configPath
+	if value == "" {
+		value = os.Getenv("KUBECONFIG")
+	}
+	if value == "" {
+		return []string{defaultKubeconfigPath()}, false
 	}
 
 	sep := string(os.PathListSeparator)
-	if strings.Contains(envValue, sep) {
-		parts := strings.Split(envValue, sep)
+	if strings.Contains(value, sep) {
+		parts := strings.Split(value, sep)
 		locations := make([]string, 0, len(parts))
 		for _, part := range parts {
 			if part == "" {
@@ -81,10 +85,10 @@ func kubeconfigLocations() []string {
 			}
 			locations = append(locations, part)
 		}
-		return locations
+		return locations, true
 	}
 
-	return []string{envValue}
+	return []string{value}, true
 }
 
 func expandKubeconfigLocations(l Logger, locations []string) []string {
@@ -125,9 +129,9 @@ func expandKubeconfigLocations(l Logger, locations []string) []string {
 	return files
 }
 
-func buildLoadingRules(files []string) *clientcmd.ClientConfigLoadingRules {
+func buildLoadingRules(files []string, kubeconfigSet bool) *clientcmd.ClientConfigLoadingRules {
 	rules := clientcmd.NewDefaultClientConfigLoadingRules()
-	if len(files) > 0 {
+	if kubeconfigSet || len(files) > 0 {
 		rules.Precedence = files
 		rules.ExplicitPath = ""
 	}
@@ -135,8 +139,8 @@ func buildLoadingRules(files []string) *clientcmd.ClientConfigLoadingRules {
 	return rules
 }
 
-func loadMergedKubeconfig(files []string) (*api.Config, []string, error) {
-	loadingRules := buildLoadingRules(files)
+func loadMergedKubeconfig(files []string, kubeconfigSet bool) (*api.Config, []string, error) {
+	loadingRules := buildLoadingRules(files, kubeconfigSet)
 	effectiveFiles := loadingRules.GetLoadingPrecedence()
 
 	merged, err := loadingRules.Load()
@@ -156,12 +160,18 @@ func NewManager() (*Manager, error) {
 
 // NewManagerWithLogger allows callers to capture kubeconfig discovery logs.
 func NewManagerWithLogger(l Logger) (*Manager, error) {
-	locations := kubeconfigLocations()
+	return NewManagerWithLoggerAndConfig(l, "")
+}
+
+// NewManagerWithLoggerAndConfig allows callers to provide an explicit
+// kubeconfig file or directory. A non-empty configPath overrides KUBECONFIG.
+func NewManagerWithLoggerAndConfig(l Logger, configPath string) (*Manager, error) {
+	locations, kubeconfigSet := kubeconfigLocations(configPath)
 	l.Printf("kubeconfig: discovered locations: %v", locations)
 	files := expandKubeconfigLocations(l, locations)
 	l.Printf("kubeconfig: files to read: %v", files)
 
-	cfg, effectiveFiles, err := loadMergedKubeconfig(files)
+	cfg, effectiveFiles, err := loadMergedKubeconfig(files, kubeconfigSet)
 	if err != nil {
 		return nil, fmt.Errorf("load kubeconfig: %w", err)
 	}
@@ -171,6 +181,7 @@ func NewManagerWithLogger(l Logger) (*Manager, error) {
 		activeContext:   cfg.CurrentContext,
 		clients:         map[string]*Clients{},
 		kubeconfigFiles: effectiveFiles,
+		kubeconfigSet:   kubeconfigSet,
 		logger:          l,
 	}
 	return m, nil
@@ -236,7 +247,7 @@ func (m *Manager) GetClients(ctx context.Context) (*Clients, string, error) {
 
 	// Build rest.Config for the active context (supports exec plugins => OIDC-friendly)
 	overrides := &clientcmd.ConfigOverrides{CurrentContext: active}
-	loadingRules := buildLoadingRules(m.kubeconfigFiles)
+	loadingRules := buildLoadingRules(m.kubeconfigFiles, m.kubeconfigSet)
 	cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)
 
 	restCfg, err := cc.ClientConfig()
@@ -284,7 +295,7 @@ func (m *Manager) GetClientsForContext(ctx context.Context, contextName string) 
 	m.mu.RUnlock()
 
 	overrides := &clientcmd.ConfigOverrides{CurrentContext: contextName}
-	loadingRules := buildLoadingRules(m.kubeconfigFiles)
+	loadingRules := buildLoadingRules(m.kubeconfigFiles, m.kubeconfigSet)
 	cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)
 
 	restCfg, err := cc.ClientConfig()

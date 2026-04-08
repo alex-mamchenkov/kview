@@ -29,12 +29,13 @@ func main() {
 	addr := flag.String("listen", "127.0.0.1:10443", "listen address")
 	open := flag.Bool("open", true, "open browser (deprecated, use --mode)")
 	modeFlag := flag.String("mode", "", "launch mode: browser|webview|server")
+	configPath := flag.String("config", "", "path to kubeconfig file or directory (overrides KUBECONFIG)")
 	flag.Parse()
 
 	// Initialize runtime manager first so we can capture startup logs including kubeconfig discovery.
 	rt := runtime.NewManager()
 
-	mgr, err := cluster.NewManagerWithLogger(runtimeLogger{rt: rt})
+	mgr, err := cluster.NewManagerWithLoggerAndConfig(runtimeLogger{rt: rt}, *configPath)
 	if err != nil {
 		log.Fatalf("init cluster manager: %v", err)
 	}

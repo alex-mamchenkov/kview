@@ -175,6 +175,15 @@ kview
 
 Starts the local server and opens the UI in a browser.
 
+To use a kubeconfig file or a directory containing kubeconfig files:
+
+```bash
+kview --config "C:\Users\alice\.kube\config"
+```
+
+`--config` overrides `KUBECONFIG`. If neither is set, kview uses the default
+`~/.kube/config`.
+
 ### Webview Mode
 
 ```bash
