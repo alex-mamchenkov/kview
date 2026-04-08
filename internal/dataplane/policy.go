@@ -16,6 +16,7 @@ type DataplanePolicy struct {
 	Profile DataplaneProfile `json:"profile"`
 
 	Snapshots           SnapshotPolicy            `json:"snapshots"`
+	Persistence         PersistencePolicy         `json:"persistence"`
 	Observers           ObserverPolicy            `json:"observers"`
 	NamespaceEnrichment NamespaceEnrichmentPolicy `json:"namespaceEnrichment"`
 	BackgroundBudget    BackgroundBudgetPolicy    `json:"backgroundBudget"`
@@ -26,6 +27,11 @@ type SnapshotPolicy struct {
 	TTLSeconds                 map[string]int `json:"ttlSec"`
 	ManualRefreshBypassesTTL   bool           `json:"manualRefreshBypassesTtl"`
 	InvalidateAfterKnownWrites bool           `json:"invalidateAfterKnownMutations"`
+}
+
+type PersistencePolicy struct {
+	Enabled     bool `json:"enabled"`
+	MaxAgeHours int  `json:"maxAgeHours"`
 }
 
 type ObserverPolicy struct {
@@ -111,6 +117,10 @@ func DefaultDataplanePolicy() DataplanePolicy {
 			ManualRefreshBypassesTTL:   true,
 			InvalidateAfterKnownWrites: true,
 		},
+		Persistence: PersistencePolicy{
+			Enabled:     false,
+			MaxAgeHours: 168,
+		},
 		Observers: ObserverPolicy{
 			Enabled:               true,
 			NamespacesEnabled:     true,
@@ -181,6 +191,7 @@ func ValidateDataplanePolicy(in DataplanePolicy) DataplanePolicy {
 	for k, v := range def.Snapshots.TTLSeconds {
 		out.Snapshots.TTLSeconds[k] = clampInt(out.Snapshots.TTLSeconds[k], 5, 3600, v)
 	}
+	out.Persistence.MaxAgeHours = clampInt(out.Persistence.MaxAgeHours, 1, 720, def.Persistence.MaxAgeHours)
 
 	out.Observers.NamespacesIntervalSec = clampInt(out.Observers.NamespacesIntervalSec, 10, 3600, def.Observers.NamespacesIntervalSec)
 	out.Observers.NodesIntervalSec = clampInt(out.Observers.NodesIntervalSec, 10, 3600, def.Observers.NodesIntervalSec)
@@ -271,6 +282,15 @@ func (p DataplanePolicy) SnapshotTTL(kind ResourceKind) time.Duration {
 		secs = 15
 	}
 	return time.Duration(secs) * time.Second
+}
+
+func (p DataplanePolicy) PersistenceMaxAge() time.Duration {
+	def := DefaultDataplanePolicy()
+	hours := p.Persistence.MaxAgeHours
+	if hours <= 0 {
+		hours = def.Persistence.MaxAgeHours
+	}
+	return time.Duration(hours) * time.Hour
 }
 
 func clampInt(value, min, max, fallback int) int {

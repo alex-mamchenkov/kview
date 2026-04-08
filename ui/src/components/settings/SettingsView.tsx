@@ -285,6 +285,12 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
     }));
   };
 
+  const setDataplanePersistence = (patch: Partial<DataplaneSettings["persistence"]>) => {
+    setSettings((prev) => updateDataplane(prev, {
+      persistence: { ...prev.dataplane.persistence, ...patch },
+    }));
+  };
+
   const setDataplaneObservers = (patch: Partial<DataplaneSettings["observers"]>) => {
     setSettings((prev) => updateDataplane(prev, {
       observers: { ...prev.dataplane.observers, ...patch },
@@ -1109,6 +1115,18 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
             {numField("Restart threshold", dp.dashboard.restartElevatedThreshold, (value) => setDataplaneDashboard({ restartElevatedThreshold: value }))}
             {numField("Hotspot limit", dp.dashboard.hotspotLimit, (value) => setDataplaneDashboard({ hotspotLimit: value }))}
           </Box>
+        </Paper>
+
+        <Paper variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
+          <Typography variant="subtitle2">Persisted Dataplane Cache</Typography>
+          <Alert severity={dp.persistence.enabled ? "warning" : "info"}>
+            Persisted snapshots keep the last observed list data on this device for restart recovery and cached quick access search. Results are stale until refreshed by the cluster.
+          </Alert>
+          <FormControlLabel
+            control={<Switch checked={dp.persistence.enabled} onChange={(e) => setDataplanePersistence({ enabled: e.target.checked })} />}
+            label="Persist dataplane snapshots"
+          />
+          {numField("Max persisted age (hours)", dp.persistence.maxAgeHours, (value) => setDataplanePersistence({ maxAgeHours: value }), "Older snapshots are ignored on restart.")}
         </Paper>
 
         <Paper variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>

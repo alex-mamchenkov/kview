@@ -50,6 +50,10 @@ export type DataplaneSettings = {
     manualRefreshBypassesTtl: boolean;
     invalidateAfterKnownMutations: boolean;
   };
+  persistence: {
+    enabled: boolean;
+    maxAgeHours: number;
+  };
   observers: {
     enabled: boolean;
     namespacesEnabled: boolean;
@@ -302,6 +306,10 @@ export function defaultDataplaneSettings(): DataplaneSettings {
       },
       manualRefreshBypassesTtl: true,
       invalidateAfterKnownMutations: true,
+    },
+    persistence: {
+      enabled: false,
+      maxAgeHours: 168,
     },
     observers: {
       enabled: true,
@@ -626,6 +634,7 @@ function normalizeDataplaneSettings(input: unknown): DataplaneSettings {
   if (!input || typeof input !== "object") return defaults;
   const raw = input as Partial<DataplaneSettings>;
   const rawSnapshots = (raw.snapshots ?? {}) as Partial<DataplaneSettings["snapshots"]>;
+  const rawPersistence = (raw.persistence ?? {}) as Partial<DataplaneSettings["persistence"]>;
   const rawObservers = (raw.observers ?? {}) as Partial<DataplaneSettings["observers"]>;
   const rawEnrichment = (raw.namespaceEnrichment ?? {}) as Partial<DataplaneSettings["namespaceEnrichment"]>;
   const rawSweep = (rawEnrichment.sweep ?? {}) as Partial<DataplaneSettings["namespaceEnrichment"]["sweep"]>;
@@ -660,6 +669,10 @@ function normalizeDataplaneSettings(input: unknown): DataplaneSettings {
         typeof rawSnapshots.invalidateAfterKnownMutations === "boolean"
           ? rawSnapshots.invalidateAfterKnownMutations
           : defaults.snapshots.invalidateAfterKnownMutations,
+    },
+    persistence: {
+      enabled: typeof rawPersistence.enabled === "boolean" ? rawPersistence.enabled : defaults.persistence.enabled,
+      maxAgeHours: validNumber(rawPersistence.maxAgeHours, 1, 720, defaults.persistence.maxAgeHours),
     },
     observers: {
       enabled: typeof rawObservers.enabled === "boolean" ? rawObservers.enabled : defaults.observers.enabled,

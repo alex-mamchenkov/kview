@@ -26,7 +26,7 @@ func TestResourceTotalsCompletenessLabel(t *testing.T) {
 }
 
 func TestVisibleNamespacesWithCachedDataplaneLists(t *testing.T) {
-	p := newClusterPlane("c", ProfileFocused, DiscoveryModeTargeted, ObservationScope{}, nil)
+	p := newClusterPlane("c", ProfileFocused, DiscoveryModeTargeted, ObservationScope{}, nil, nil)
 	now := time.Now().UTC()
 	meta := SnapshotMetadata{ObservedAt: now}
 	setNamespacedSnapshot(&p.helmReleasesStore, "bravo", HelmReleasesSnapshot{Items: []dto.HelmReleaseDTO{{Name: "rel1"}}, Meta: meta})

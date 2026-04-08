@@ -177,6 +177,9 @@ type manager struct {
 	policyMu sync.RWMutex
 	policy   DataplanePolicy
 
+	persistenceMu sync.RWMutex
+	persistence   snapshotPersistence
+
 	nsEnrich *nsEnrichmentCoordinator
 
 	nsSweepMu        sync.Mutex
@@ -212,7 +215,7 @@ func NewManager(cfg ManagerConfig) DataPlaneManager {
 		reg := cfg.Runtime.Registry()
 		sched.configureLongRun(time.Duration(policy.BackgroundBudget.LongRunNoticeSec)*time.Second, newDataplaneLongRunRecorder(reg))
 	}
-	return &manager{
+	m := &manager{
 		rt:                   cfg.Runtime,
 		defaultProfile:       profile,
 		defaultDiscoveryMode: mode,
@@ -225,6 +228,10 @@ func NewManager(cfg ManagerConfig) DataPlaneManager {
 		nsSweepHourStart:     map[string]time.Time{},
 		nsSweepHourCount:     map[string]int{},
 	}
+	if err := m.configurePersistence(policy); err != nil {
+		m.policy.Persistence.Enabled = false
+	}
+	return m
 }
 
 func (m *manager) Policy() DataplanePolicy {
@@ -244,7 +251,40 @@ func (m *manager) SetPolicy(policy DataplanePolicy) DataplanePolicy {
 		m.scheduler.configureRetries(next.BackgroundBudget.TransientRetries, 100*time.Millisecond, 1500*time.Millisecond)
 		m.scheduler.configureLongRun(time.Duration(next.BackgroundBudget.LongRunNoticeSec)*time.Second, newDataplaneLongRunRecorder(m.activityReg()))
 	}
+	if err := m.configurePersistence(next); err != nil {
+		next.Persistence.Enabled = false
+		m.policyMu.Lock()
+		m.policy = next
+		m.policyMu.Unlock()
+	}
 	return next
+}
+
+func (m *manager) configurePersistence(policy DataplanePolicy) error {
+	m.persistenceMu.Lock()
+	defer m.persistenceMu.Unlock()
+	if !policy.Persistence.Enabled {
+		if m.persistence != nil {
+			_ = m.persistence.Close()
+			m.persistence = nil
+		}
+		return nil
+	}
+	if m.persistence != nil {
+		return nil
+	}
+	p, err := openBoltSnapshotPersistence("")
+	if err != nil {
+		return persistenceOpenError(err)
+	}
+	m.persistence = p
+	return nil
+}
+
+func (m *manager) currentPersistence() snapshotPersistence {
+	m.persistenceMu.RLock()
+	defer m.persistenceMu.RUnlock()
+	return m.persistence
 }
 
 func (m *manager) DefaultProfile() Profile {
@@ -274,7 +314,7 @@ func (m *manager) PlaneForCluster(_ context.Context, clusterName string) (Cluste
 		Namespaces:    nil,
 		ResourceKinds: nil,
 	}
-	p := newClusterPlane(clusterName, m.defaultProfile, m.defaultDiscoveryMode, scope, m.Policy)
+	p := newClusterPlane(clusterName, m.defaultProfile, m.defaultDiscoveryMode, scope, m.Policy, m.currentPersistence)
 	m.planes[clusterName] = p
 	return p, nil
 }
@@ -317,12 +357,16 @@ type clusterPlane struct {
 	obsMu     sync.Mutex
 	observers *clusterObservers
 
-	policy func() DataplanePolicy
+	policy      func() DataplanePolicy
+	persistence func() snapshotPersistence
 }
 
-func newClusterPlane(name string, profile Profile, mode DiscoveryMode, scope ObservationScope, policy func() DataplanePolicy) *clusterPlane {
+func newClusterPlane(name string, profile Profile, mode DiscoveryMode, scope ObservationScope, policy func() DataplanePolicy, persistence func() snapshotPersistence) *clusterPlane {
 	if policy == nil {
 		policy = func() DataplanePolicy { return DefaultDataplanePolicy() }
+	}
+	if persistence == nil {
+		persistence = func() snapshotPersistence { return nil }
 	}
 	return &clusterPlane{
 		name:              name,
@@ -348,6 +392,7 @@ func newClusterPlane(name string, profile Profile, mode DiscoveryMode, scope Obs
 		jobsStore:         newNamespacedSnapshotStore[JobsSnapshot](),
 		cjStore:           newNamespacedSnapshotStore[CronJobsSnapshot](),
 		policy:            policy,
+		persistence:       persistence,
 	}
 }
 
@@ -378,6 +423,13 @@ func (p *clusterPlane) currentPolicy() DataplanePolicy {
 		return DefaultDataplanePolicy()
 	}
 	return p.policy()
+}
+
+func (p *clusterPlane) currentPersistence() snapshotPersistence {
+	if p.persistence == nil {
+		return nil
+	}
+	return p.persistence()
 }
 
 // Snapshot is the shared raw snapshot container across dataplane-owned resources.
@@ -728,6 +780,9 @@ func (m *manager) InvalidateHelmReleasesSnapshot(ctx context.Context, clusterNam
 	}
 	plane := planeAny.(*clusterPlane)
 	clearNamespacedSnapshot(&plane.helmReleasesStore, namespace)
+	if sp := plane.currentPersistence(); sp != nil {
+		_ = sp.Delete(clusterName, ResourceKindHelmReleases, namespace)
+	}
 	return nil
 }
 

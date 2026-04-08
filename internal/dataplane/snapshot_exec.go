@@ -68,6 +68,16 @@ func executeClusterSnapshot[I any](
 		return cached, nil
 	}
 
+	var persisted Snapshot[I]
+	var havePersisted bool
+	if sp := p.currentPersistence(); sp != nil {
+		var loaded Snapshot[I]
+		if ok, err := sp.Load(p.name, desc.kind, "", &loaded); err == nil && ok && markPersistedSnapshot(&loaded, p.currentPolicy().PersistenceMaxAge()) {
+			persisted = loaded
+			havePersisted = true
+		}
+	}
+
 	key := workKey{
 		Cluster:   p.name,
 		Class:     WorkClassSnapshot,
@@ -109,7 +119,17 @@ func executeClusterSnapshot[I any](
 		return nil
 	})
 
+	if runErr != nil && len(out.Items) == 0 && havePersisted {
+		fallback := persistedSnapshotFallback(persisted, out)
+		setClusterSnapshot(store, fallback)
+		return fallback, runErr
+	}
 	setClusterSnapshot(store, out)
+	if runErr == nil && out.Err == nil {
+		if sp := p.currentPersistence(); sp != nil {
+			_ = sp.Save(p.name, desc.kind, "", out)
+		}
+	}
 	return out, runErr
 }
 
@@ -125,6 +145,16 @@ func executeNamespacedSnapshot[I any](
 ) (Snapshot[I], error) {
 	if cached, ok := store.getFresh(namespace, desc.ttl); ok {
 		return cached, nil
+	}
+
+	var persisted Snapshot[I]
+	var havePersisted bool
+	if sp := p.currentPersistence(); sp != nil {
+		var loaded Snapshot[I]
+		if ok, err := sp.Load(p.name, desc.kind, namespace, &loaded); err == nil && ok && markPersistedSnapshot(&loaded, p.currentPolicy().PersistenceMaxAge()) {
+			persisted = loaded
+			havePersisted = true
+		}
 	}
 
 	key := workKey{
@@ -168,6 +198,16 @@ func executeNamespacedSnapshot[I any](
 		return nil
 	})
 
+	if runErr != nil && len(out.Items) == 0 && havePersisted {
+		fallback := persistedSnapshotFallback(persisted, out)
+		setNamespacedSnapshot(store, namespace, fallback)
+		return fallback, runErr
+	}
 	setNamespacedSnapshot(store, namespace, out)
+	if runErr == nil && out.Err == nil {
+		if sp := p.currentPersistence(); sp != nil {
+			_ = sp.Save(p.name, desc.kind, namespace, out)
+		}
+	}
 	return out, runErr
 }
