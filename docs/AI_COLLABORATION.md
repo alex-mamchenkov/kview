@@ -49,7 +49,7 @@ Each executor prompt must include:
 4. Frontend requirements (if applicable)
 5. UX contract reminders
 6. Acceptance checklist
-7. Mandatory build verification (`make build`)
+7. Mandatory Docker-toolchain verification (`make build-docker` for builds, `make docker-image` then Docker-run `make check` for tests/checks)
 8. Post-implementation instructions (docs + commit suggestion)
 
 All prompts must be provided in markdown format as file download links.

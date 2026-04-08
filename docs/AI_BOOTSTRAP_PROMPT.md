@@ -21,6 +21,7 @@ Development constraints:
 - Always preserve drawer-based navigation and cross-resource links.
 - Prefer existing shared components and helpers over new patterns.
 - Update documentation when architecture, read ownership, or operator-visible behavior changes.
+- Run checks through the pinned Docker toolchain, not the host Go/Node/npm toolchain. Prefer `make docker-image` followed by the Docker-run `make check` command from `docs/AI_AGENT_RULES.md`; use `make build-docker` for build verification.
 - No auto-commits.
 
 Before implementing:

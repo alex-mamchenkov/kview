@@ -104,14 +104,19 @@ If architecture changes, update:
 
 # Quality Checks
 
-Backend:
+AI agents must run verification through the pinned Docker toolchain, not the host Go/Node/npm toolchain. Use host-local commands only when the project owner explicitly asks for them or when documenting why Docker is unavailable.
 
-go test ./...  
-go vet ./...
+Default full check sequence:
 
-Frontend:
+```bash
+make docker-image
+docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOCACHE=/workspace/.cache/go-build -e GOMODCACHE=/workspace/.cache/go-mod -e npm_config_cache=/workspace/.cache/npm -v "$PWD:/workspace" -w /workspace kview-build:go1.25.0-node22.20.0 make check
+```
 
-npm run typecheck  
-npm run lint
+For build verification:
+
+```bash
+make build-docker
+```
 
 Tests should accompany important logic changes.

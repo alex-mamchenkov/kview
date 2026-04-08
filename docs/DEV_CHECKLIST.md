@@ -123,15 +123,20 @@ Before finishing a change:
 
 # 10. Tests
 
-Backend changes should run:
+Run tests and checks through the pinned Docker toolchain, not the host Go/Node/npm toolchain. Use local host commands only when explicitly requested or when Docker is unavailable and the exception is documented.
 
-go test ./...  
-go vet ./...
+Default full check sequence:
 
-Frontend changes should run:
+```bash
+make docker-image
+docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOCACHE=/workspace/.cache/go-build -e GOMODCACHE=/workspace/.cache/go-mod -e npm_config_cache=/workspace/.cache/npm -v "$PWD:/workspace" -w /workspace kview-build:go1.25.0-node22.20.0 make check
+```
 
-npm run typecheck  
-npm run lint
+Build verification should use:
+
+```bash
+make build-docker
+```
 
 Add tests when modifying critical logic.
 

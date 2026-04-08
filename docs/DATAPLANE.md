@@ -29,6 +29,8 @@ Snapshots are the unit of cached list data. **`kube.List*`** runs **inside** dat
 
 Typical TTLs are on the order of **~15s** for namespaced workload lists and namespaces, **~30s** for nodes (see code for exact values).
 
+Snapshot persistence is optional and off by default. When enabled, kview stores dataplane list snapshots in a local bbolt file under the user cache directory, together with a compact name index for future cached quick-access search. Persisted snapshots are used only as stale fallback data when a live refresh cannot replace them, and they keep stale/degraded metadata rather than appearing fresh. Secret list snapshots contain list metadata such as name/type/key count, not secret values; detail drawers still perform targeted live reads.
+
 ---
 
 ## Scheduler
@@ -89,6 +91,7 @@ Current policy knobs include:
 
 - profile: manual, focused, balanced, wide, diagnostic
 - snapshot TTLs per dataplane-owned list kind
+- optional local persisted snapshot cache and max persisted age
 - namespace and node observer intervals/backoff
 - focused namespace enrichment: current/recent/favourite inclusion, caps, parallelism, idle quiet window, and stage toggles for namespace details, pods, deployments
 - optional background namespace sweep: per-cycle cap, per-hour cap, re-enrich interval, idle gate, system namespace inclusion
