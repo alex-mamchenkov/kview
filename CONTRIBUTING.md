@@ -17,9 +17,9 @@ Contributions are welcome, but the workflow is intentionally lightweight.
 
 ## Prerequisites
 
-- Go 1.22+
-- Node.js 20+ (required by Vite toolchain)
-- npm
+- Docker, for the pinned build toolchain used by `make build-docker`
+- Go 1.25+ and Node.js 22+ only if building directly on the host
+- npm, only if building directly on the host
 
 ---
 
@@ -57,4 +57,3 @@ Rules for AI-generated changes:
 - Keep documentation up to date
 
 See `docs/AI_AGENT_RULES.md` for details.
-

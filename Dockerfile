@@ -1,0 +1,16 @@
+ARG NODE_IMAGE=node:22.20.0-bookworm@sha256:915acd9e9b885ead0c620e27e37c81b74c226e0e1c8177f37a60217b6eabb0d7
+ARG GO_IMAGE=golang:1.25.0-bookworm@sha256:81dc45d05a7444ead8c92a389621fafabc8e40f8fd1a19d7e5df14e61e98bc1a
+
+FROM ${NODE_IMAGE} AS node
+
+FROM ${GO_IMAGE}
+
+COPY --from=node /usr/local /usr/local
+
+WORKDIR /workspace
+
+ENV GOCACHE=/workspace/.cache/go-build \
+	GOMODCACHE=/workspace/.cache/go-mod \
+	npm_config_cache=/workspace/.cache/npm
+
+RUN go version && node --version && npm --version

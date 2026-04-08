@@ -191,6 +191,23 @@ Runs the same embedded HTTP server and UI inside a native desktop webview window
 make build
 ```
 
+To build with the pinned Docker toolchain and write the binary back into the
+repo:
+
+```bash
+make build-docker
+```
+
+Release-style artifacts can be produced with:
+
+```bash
+make build-docker-release GOOS=linux GOARCH=amd64 OUTPUT=dist/kview-linux-amd64
+```
+
+Docker builds bind-mount the repository and keep Go/npm build caches under
+`.cache/`, so local rebuilds reuse dependency artifacts without relying on the
+host Go or Node.js installation.
+
 For the embedded webview build:
 
 ```bash
@@ -198,6 +215,10 @@ make build-webview
 ```
 
 The build regenerates embedded UI assets under `internal/server/ui_dist`.
+
+GitHub release builds run only when a `v*` tag is pushed. The workflow builds
+Linux, macOS, and Windows browser/server binaries in Docker and publishes them
+to the matching GitHub release.
 
 ---
 
