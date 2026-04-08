@@ -14,6 +14,12 @@ kview is a **local, single-binary** application: Go backend embeds the React UI 
 
 The API and UI run in-process. Cluster access uses the operator’s kubeconfig and respects **Kubernetes RBAC** end to end.
 
+Authentication is delegated to Kubernetes `client-go` and the selected
+kubeconfig. If the kubeconfig uses an `exec` auth plugin, kview runs the command
+declared there, such as `kubectl`, `kubelogin`, a cloud-provider CLI, or another
+configured helper. Those commands must be installed and available on `PATH` in
+the environment where kview runs.
+
 ---
 
 ## View-first UI

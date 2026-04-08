@@ -184,6 +184,16 @@ kview --config "C:\Users\alice\.kube\config"
 `--config` overrides `KUBECONFIG`. If neither is set, kview uses the default
 `~/.kube/config`.
 
+kview uses Kubernetes `client-go` authentication from the selected kubeconfig.
+If a context uses an `exec` auth plugin, the referenced command must be
+installed and available on `PATH` where kview runs. For example, kubeconfigs may
+call `kubectl`, `kubelogin`, cloud-provider CLIs, or another command declared in
+the kubeconfig.
+
+On Windows, running kview from WSL is currently the simpler path because
+kubeconfig paths, shell behavior, and auth helper commands tend to match the
+Linux-native Kubernetes tooling setup more closely.
+
 ### Webview Mode
 
 ```bash
