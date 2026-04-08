@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef } from "react";
 import { Box, IconButton, Typography } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import { Terminal } from "xterm";
+import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import "xterm/css/xterm.css";
+import "@xterm/xterm/css/xterm.css";
 
 type SessionSummary = {
   id: string;
