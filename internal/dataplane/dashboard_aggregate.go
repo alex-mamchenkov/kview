@@ -3,6 +3,8 @@ package dataplane
 import (
 	"context"
 	"sort"
+	"strings"
+	"time"
 
 	"kview/internal/kube/dto"
 )
@@ -24,7 +26,7 @@ func resourceTotalsCompletenessLabel(visible, withCachedDataplaneLists int) stri
 // aggregateClusterDashboard rolls up workload totals and hotspots only from namespaces that already
 // have cached dataplane list snapshots (typically from visiting those namespaces or row enrichment),
 // intersected with the current namespace list snapshot. No alphabetical sampling and no implicit cluster-wide totals.
-func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted []string, nsTotal int, nsUnhealthy int) (ClusterDashboardResourcesPanel, ClusterDashboardHotspotsPanel, ClusterDashboardWorkloadHints, ClusterDashboardCoverage) {
+func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted []string, nsTotal int, nsUnhealthy int) (ClusterDashboardResourcesPanel, ClusterDashboardHotspotsPanel, ClusterDashboardFindingsPanel, ClusterDashboardWorkloadHints, ClusterDashboardCoverage) {
 	cov := m.buildDashboardCoverage(plane.name, nsNamesSorted, nsTotal)
 	policy := m.Policy().Dashboard
 
@@ -38,6 +40,7 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 	hot := ClusterDashboardHotspotsPanel{
 		UnhealthyNamespaces: nsUnhealthy,
 	}
+	find := ClusterDashboardFindingsPanel{}
 	wh := ClusterDashboardWorkloadHints{
 		TotalNamespacesVisible:      nsTotal,
 		NamespacesWithWorkloadCache: len(knownNS),
@@ -47,18 +50,21 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 		if nsTotal > 0 && len(knownNS) == 0 {
 			res.Note = "No cached dataplane list snapshots yet for visible namespaces; totals stay at zero until namespaces are opened or row enrichment fills caches."
 			hot.Note = res.Note
+			find.Note = res.Note
 			cov.ResourceTotalsNote = res.Note
 		} else if nsTotal == 0 {
 			res.Note = "No namespaces visible in snapshot; resource totals are zero."
 			hot.Note = res.Note
+			find.Note = res.Note
 		}
-		return res, hot, wh, cov
+		return res, hot, find, wh, cov
 	}
 
 	if cov.ResourceTotalsCompleteness == "partial" {
 		t := "Resource totals and hotspots sum only namespaces where the dataplane already has cached list snapshots; some visible namespaces are not included yet."
 		res.Note = t
 		hot.Note = t
+		find.Note = t
 		cov.ResourceTotalsNote = t
 	} else {
 		cov.ResourceTotalsNote = "Totals include every visible namespace that has at least one cached dataplane list snapshot."
@@ -71,6 +77,8 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 		score int
 	}
 	scores := make([]nsScore, 0, len(knownNS))
+	var findings []ClusterDashboardFinding
+	now := time.Now()
 
 	for _, ns := range knownNS {
 		podsSnap, podsOK := plane.podsStore.getCached(ns)
@@ -168,6 +176,36 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 			res.HelmReleases += len(helmReleasesSnap.Items)
 			aggregateMetas = append(aggregateMetas, helmReleasesSnap.Meta)
 		}
+		findings = append(findings, detectDashboardFindings(now, ns, dashboardSnapshotSet{
+			pods:         podsSnap,
+			podsOK:       podsOK && podsSnap.Err == nil,
+			deps:         depsSnap,
+			depsOK:       depsOK && depsSnap.Err == nil,
+			ds:           dsSnap,
+			dsOK:         dsOK && dsSnap.Err == nil,
+			sts:          stsSnap,
+			stsOK:        stsOK && stsSnap.Err == nil,
+			rs:           rsSnap,
+			rsOK:         rsOK && rsSnap.Err == nil,
+			jobs:         jobsSnap,
+			jobsOK:       jobsOK && jobsSnap.Err == nil,
+			cjs:          cjSnap,
+			cjsOK:        cjOK && cjSnap.Err == nil,
+			svcs:         svcsSnap,
+			svcsOK:       svcsOK && svcsSnap.Err == nil,
+			ings:         ingsSnap,
+			ingsOK:       ingsOK && ingsSnap.Err == nil,
+			pvcs:         pvcSnap,
+			pvcsOK:       pvcOK && pvcSnap.Err == nil,
+			cms:          cmSnap,
+			cmsOK:        cmOK && cmSnap.Err == nil,
+			secs:         secSnap,
+			secsOK:       secOK && secSnap.Err == nil,
+			sas:          saSnap,
+			sasOK:        saOK && saSnap.Err == nil,
+			helmReleases: helmReleasesSnap,
+			helmOK:       helmReleasesOK && helmReleasesSnap.Err == nil,
+		})...)
 
 		if policy.IncludeHotspots {
 			var probPods []dto.ProblematicResource
@@ -199,9 +237,12 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 
 	if !policy.IncludeHotspots {
 		hot.Note = "Hotspot projection is disabled in dataplane settings."
+		findNote := find.Note
+		find = summarizeDashboardFindings(findings, policy.HotspotLimit)
+		find.Note = findNote
 		wh.AggregateFreshness = res.AggregateFreshness
 		wh.AggregateDegradation = res.AggregateDegradation
-		return res, hot, wh, cov
+		return res, hot, find, wh, cov
 	}
 
 	sort.Slice(scores, func(i, j int) bool {
@@ -231,7 +272,14 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 		res.AggregateDegradation = wd
 		hot.AggregateFreshness = wf
 		hot.AggregateDegradation = wd
+		find.AggregateFreshness = wf
+		find.AggregateDegradation = wd
 	}
+	findNote := find.Note
+	find = summarizeDashboardFindings(findings, policy.HotspotLimit)
+	find.Note = findNote
+	find.AggregateFreshness = hot.AggregateFreshness
+	find.AggregateDegradation = hot.AggregateDegradation
 
 	wh.TopPodRestartHotspots = hot.TopPodRestartHotspots
 	wh.PodsWithElevatedRestarts = hot.PodsWithElevatedRestarts
@@ -239,7 +287,219 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 	wh.AggregateFreshness = hot.AggregateFreshness
 	wh.AggregateDegradation = hot.AggregateDegradation
 
-	return res, hot, wh, cov
+	return res, hot, find, wh, cov
+}
+
+type dashboardSnapshotSet struct {
+	pods         PodsSnapshot
+	podsOK       bool
+	deps         DeploymentsSnapshot
+	depsOK       bool
+	ds           DaemonSetsSnapshot
+	dsOK         bool
+	sts          StatefulSetsSnapshot
+	stsOK        bool
+	rs           ReplicaSetsSnapshot
+	rsOK         bool
+	jobs         JobsSnapshot
+	jobsOK       bool
+	cjs          CronJobsSnapshot
+	cjsOK        bool
+	svcs         ServicesSnapshot
+	svcsOK       bool
+	ings         IngressesSnapshot
+	ingsOK       bool
+	pvcs         PVCsSnapshot
+	pvcsOK       bool
+	cms          ConfigMapsSnapshot
+	cmsOK        bool
+	secs         SecretsSnapshot
+	secsOK       bool
+	sas          ServiceAccountsSnapshot
+	sasOK        bool
+	helmReleases HelmReleasesSnapshot
+	helmOK       bool
+}
+
+func detectDashboardFindings(now time.Time, ns string, s dashboardSnapshotSet) []ClusterDashboardFinding {
+	var out []ClusterDashboardFinding
+	if isEmptyLookingNamespace(s) {
+		out = append(out, dashboardFinding("Namespace", ns, "", "medium", 70, "No workload, network, storage, config, or Helm resources in cached snapshots.", "medium", "namespaces"))
+	}
+	if s.jobsOK {
+		for _, j := range EnrichJobListItemsForAPI(s.jobs.Items) {
+			if j.NeedsAttention {
+				out = append(out, dashboardFinding("Job", ns, j.Name, "high", 90, "Job is failed or has failed attempts.", "high", "jobs"))
+				continue
+			}
+			if j.Status == "Running" && j.AgeSec >= int64((6*time.Hour).Seconds()) {
+				out = append(out, dashboardFinding("Job", ns, j.Name, "medium", 62, "Job has been running for more than 6 hours.", "medium", "jobs"))
+			}
+		}
+	}
+	if s.cjsOK {
+		for _, cj := range EnrichCronJobListItemsForAPI(s.cjs.Items) {
+			if cj.NeedsAttention {
+				out = append(out, dashboardFinding("CronJob", ns, cj.Name, "high", 88, "CronJob has an unusually large number of active jobs.", "high", "cronjobs"))
+				continue
+			}
+			if !cj.Suspend && cj.AgeSec >= int64((24*time.Hour).Seconds()) && cj.LastSuccessfulTime == 0 {
+				out = append(out, dashboardFinding("CronJob", ns, cj.Name, "medium", 60, "CronJob has no successful run recorded after more than 24 hours.", "medium", "cronjobs"))
+			}
+		}
+	}
+	if s.helmOK {
+		for _, rel := range s.helmReleases.Items {
+			if isTransitionalHelmStatus(rel.Status) {
+				age := "last update time is unknown"
+				stale := rel.Updated == 0
+				if rel.Updated > 0 {
+					d := now.Sub(time.Unix(rel.Updated, 0))
+					stale = d >= 15*time.Minute
+					age = "status has been transitional for more than 15 minutes"
+				}
+				if stale {
+					out = append(out, dashboardFinding("HelmRelease", ns, rel.Name, "high", 86, age, "medium", "helm"))
+				}
+			}
+		}
+	}
+	if s.cmsOK {
+		for _, cm := range s.cms.Items {
+			if cm.KeysCount == 0 {
+				out = append(out, dashboardFinding("ConfigMap", ns, cm.Name, "low", 35, "ConfigMap has no data keys.", "high", "configmaps"))
+			}
+		}
+	}
+	if s.secsOK {
+		for _, sec := range s.secs.Items {
+			if sec.KeysCount == 0 {
+				out = append(out, dashboardFinding("Secret", ns, sec.Name, "low", 35, "Secret has no data keys.", "high", "secrets"))
+			}
+		}
+	}
+	if s.pvcsOK && s.podsOK && len(s.pods.Items) == 0 {
+		for _, pvc := range s.pvcs.Items {
+			if pvc.AgeSec >= int64((24 * time.Hour).Seconds()) {
+				out = append(out, dashboardFinding("PersistentVolumeClaim", ns, pvc.Name, "low", 30, "Potentially unused: no pods are present in the cached namespace snapshot.", "low", "persistentvolumeclaims"))
+			}
+		}
+	}
+	if s.sasOK && s.podsOK && len(s.pods.Items) == 0 {
+		for _, sa := range s.sas.Items {
+			if sa.Name != "default" && sa.AgeSec >= int64((24*time.Hour).Seconds()) {
+				out = append(out, dashboardFinding("ServiceAccount", ns, sa.Name, "low", 25, "Potentially unused: no pods are present in the cached namespace snapshot.", "low", "serviceaccounts"))
+			}
+		}
+	}
+	return out
+}
+
+func dashboardFinding(kind, namespace, name, severity string, score int, reason, confidence, section string) ClusterDashboardFinding {
+	return ClusterDashboardFinding{
+		Kind:       kind,
+		Namespace:  namespace,
+		Name:       name,
+		Severity:   severity,
+		Score:      score,
+		Reason:     reason,
+		Confidence: confidence,
+		Section:    section,
+	}
+}
+
+func isEmptyLookingNamespace(s dashboardSnapshotSet) bool {
+	requiredOK := s.podsOK && s.depsOK && s.dsOK && s.stsOK && s.rsOK && s.jobsOK && s.cjsOK && s.svcsOK && s.ingsOK && s.pvcsOK && s.cmsOK && s.secsOK && s.helmOK
+	if !requiredOK {
+		return false
+	}
+	return len(s.pods.Items) == 0 &&
+		len(s.deps.Items) == 0 &&
+		len(s.ds.Items) == 0 &&
+		len(s.sts.Items) == 0 &&
+		len(s.rs.Items) == 0 &&
+		len(s.jobs.Items) == 0 &&
+		len(s.cjs.Items) == 0 &&
+		len(s.svcs.Items) == 0 &&
+		len(s.ings.Items) == 0 &&
+		len(s.pvcs.Items) == 0 &&
+		nonSystemConfigMapCount(s.cms.Items) == 0 &&
+		len(s.secs.Items) == 0 &&
+		len(s.helmReleases.Items) == 0
+}
+
+func nonSystemConfigMapCount(items []dto.ConfigMapDTO) int {
+	n := 0
+	for _, item := range items {
+		if item.Name == "kube-root-ca.crt" {
+			continue
+		}
+		n++
+	}
+	return n
+}
+
+func isTransitionalHelmStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "pending-install", "pending-upgrade", "pending-rollback", "uninstalling":
+		return true
+	default:
+		return false
+	}
+}
+
+func summarizeDashboardFindings(findings []ClusterDashboardFinding, limit int) ClusterDashboardFindingsPanel {
+	if limit <= 0 {
+		limit = 10
+	}
+	sort.Slice(findings, func(i, j int) bool {
+		if findings[i].Score != findings[j].Score {
+			return findings[i].Score > findings[j].Score
+		}
+		if findings[i].Namespace != findings[j].Namespace {
+			return findings[i].Namespace < findings[j].Namespace
+		}
+		if findings[i].Kind != findings[j].Kind {
+			return findings[i].Kind < findings[j].Kind
+		}
+		return findings[i].Name < findings[j].Name
+	})
+	out := ClusterDashboardFindingsPanel{Total: len(findings)}
+	for _, f := range findings {
+		switch f.Severity {
+		case "high":
+			out.High++
+		case "medium":
+			out.Medium++
+		default:
+			out.Low++
+		}
+		switch f.Kind {
+		case "Namespace":
+			out.EmptyNamespaces++
+		case "HelmRelease":
+			out.StuckHelmReleases++
+		case "Job":
+			out.AbnormalJobs++
+		case "CronJob":
+			out.AbnormalCronJobs++
+		case "ConfigMap":
+			out.EmptyConfigMaps++
+		case "Secret":
+			out.EmptySecrets++
+		case "PersistentVolumeClaim":
+			out.PotentiallyUnusedPVCs++
+		case "ServiceAccount":
+			out.PotentiallyUnusedSAs++
+		}
+	}
+	if len(findings) > limit {
+		out.Top = append(out.Top, findings[:limit]...)
+	} else {
+		out.Top = append(out.Top, findings...)
+	}
+	out.Items = append(out.Items, findings...)
+	return out
 }
 
 func visibleNamespacesWithCachedDataplaneLists(plane *clusterPlane, visibleSorted []string) []string {

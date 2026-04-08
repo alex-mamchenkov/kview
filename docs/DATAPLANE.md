@@ -51,7 +51,7 @@ Notable projection:
 
 ## Dashboard summary
 
-`GET /api/dashboard/cluster` uses **`DashboardSummary`**: namespace and node snapshot blocks, trust copy, resource totals for all dataplane-owned namespaced list kinds from cached namespace snapshots, and optional **bounded** workload hints (cross-namespace sampling is not cluster-complete). See response types in `internal/dataplane/dashboard.go`.
+`GET /api/dashboard/cluster` uses **`DashboardSummary`**: namespace and node snapshot blocks, trust copy, resource totals for all dataplane-owned namespaced list kinds from cached namespace snapshots, heuristic **findings** for cached-scope attention signals, and optional **bounded** workload hints (cross-namespace sampling is not cluster-complete). Findings currently cover empty-looking namespaces, stale transitional Helm releases, abnormal Jobs/CronJobs, empty ConfigMaps/Secrets, and low-confidence potentially unused PVCs/service accounts when no cached pods exist in the namespace. The response includes both a capped `findings.top` list for first-glance triage and `findings.items` for category drill-down in the UI. See response types in `internal/dataplane/dashboard.go`.
 
 ---
 

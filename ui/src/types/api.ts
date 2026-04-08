@@ -229,6 +229,43 @@ export type ApiDashboardClusterResponse = {
       aggregateDegradation?: string;
       highSeverityHotspotsInTopN: number;
     };
+    findings?: {
+      total: number;
+      high: number;
+      medium: number;
+      low: number;
+      emptyNamespaces: number;
+      stuckHelmReleases: number;
+      abnormalJobs: number;
+      abnormalCronJobs: number;
+      emptyConfigMaps: number;
+      emptySecrets: number;
+      potentiallyUnusedPVCs: number;
+      potentiallyUnusedServiceAccounts: number;
+      top?: Array<{
+        kind: string;
+        namespace?: string;
+        name?: string;
+        severity: string;
+        score: number;
+        reason: string;
+        confidence?: string;
+        section?: string;
+      }>;
+      items?: Array<{
+        kind: string;
+        namespace?: string;
+        name?: string;
+        severity: string;
+        score: number;
+        reason: string;
+        confidence?: string;
+        section?: string;
+      }>;
+      note?: string;
+      aggregateFreshness?: string;
+      aggregateDegradation?: string;
+    };
     workloadHints?: {
       totalNamespacesVisible: number;
       namespacesWithWorkloadCache: number;

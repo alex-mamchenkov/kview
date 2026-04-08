@@ -348,7 +348,15 @@ function AppInner() {
                   onClose={() => setSettingsOpen(false)}
                 />
               ) : null}
-              {!settingsOpen && section === "dashboard" ? <DashboardView token={token} /> : null}
+              {!settingsOpen && section === "dashboard" ? (
+                <DashboardView
+                  token={token}
+                  onNavigate={(sec, ns) => {
+                    onSelectNamespace(ns);
+                    onSelectSection(sec as Section);
+                  }}
+                />
+              ) : null}
               {!settingsOpen && section === "nodes" ? <NodesTable token={token} /> : null}
               {!settingsOpen && section === "namespaces" ? (
                 <NamespacesTable

@@ -16,6 +16,7 @@ type ClusterDashboardSummary struct {
 	Coverage      ClusterDashboardCoverage        `json:"coverage"`
 	Resources     ClusterDashboardResourcesPanel  `json:"resources"`
 	Hotspots      ClusterDashboardHotspotsPanel   `json:"hotspots"`
+	Findings      ClusterDashboardFindingsPanel   `json:"findings"`
 	WorkloadHints ClusterDashboardWorkloadHints   `json:"workloadHints"`
 }
 
@@ -123,6 +124,38 @@ type ClusterDashboardHotspotsPanel struct {
 	HighSeverityHotspotsInTopN int                                    `json:"highSeverityHotspotsInTopN"`
 }
 
+// ClusterDashboardFindingsPanel groups heuristic dataplane findings from cached namespace snapshots.
+type ClusterDashboardFindingsPanel struct {
+	Total                 int                       `json:"total"`
+	High                  int                       `json:"high"`
+	Medium                int                       `json:"medium"`
+	Low                   int                       `json:"low"`
+	EmptyNamespaces       int                       `json:"emptyNamespaces"`
+	StuckHelmReleases     int                       `json:"stuckHelmReleases"`
+	AbnormalJobs          int                       `json:"abnormalJobs"`
+	AbnormalCronJobs      int                       `json:"abnormalCronJobs"`
+	EmptyConfigMaps       int                       `json:"emptyConfigMaps"`
+	EmptySecrets          int                       `json:"emptySecrets"`
+	PotentiallyUnusedPVCs int                       `json:"potentiallyUnusedPVCs"`
+	PotentiallyUnusedSAs  int                       `json:"potentiallyUnusedServiceAccounts"`
+	Top                   []ClusterDashboardFinding `json:"top,omitempty"`
+	Items                 []ClusterDashboardFinding `json:"items,omitempty"`
+	Note                  string                    `json:"note,omitempty"`
+	AggregateFreshness    string                    `json:"aggregateFreshness,omitempty"`
+	AggregateDegradation  string                    `json:"aggregateDegradation,omitempty"`
+}
+
+type ClusterDashboardFinding struct {
+	Kind       string `json:"kind"`
+	Namespace  string `json:"namespace,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Severity   string `json:"severity"`
+	Score      int    `json:"score"`
+	Reason     string `json:"reason"`
+	Confidence string `json:"confidence,omitempty"`
+	Section    string `json:"section,omitempty"`
+}
+
 // ClusterDashboardWorkloadHints mirrors Hotspots for compact UI chips.
 type ClusterDashboardWorkloadHints struct {
 	TotalNamespacesVisible      int                        `json:"totalNamespacesVisible"`
@@ -188,7 +221,7 @@ func (m *manager) DashboardSummary(ctx context.Context, clusterName string) Clus
 		resourceScope = strings.Join(scope.ResourceKinds, ",")
 	}
 
-	resPanel, hotPanel, wh, cov := m.aggregateClusterDashboard(plane, nsNames, nsTotal, nsUnhealthy)
+	resPanel, hotPanel, findingsPanel, wh, cov := m.aggregateClusterDashboard(plane, nsNames, nsTotal, nsUnhealthy)
 	if policy.NamespaceEnrichment.Enabled && policy.NamespaceEnrichment.Sweep.Enabled && len(nsSnap.Items) > 0 && !m.hasNamespaceEnrichmentInFlight(clusterName) {
 		m.BeginNamespaceListProgressiveEnrichment(clusterName, nsSnap.Items, NamespaceEnrichHints{})
 	}
@@ -234,6 +267,7 @@ func (m *manager) DashboardSummary(ctx context.Context, clusterName string) Clus
 		Coverage:      cov,
 		Resources:     resPanel,
 		Hotspots:      hotPanel,
+		Findings:      findingsPanel,
 		WorkloadHints: wh,
 	}
 }

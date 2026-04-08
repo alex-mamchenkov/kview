@@ -46,7 +46,7 @@ Dataplane-backed read endpoints accept optional `X-Kview-Context`; when absent, 
 | Route | Behavior |
 |-------|----------|
 | `GET /api/namespaces` | Returns `NamespacesSnapshot` list immediately with `rowProjection.revision` / `loading`. Background stages enrich a scored subset: live **GET** per selected namespace (`GetNamespaceListFields`), then **pods + deployments** snapshots at low priority. If the namespace list order and target set are unchanged, the existing enrichment revision is reused so enriched rows remain stable across refreshes. Target namespaces are **scored from optional query hints**, not an alphabetical walk of the full list (see §2.1). UI polls `GET /api/namespaces/enrichment?revision=…`. |
-| `GET /api/dashboard/cluster` | `EnsureObservers` + `DashboardSummary`: `visibility` (namespaces/nodes snapshots + observed-at), `resources` for all dataplane-owned namespaced list kinds from cached namespace snapshots, and workload `hotspots` from the cached workload subset, plus `workloadHints` alias for chips. |
+| `GET /api/dashboard/cluster` | `EnsureObservers` + `DashboardSummary`: `visibility` (namespaces/nodes snapshots + observed-at), `resources` for all dataplane-owned namespaced list kinds from cached namespace snapshots, heuristic `findings` from the same cached namespace scope, and workload `hotspots` from the cached workload subset, plus `workloadHints` alias for chips. |
 | `GET /api/namespaces/enrichment?revision=` | Server-side merge for progressive namespace list rows (same revision as `GET /api/namespaces`). Includes `enrichTargets` (count of namespaces in the scored enrichment subset). Reflects in-process background work, not a direct kube call. |
 
 ### 2.1 Namespace list: enrichment hints, scoring, idle worker

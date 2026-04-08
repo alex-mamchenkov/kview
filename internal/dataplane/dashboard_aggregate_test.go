@@ -69,7 +69,7 @@ func TestAggregateClusterDashboard_FromCachedPodsOnly(t *testing.T) {
 	setNamespacedSnapshot(&plane.roleBindingsStore, ns, RoleBindingsSnapshot{Meta: meta, Items: []dto.RoleBindingListItemDTO{{Name: "rb", Namespace: ns}}})
 	setNamespacedSnapshot(&plane.helmReleasesStore, ns, HelmReleasesSnapshot{Meta: meta, Items: []dto.HelmReleaseDTO{{Name: "rel", Namespace: ns}}})
 
-	res, hot, wh, cov := mm.aggregateClusterDashboard(plane, []string{ns}, 1, 0)
+	res, hot, find, wh, cov := mm.aggregateClusterDashboard(plane, []string{ns}, 1, 0)
 	if res.Pods != 1 {
 		t.Fatalf("pods: %d", res.Pods)
 	}
@@ -88,6 +88,9 @@ func TestAggregateClusterDashboard_FromCachedPodsOnly(t *testing.T) {
 	if wh.NamespacesWithWorkloadCache != 1 || wh.TotalNamespacesVisible != 1 {
 		t.Fatalf("wh %+v", wh)
 	}
+	if find.EmptyConfigMaps != 1 || find.EmptySecrets != 1 {
+		t.Fatalf("findings %+v", find)
+	}
 	if cov.ResourceTotalsCompleteness != "complete" || cov.NamespacesInResourceTotals != 1 {
 		t.Fatalf("cov %+v", cov)
 	}
@@ -102,7 +105,7 @@ func TestAggregateClusterDashboard_NoCacheUnknownTotals(t *testing.T) {
 	planeAny, _ := mm.PlaneForCluster(t.Context(), "ctx2")
 	plane := planeAny.(*clusterPlane)
 
-	res, _, _, cov := mm.aggregateClusterDashboard(plane, []string{"x", "y"}, 2, 0)
+	res, _, _, _, cov := mm.aggregateClusterDashboard(plane, []string{"x", "y"}, 2, 0)
 	if res.Pods != 0 || cov.ResourceTotalsCompleteness != "unknown" || cov.NamespacesInResourceTotals != 0 {
 		t.Fatalf("res=%+v cov=%+v", res, cov)
 	}
@@ -126,7 +129,7 @@ func TestAggregateClusterDashboard_HonorsHotspotToggle(t *testing.T) {
 		},
 	})
 
-	res, hot, wh, cov := mm.aggregateClusterDashboard(plane, []string{ns}, 1, 0)
+	res, hot, _, wh, cov := mm.aggregateClusterDashboard(plane, []string{ns}, 1, 0)
 	if res.Pods != 1 {
 		t.Fatalf("pods: got %d, want 1", res.Pods)
 	}
@@ -141,6 +144,84 @@ func TestAggregateClusterDashboard_HonorsHotspotToggle(t *testing.T) {
 	}
 	if cov.ResourceTotalsCompleteness != "complete" {
 		t.Fatalf("coverage: %+v", cov)
+	}
+}
+
+func TestDetectDashboardFindingsRanksSignals(t *testing.T) {
+	now := time.Now().UTC()
+	ns := "app"
+	findings := detectDashboardFindings(now, ns, dashboardSnapshotSet{
+		pods:         PodsSnapshot{Items: nil},
+		podsOK:       true,
+		deps:         DeploymentsSnapshot{Items: nil},
+		depsOK:       true,
+		ds:           DaemonSetsSnapshot{Items: nil},
+		dsOK:         true,
+		sts:          StatefulSetsSnapshot{Items: nil},
+		stsOK:        true,
+		rs:           ReplicaSetsSnapshot{Items: nil},
+		rsOK:         true,
+		jobs:         JobsSnapshot{Items: []dto.JobDTO{{Name: "failed", Namespace: ns, Status: "Failed", Failed: 1}}},
+		jobsOK:       true,
+		cjs:          CronJobsSnapshot{Items: []dto.CronJobDTO{{Name: "stale", Namespace: ns, AgeSec: int64((48 * time.Hour).Seconds())}}},
+		cjsOK:        true,
+		svcs:         ServicesSnapshot{Items: nil},
+		svcsOK:       true,
+		ings:         IngressesSnapshot{Items: nil},
+		ingsOK:       true,
+		pvcs:         PVCsSnapshot{Items: []dto.PersistentVolumeClaimDTO{{Name: "data", Namespace: ns, AgeSec: int64((48 * time.Hour).Seconds())}}},
+		pvcsOK:       true,
+		cms:          ConfigMapsSnapshot{Items: []dto.ConfigMapDTO{{Name: "empty-cm", Namespace: ns}}},
+		cmsOK:        true,
+		secs:         SecretsSnapshot{Items: []dto.SecretDTO{{Name: "empty-secret", Namespace: ns}}},
+		secsOK:       true,
+		sas:          ServiceAccountsSnapshot{Items: []dto.ServiceAccountListItemDTO{{Name: "builder", Namespace: ns, AgeSec: int64((48 * time.Hour).Seconds())}}},
+		sasOK:        true,
+		helmReleases: HelmReleasesSnapshot{Items: []dto.HelmReleaseDTO{{Name: "rel", Namespace: ns, Status: "pending-upgrade", Updated: now.Add(-time.Hour).Unix()}}},
+		helmOK:       true,
+	})
+	summary := summarizeDashboardFindings(findings, 3)
+	if summary.Total != len(findings) || summary.High < 2 || summary.EmptyConfigMaps != 1 || summary.EmptySecrets != 1 {
+		t.Fatalf("summary %+v findings %+v", summary, findings)
+	}
+	if len(summary.Top) != 3 || summary.Top[0].Score < summary.Top[1].Score {
+		t.Fatalf("top not capped/sorted: %+v", summary.Top)
+	}
+	if len(summary.Items) != len(findings) {
+		t.Fatalf("items should keep all findings: got %d want %d", len(summary.Items), len(findings))
+	}
+}
+
+func TestEmptyLookingNamespaceIgnoresKubeRootCAConfigMap(t *testing.T) {
+	if !isEmptyLookingNamespace(dashboardSnapshotSet{
+		pods:         PodsSnapshot{Items: nil},
+		podsOK:       true,
+		deps:         DeploymentsSnapshot{Items: nil},
+		depsOK:       true,
+		ds:           DaemonSetsSnapshot{Items: nil},
+		dsOK:         true,
+		sts:          StatefulSetsSnapshot{Items: nil},
+		stsOK:        true,
+		rs:           ReplicaSetsSnapshot{Items: nil},
+		rsOK:         true,
+		jobs:         JobsSnapshot{Items: nil},
+		jobsOK:       true,
+		cjs:          CronJobsSnapshot{Items: nil},
+		cjsOK:        true,
+		svcs:         ServicesSnapshot{Items: nil},
+		svcsOK:       true,
+		ings:         IngressesSnapshot{Items: nil},
+		ingsOK:       true,
+		pvcs:         PVCsSnapshot{Items: nil},
+		pvcsOK:       true,
+		cms:          ConfigMapsSnapshot{Items: []dto.ConfigMapDTO{{Name: "kube-root-ca.crt", Namespace: "empty"}}},
+		cmsOK:        true,
+		secs:         SecretsSnapshot{Items: nil},
+		secsOK:       true,
+		helmReleases: HelmReleasesSnapshot{Items: nil},
+		helmOK:       true,
+	}) {
+		t.Fatal("expected auto-created kube-root-ca.crt to be ignored for empty namespace heuristic")
 	}
 }
 
