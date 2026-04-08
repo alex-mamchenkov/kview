@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -27,6 +28,8 @@ type snapshotPersistence interface {
 	Load(cluster string, kind ResourceKind, namespace string, into any) (bool, error)
 	Save(cluster string, kind ResourceKind, namespace string, snap any) error
 	Delete(cluster string, kind ResourceKind, namespace string) error
+	ListSnapshots(cluster string) ([]persistedSnapshotCell, error)
+	SearchName(cluster string, query string, limit int, offset int) ([]dataplaneSearchRow, error)
 	Close() error
 }
 
@@ -171,6 +174,38 @@ func (p *boltSnapshotPersistence) Delete(cluster string, kind ResourceKind, name
 	})
 }
 
+type persistedSnapshotCell struct {
+	Kind      ResourceKind
+	Namespace string
+	Payload   []byte
+}
+
+func (p *boltSnapshotPersistence) ListSnapshots(cluster string) ([]persistedSnapshotCell, error) {
+	if p == nil || p.db == nil {
+		return nil, nil
+	}
+	var cells []persistedSnapshotCell
+	err := p.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(dataplaneSnapshotBucket)
+		if b == nil {
+			return nil
+		}
+		return b.ForEach(func(key, value []byte) error {
+			keyCluster, kind, namespace, ok := decodeSnapshotKey(key)
+			if !ok || keyCluster != cluster {
+				return nil
+			}
+			cells = append(cells, persistedSnapshotCell{
+				Kind:      ResourceKind(kind),
+				Namespace: namespace,
+				Payload:   append([]byte(nil), value...),
+			})
+			return nil
+		})
+	})
+	return cells, err
+}
+
 func (p *boltSnapshotPersistence) SearchNamePrefix(prefix string, limit int) ([]dataplaneSearchRow, error) {
 	if p == nil || p.db == nil || limit <= 0 {
 		return nil, nil
@@ -195,12 +230,86 @@ func (p *boltSnapshotPersistence) SearchNamePrefix(prefix string, limit int) ([]
 	return rows, err
 }
 
+func (p *boltSnapshotPersistence) SearchName(cluster string, query string, limit int, offset int) ([]dataplaneSearchRow, error) {
+	if p == nil || p.db == nil || limit <= 0 {
+		return nil, nil
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	needle := strings.ToLower(strings.TrimSpace(query))
+	if needle == "" {
+		return nil, nil
+	}
+	rows := make([]dataplaneSearchRow, 0, limit+offset)
+	err := p.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(dataplaneSearchBucket)
+		if b == nil {
+			return nil
+		}
+		c := b.Cursor()
+		for key, value := c.First(); key != nil; key, value = c.Next() {
+			var row dataplaneSearchRow
+			if err := json.Unmarshal(value, &row); err != nil {
+				return err
+			}
+			if cluster != "" && row.Cluster != cluster {
+				continue
+			}
+			if !strings.Contains(strings.ToLower(row.Name), needle) {
+				continue
+			}
+			rows = append(rows, row)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		if pi, pj := searchKindPriority(rows[i].Kind), searchKindPriority(rows[j].Kind); pi != pj {
+			return pi < pj
+		}
+		if ni, nj := strings.ToLower(rows[i].Name), strings.ToLower(rows[j].Name); ni != nj {
+			return ni < nj
+		}
+		if rows[i].Namespace != rows[j].Namespace {
+			return rows[i].Namespace < rows[j].Namespace
+		}
+		if rows[i].Kind != rows[j].Kind {
+			return rows[i].Kind < rows[j].Kind
+		}
+		return rows[i].Cluster < rows[j].Cluster
+	})
+	if offset >= len(rows) {
+		return nil, nil
+	}
+	end := offset + limit
+	if end > len(rows) {
+		end = len(rows)
+	}
+	return rows[offset:end], nil
+}
+
 type dataplaneSearchRow struct {
 	Cluster    string `json:"cluster"`
 	Kind       string `json:"kind"`
 	Namespace  string `json:"namespace,omitempty"`
 	Name       string `json:"name"`
 	ObservedAt string `json:"observedAt,omitempty"`
+}
+
+func searchKindPriority(kind string) int {
+	switch ResourceKind(kind) {
+	case ResourceKindHelmReleases:
+		return 0
+	case ResourceKindDeployments:
+		return 1
+	case ResourceKindReplicaSets, ResourceKindDaemonSets, ResourceKindStatefulSets:
+		return 2
+	default:
+		return 3
+	}
 }
 
 func deleteCellIndex(search, cells *bolt.Bucket, cellKey []byte) error {
@@ -286,6 +395,26 @@ func snapshotKey(cluster string, kind ResourceKind, namespace string) []byte {
 	return []byte(strings.Join([]string{keyPart(cluster), keyPart(string(kind)), keyPart(namespace)}, "/"))
 }
 
+func decodeSnapshotKey(key []byte) (cluster string, kind string, namespace string, ok bool) {
+	parts := strings.Split(string(key), "/")
+	if len(parts) != 3 {
+		return "", "", "", false
+	}
+	cluster, err := decodeKeyPart(parts[0])
+	if err != nil {
+		return "", "", "", false
+	}
+	kind, err = decodeKeyPart(parts[1])
+	if err != nil {
+		return "", "", "", false
+	}
+	namespace, err = decodeKeyPart(parts[2])
+	if err != nil {
+		return "", "", "", false
+	}
+	return cluster, kind, namespace, true
+}
+
 func searchIndexKey(row dataplaneSearchRow) []byte {
 	normalized := strings.ToLower(row.Name)
 	return []byte(strings.Join([]string{
@@ -299,6 +428,14 @@ func searchIndexKey(row dataplaneSearchRow) []byte {
 
 func keyPart(s string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(s))
+}
+
+func decodeKeyPart(s string) (string, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
 }
 
 func markPersistedSnapshot[I any](snap *Snapshot[I], maxAge time.Duration) bool {

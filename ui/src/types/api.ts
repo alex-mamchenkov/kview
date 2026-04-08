@@ -93,6 +93,23 @@ export type ApiNamespacesEnrichmentPoll = {
 /** /api/contexts response */
 export type ApiContextsResponse = { contexts?: Array<{ name: string }> };
 
+export type ApiDataplaneSearchItem = {
+  cluster: string;
+  kind: string;
+  namespace?: string;
+  name: string;
+  observedAt?: string;
+};
+
+export type ApiDataplaneSearchResponse = {
+  active: string;
+  query: string;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  items?: ApiDataplaneSearchItem[];
+};
+
 /** /api/namespaces list response (list of namespace objects with name) */
 export type ApiNamespacesListResponse = {
   active?: string;

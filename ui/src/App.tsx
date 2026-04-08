@@ -49,12 +49,36 @@ import MutationProvider from "./components/mutations/MutationProvider";
 import { ThemeProvider, useThemeMode } from "./theme/ThemeProvider";
 import { UserSettingsProvider, useUserSettings } from "./settingsContext";
 import SettingsView from "./components/settings/SettingsView";
+import DataplaneQuickSearch from "./components/search/DataplaneQuickSearch";
+import DataplaneSearchDrawer from "./components/search/DataplaneSearchDrawer";
+import type { ApiDataplaneSearchItem } from "./types/api";
 import "./styles/theme.css";
 
 function getToken(): string {
   const u = new URL(window.location.href);
   return u.searchParams.get("token") || "";
 }
+
+const dataplaneSearchSectionByKind: Record<string, Section> = {
+  namespaces: "namespaces",
+  nodes: "nodes",
+  pods: "pods",
+  deployments: "deployments",
+  daemonsets: "daemonsets",
+  statefulsets: "statefulsets",
+  replicasets: "replicasets",
+  jobs: "jobs",
+  cronjobs: "cronjobs",
+  services: "services",
+  ingresses: "ingresses",
+  configmaps: "configmaps",
+  secrets: "secrets",
+  serviceaccounts: "serviceaccounts",
+  roles: "roles",
+  rolebindings: "rolebindings",
+  persistentvolumeclaims: "persistentvolumeclaims",
+  helmreleases: "helm",
+};
 
 function AppInner() {
   const token = useMemo(() => getToken(), []);
@@ -73,6 +97,7 @@ function AppInner() {
 
   const [section, setSection] = useState<Section>("pods");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [searchDrawerItem, setSearchDrawerItem] = useState<ApiDataplaneSearchItem | null>(null);
 
   const [favourites, setFavourites] = useState<string[]>([]);
 
@@ -278,6 +303,15 @@ function AppInner() {
     setAppState((s) => ({ ...s, activeSection: sec }));
   }
 
+  function onOpenSearchResult(item: ApiDataplaneSearchItem) {
+    const targetSection = dataplaneSearchSectionByKind[item.kind];
+    if (item.namespace) onSelectNamespace(item.namespace);
+    if (item.kind === "namespaces") onSelectNamespace(item.name);
+    if (targetSection) onSelectSection(targetSection);
+    setSettingsOpen(false);
+    setSearchDrawerItem(item);
+  }
+
   return (
     <ActiveContextProvider value={activeContext}>
         <MutationProvider>
@@ -295,7 +329,7 @@ function AppInner() {
         >
           <CssBaseline />
           <AppBar position="fixed" sx={{ zIndex: 1201 }}>
-            <Toolbar>
+            <Toolbar sx={{ position: "relative" }}>
               <Box
                 component="img"
                 src={logoUrl}
@@ -306,6 +340,23 @@ function AppInner() {
               <Typography variant="h6" noWrap component="div">
                 {settingsOpen ? "kview — Settings" : `kview — ${activeContext || "no context"}`}
               </Typography>
+              {!settingsOpen ? (
+                <Box
+                  sx={{
+                    position: "absolute",
+                    left: "50%",
+                    top: "50%",
+                    transform: "translate(-50%, -50%)",
+                    zIndex: 1,
+                  }}
+                >
+                  <DataplaneQuickSearch
+                    token={token}
+                    activeContext={activeContext}
+                    onOpenResult={onOpenSearchResult}
+                  />
+                </Box>
+              ) : null}
               <Box sx={{ flexGrow: 1 }} />
               <SettingsSelector open={settingsOpen} onToggle={() => setSettingsOpen((v) => !v)} />
               <ThemeSelector />
@@ -440,6 +491,15 @@ function AppInner() {
             </Alert>
           </Snackbar>
           <ActivityPanel token={token} covered={settingsOpen} />
+          <DataplaneSearchDrawer
+            token={token}
+            item={searchDrawerItem}
+            onClose={() => setSearchDrawerItem(null)}
+            onNavigate={(sec, ns) => {
+              onSelectNamespace(ns);
+              onSelectSection(sec as Section);
+            }}
+          />
         </Box>
         </MutationProvider>
     </ActiveContextProvider>

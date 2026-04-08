@@ -2,6 +2,8 @@ package dataplane
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -130,6 +132,9 @@ type DataPlaneManager interface {
 
 	// SchedulerLiveWork returns running and queued snapshot scheduler work (for operator visibility).
 	SchedulerLiveWork() SchedulerLiveWork
+
+	// SearchCachedResources returns persisted dataplane name-index matches without live Kubernetes reads.
+	SearchCachedResources(ctx context.Context, clusterName string, query string, limit int, offset int) (CachedResourceSearch, error)
 }
 
 // ManagerConfig describes construction-time parameters for the data plane manager.
@@ -262,22 +267,27 @@ func (m *manager) SetPolicy(policy DataplanePolicy) DataplanePolicy {
 
 func (m *manager) configurePersistence(policy DataplanePolicy) error {
 	m.persistenceMu.Lock()
-	defer m.persistenceMu.Unlock()
 	if !policy.Persistence.Enabled {
 		if m.persistence != nil {
 			_ = m.persistence.Close()
 			m.persistence = nil
 		}
+		m.persistenceMu.Unlock()
 		return nil
 	}
 	if m.persistence != nil {
+		m.persistenceMu.Unlock()
+		m.hydratePersistedPlanes(policy)
 		return nil
 	}
 	p, err := openBoltSnapshotPersistence("")
 	if err != nil {
+		m.persistenceMu.Unlock()
 		return persistenceOpenError(err)
 	}
 	m.persistence = p
+	m.persistenceMu.Unlock()
+	m.hydratePersistedPlanes(policy)
 	return nil
 }
 
@@ -285,6 +295,23 @@ func (m *manager) currentPersistence() snapshotPersistence {
 	m.persistenceMu.RLock()
 	defer m.persistenceMu.RUnlock()
 	return m.persistence
+}
+
+func (m *manager) hydratePersistedPlanes(policy DataplanePolicy) {
+	sp := m.currentPersistence()
+	if sp == nil {
+		return
+	}
+	maxAge := policy.PersistenceMaxAge()
+	m.mu.RLock()
+	planes := make([]*clusterPlane, 0, len(m.planes))
+	for _, plane := range m.planes {
+		planes = append(planes, plane)
+	}
+	m.mu.RUnlock()
+	for _, plane := range planes {
+		_ = plane.hydratePersistedSnapshots(maxAge)
+	}
 }
 
 func (m *manager) DefaultProfile() Profile {
@@ -316,6 +343,10 @@ func (m *manager) PlaneForCluster(_ context.Context, clusterName string) (Cluste
 	}
 	p := newClusterPlane(clusterName, m.defaultProfile, m.defaultDiscoveryMode, scope, m.Policy, m.currentPersistence)
 	m.planes[clusterName] = p
+	policy := m.Policy()
+	if policy.Persistence.Enabled {
+		_ = p.hydratePersistedSnapshots(policy.PersistenceMaxAge())
+	}
 	return p, nil
 }
 
@@ -430,6 +461,105 @@ func (p *clusterPlane) currentPersistence() snapshotPersistence {
 		return nil
 	}
 	return p.persistence()
+}
+
+func (p *clusterPlane) hydratePersistedSnapshots(maxAge time.Duration) error {
+	sp := p.currentPersistence()
+	if sp == nil {
+		return nil
+	}
+	cells, err := sp.ListSnapshots(p.name)
+	if err != nil {
+		return err
+	}
+	for _, cell := range cells {
+		if cell.Namespace == "" {
+			if err := p.hydratePersistedClusterSnapshot(cell.Kind, cell.Payload, maxAge); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := p.hydratePersistedNamespacedSnapshot(cell.Kind, cell.Namespace, cell.Payload, maxAge); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *clusterPlane) hydratePersistedClusterSnapshot(kind ResourceKind, payload []byte, maxAge time.Duration) error {
+	switch kind {
+	case ResourceKindNamespaces:
+		return hydratePersistedClusterSnapshotInto(&p.nsStore, payload, maxAge)
+	case ResourceKindNodes:
+		return hydratePersistedClusterSnapshotInto(&p.nodesStore, payload, maxAge)
+	}
+	return nil
+}
+
+func (p *clusterPlane) hydratePersistedNamespacedSnapshot(kind ResourceKind, namespace string, payload []byte, maxAge time.Duration) error {
+	switch kind {
+	case ResourceKindPods:
+		return hydratePersistedNamespacedSnapshotInto(&p.podsStore, namespace, payload, maxAge)
+	case ResourceKindDeployments:
+		return hydratePersistedNamespacedSnapshotInto(&p.depsStore, namespace, payload, maxAge)
+	case ResourceKindServices:
+		return hydratePersistedNamespacedSnapshotInto(&p.svcsStore, namespace, payload, maxAge)
+	case ResourceKindIngresses:
+		return hydratePersistedNamespacedSnapshotInto(&p.ingStore, namespace, payload, maxAge)
+	case ResourceKindPVCs:
+		return hydratePersistedNamespacedSnapshotInto(&p.pvcsStore, namespace, payload, maxAge)
+	case ResourceKindConfigMaps:
+		return hydratePersistedNamespacedSnapshotInto(&p.cmsStore, namespace, payload, maxAge)
+	case ResourceKindSecrets:
+		return hydratePersistedNamespacedSnapshotInto(&p.secsStore, namespace, payload, maxAge)
+	case ResourceKindServiceAccounts:
+		return hydratePersistedNamespacedSnapshotInto(&p.saStore, namespace, payload, maxAge)
+	case ResourceKindRoles:
+		return hydratePersistedNamespacedSnapshotInto(&p.rolesStore, namespace, payload, maxAge)
+	case ResourceKindRoleBindings:
+		return hydratePersistedNamespacedSnapshotInto(&p.roleBindingsStore, namespace, payload, maxAge)
+	case ResourceKindHelmReleases:
+		return hydratePersistedNamespacedSnapshotInto(&p.helmReleasesStore, namespace, payload, maxAge)
+	case ResourceKindDaemonSets:
+		return hydratePersistedNamespacedSnapshotInto(&p.dsStore, namespace, payload, maxAge)
+	case ResourceKindStatefulSets:
+		return hydratePersistedNamespacedSnapshotInto(&p.stsStore, namespace, payload, maxAge)
+	case ResourceKindReplicaSets:
+		return hydratePersistedNamespacedSnapshotInto(&p.rsStore, namespace, payload, maxAge)
+	case ResourceKindJobs:
+		return hydratePersistedNamespacedSnapshotInto(&p.jobsStore, namespace, payload, maxAge)
+	case ResourceKindCronJobs:
+		return hydratePersistedNamespacedSnapshotInto(&p.cjStore, namespace, payload, maxAge)
+	}
+	return nil
+}
+
+func hydratePersistedClusterSnapshotInto[I any](store *snapshotStore[Snapshot[I]], payload []byte, maxAge time.Duration) error {
+	if _, ok := peekClusterSnapshot(store); ok {
+		return nil
+	}
+	var snap Snapshot[I]
+	if err := json.Unmarshal(payload, &snap); err != nil {
+		return err
+	}
+	if markPersistedSnapshot(&snap, maxAge) {
+		setClusterSnapshot(store, snap)
+	}
+	return nil
+}
+
+func hydratePersistedNamespacedSnapshotInto[I any](store *namespacedSnapshotStore[Snapshot[I]], namespace string, payload []byte, maxAge time.Duration) error {
+	if _, ok := peekNamespacedSnapshot(store, namespace); ok {
+		return nil
+	}
+	var snap Snapshot[I]
+	if err := json.Unmarshal(payload, &snap); err != nil {
+		return err
+	}
+	if markPersistedSnapshot(&snap, maxAge) {
+		setNamespacedSnapshot(store, namespace, snap)
+	}
+	return nil
 }
 
 // Snapshot is the shared raw snapshot container across dataplane-owned resources.
@@ -828,6 +958,42 @@ func (m *manager) SchedulerRunStats() SchedulerRunStatsSnapshot {
 
 func (m *manager) SchedulerLiveWork() SchedulerLiveWork {
 	return m.scheduler.LiveWorkSnapshot(time.Now())
+}
+
+func (m *manager) SearchCachedResources(_ context.Context, clusterName string, query string, limit int, offset int) (CachedResourceSearch, error) {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return CachedResourceSearch{Active: clusterName, Query: q, Limit: limit, Offset: offset, Items: nil}, nil
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	sp := m.currentPersistence()
+	if sp == nil {
+		return CachedResourceSearch{Active: clusterName, Query: q, Limit: limit, Offset: offset, Items: nil}, nil
+	}
+	rows, err := sp.SearchName(clusterName, q, limit+1, offset)
+	if err != nil {
+		return CachedResourceSearch{}, err
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	items := make([]CachedResourceSearchItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, CachedResourceSearchItem{
+			Cluster:    row.Cluster,
+			Kind:       row.Kind,
+			Namespace:  row.Namespace,
+			Name:       row.Name,
+			ObservedAt: row.ObservedAt,
+		})
+	}
+	return CachedResourceSearch{Active: clusterName, Query: q, Limit: limit, Offset: offset, HasMore: hasMore, Items: items}, nil
 }
 
 func (m *manager) NoteUserActivity() {

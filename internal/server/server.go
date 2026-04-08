@@ -128,6 +128,21 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, s.dp.SchedulerLiveWork())
 		})
 
+		api.Get("/dataplane/search", func(w http.ResponseWriter, r *http.Request) {
+			if s.dp == nil {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "dataplane unavailable"})
+				return
+			}
+			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+			res, err := s.dp.SearchCachedResources(r.Context(), s.readContextName(r), r.URL.Query().Get("q"), limit, offset)
+			if err != nil {
+				writeErrorResponse(w, http.StatusInternalServerError, "failed to search dataplane cache")
+				return
+			}
+			writeJSON(w, http.StatusOK, res)
+		})
+
 		api.Get("/dataplane/config", func(w http.ResponseWriter, _ *http.Request) {
 			if s.dp == nil {
 				writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "dataplane unavailable"})
