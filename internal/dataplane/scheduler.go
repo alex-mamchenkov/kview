@@ -224,8 +224,10 @@ func (s *workScheduler) configureRetries(retries int, initialBackoff, maxBackoff
 }
 
 func (s *workScheduler) configureLongRun(min time.Duration, fn func(workKey, WorkPriority, time.Duration, error)) {
+	s.mu.Lock()
 	s.longRunMin = min
 	s.onLongRun = fn
+	s.mu.Unlock()
 }
 
 func (s *workScheduler) setMaxPerCluster(maxPerCluster int) {
@@ -424,8 +426,12 @@ func (s *workScheduler) Run(ctx context.Context, priority WorkPriority, key work
 	defer func() {
 		d := time.Since(slotStart)
 		s.stats.recordRun(priority, key.Kind, d)
-		if s.onLongRun != nil && s.longRunMin > 0 && d >= s.longRunMin {
-			s.onLongRun(key, priority, d, fnErr)
+		s.mu.Lock()
+		longRunMin := s.longRunMin
+		onLongRun := s.onLongRun
+		s.mu.Unlock()
+		if onLongRun != nil && longRunMin > 0 && d >= longRunMin {
+			onLongRun(key, priority, d, fnErr)
 		}
 	}()
 

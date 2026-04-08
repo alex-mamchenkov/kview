@@ -168,7 +168,7 @@ func ValidateDataplanePolicy(in DataplanePolicy) DataplanePolicy {
 	if in.Profile == "" && in.Snapshots.TTLSeconds == nil {
 		return def
 	}
-	out := in
+	out := CloneDataplanePolicy(in)
 	switch out.Profile {
 	case DataplaneProfileManual, DataplaneProfileFocused, DataplaneProfileBalanced, DataplaneProfileWide, DataplaneProfileDiagnostic:
 	default:
@@ -216,6 +216,24 @@ func ValidateDataplanePolicy(in DataplanePolicy) DataplanePolicy {
 		out.NamespaceEnrichment.Sweep.Enabled = false
 	}
 
+	return out
+}
+
+func CloneDataplanePolicy(in DataplanePolicy) DataplanePolicy {
+	out := in
+	out.Snapshots.TTLSeconds = cloneStringIntMap(in.Snapshots.TTLSeconds)
+	out.NamespaceEnrichment.WarmResourceKinds = append([]string(nil), in.NamespaceEnrichment.WarmResourceKinds...)
+	return out
+}
+
+func cloneStringIntMap(in map[string]int) map[string]int {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]int, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
 	return out
 }
 

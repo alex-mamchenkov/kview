@@ -229,8 +229,9 @@ func NewManager(cfg ManagerConfig) DataPlaneManager {
 
 func (m *manager) Policy() DataplanePolicy {
 	m.policyMu.RLock()
-	defer m.policyMu.RUnlock()
-	return ValidateDataplanePolicy(m.policy)
+	policy := CloneDataplanePolicy(m.policy)
+	m.policyMu.RUnlock()
+	return ValidateDataplanePolicy(policy)
 }
 
 func (m *manager) SetPolicy(policy DataplanePolicy) DataplanePolicy {
