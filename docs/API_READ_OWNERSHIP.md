@@ -59,8 +59,9 @@ Background row enrichment is **narrow and user-aligned**:
   - `enrichRecent` — MRU names, comma-separated and/or repeated keys; earlier names rank as more recent.
   - `enrichFav` — favourite names, comma-separated and/or repeated keys.
 - **Scoring** (`buildEnrichmentWorkOrder`): focus ≫ favourite ≫ recency; ties break by **snapshot list index** (stable).
-- **Caps:** at most **32** namespaces receive GET + pods/deployments enrichment; up to **2** in parallel (`nsEnrichMaxParallel`).
-- **Idle-only start:** worker waits until the API has seen **no user activity** for **2s** (`nsEnrichIdleQuiet`). Activity is updated on `/api/*` **except** `GET /api/namespaces/enrichment` (trimmed path), so enrichment polling does not reset the idle timer.
+- **Caps:** by default at most **32** focused namespaces receive GET + pods/deployments enrichment, up to **2** in parallel. These values are configurable through the dataplane policy with hard validation bounds.
+- **Idle-only start:** by default the worker waits until the API has seen **no user activity** for **2s**. Activity is updated on `/api/*` **except** `GET /api/namespaces/enrichment` (trimmed path), so enrichment polling does not reset the idle timer.
+- **Optional sweep:** if enabled in NS Enrichment settings, a tiny cold set outside focus/recent/favourites can be appended after a longer idle gate, constrained by per-cycle and per-hour caps. Sweep still uses dataplane snapshots and low-priority scheduler work; it is not a direct handler read or immediate full-cluster scan.
 - **Stable refresh behavior:** repeated namespace list refreshes reuse the same enrichment revision when the namespace order and target set have not changed; refreshed base rows preserve already-enriched projection fields.
 
 **UI:** the list URL is built in `ui/src/state.ts` as `namespacesListApiPath`, using persisted `recentNamespacesByContext` and `favouriteNamespacesByContext`. The Namespaces table passes that path into `fetchRows` so list load and hints stay aligned.
@@ -121,6 +122,7 @@ For resources that have them, these remain **direct** `kube` reads:
 | `POST /api/auth/can-i` | SSA review (write-shaped; authz read). |
 | `GET /api/dataplane/revision` | Cheap list-cell revision metadata; does not schedule kube fetches. |
 | `GET /api/dataplane/work/live` | In-process snapshot of scheduler running/queued work (observability). |
+| `GET /api/dataplane/config`, `POST /api/dataplane/config` | Process-local dataplane policy read/update, synced from browser-local Settings. Does not itself read the Kubernetes API. |
 
 ---
 

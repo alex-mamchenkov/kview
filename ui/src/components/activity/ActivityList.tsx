@@ -61,6 +61,28 @@ function activityTypeDisplayLabel(type: string): string {
   }
 }
 
+function activityTargetDisplay(a: Activity): string {
+  if (a.type === "portforward" && a.metadata?.localPort && a.metadata?.remotePort) {
+    return `${a.metadata.localHost || "127.0.0.1"}:${a.metadata.localPort} -> ${a.metadata.remotePort}`;
+  }
+  if (a.type === "namespace-list-enrich") {
+    const focused = a.metadata?.focusedTargets ?? "0";
+    const sweep = a.metadata?.sweepTargets ?? "0";
+    const detail = a.metadata?.detailDone ?? "0";
+    const related = a.metadata?.relatedDone ?? "0";
+    const total = a.metadata?.enrichTargets ?? "0";
+    const warmKinds = a.metadata?.warmKinds ?? "0";
+    return `${a.metadata?.cluster || "-"} · ${a.metadata?.stage || a.status || "-"} · focused ${focused} · sweep ${sweep} · ${warmKinds} kinds · ${detail}/${total} details · ${related}/${total} counts`;
+  }
+  if (a.type === "dataplane-snapshot") {
+    return `${a.metadata?.cluster || "-"} / ${a.metadata?.namespace || "-"} / ${a.metadata?.kind || "-"}`;
+  }
+  if (a.type === "connectivity") {
+    return `${a.metadata?.context || "-"} · ${a.metadata?.state || a.status || "-"}`;
+  }
+  return `${a.metadata?.targetNamespace || "-"} / ${a.metadata?.targetResource || "-"}`;
+}
+
 type Props = {
   items?: Activity[];
   loading?: boolean;
@@ -152,10 +174,8 @@ export default function ActivityList({
                 </Typography>
               </TableCell>
               <TableCell sx={compactCellSx}>
-                <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
-                  {a.type === "portforward" && a.metadata?.localPort && a.metadata?.remotePort
-                    ? `${a.metadata.localHost || "127.0.0.1"}:${a.metadata.localPort} -> ${a.metadata.remotePort}`
-                    : `${a.metadata?.targetNamespace || "-"} / ${a.metadata?.targetResource || "-"}`}
+                <Typography variant="caption" sx={{ fontFamily: "monospace", whiteSpace: "pre-wrap" }}>
+                  {activityTargetDisplay(a)}
                 </Typography>
               </TableCell>
               <TableCell sx={compactCellSx}>

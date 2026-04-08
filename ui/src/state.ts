@@ -62,15 +62,21 @@ const MAX_RECENT_NAMESPACES = 20;
 const MAX_FAVOURITES_FOR_ENRICH_QUERY = 40;
 
 /** Path for GET /api/namespaces including enrichment hint query (current, recent, favourites). */
-export function namespacesListApiPath(state: AppStateV1, contextName: string, focusNamespace: string): string {
+export function namespacesListApiPath(
+  state: AppStateV1,
+  contextName: string,
+  focusNamespace: string,
+  recentLimit = MAX_RECENT_NAMESPACES,
+  favouriteLimit = MAX_FAVOURITES_FOR_ENRICH_QUERY,
+): string {
   const params = new URLSearchParams();
   const focus = (focusNamespace || "").trim();
   if (focus) params.set("enrichFocus", focus);
-  const recent = (state.recentNamespacesByContext?.[contextName] || []).filter(Boolean).slice(0, MAX_RECENT_NAMESPACES);
+  const recent = (state.recentNamespacesByContext?.[contextName] || []).filter(Boolean).slice(0, Math.max(0, recentLimit));
   if (recent.length) params.set("enrichRecent", recent.join(","));
   const fav = (state.favouriteNamespacesByContext?.[contextName] || [])
     .filter(Boolean)
-    .slice(0, MAX_FAVOURITES_FOR_ENRICH_QUERY);
+    .slice(0, Math.max(0, favouriteLimit));
   if (fav.length) params.set("enrichFav", fav.join(","));
   const q = params.toString();
   return q ? `/api/namespaces?${q}` : "/api/namespaces";
@@ -132,4 +138,3 @@ export function loadListTextFilter(): string {
 export function saveListTextFilter(value: string) {
   localStorage.setItem(LIST_TEXT_FILTER_KEY, value ?? "");
 }
-

@@ -83,3 +83,22 @@ func TestCountUniqueProblematic_DedupesKindName(t *testing.T) {
 		t.Fatalf("got %d", n)
 	}
 }
+
+func TestMergeNamespaceRowIntoIgnoresListOnlyPatch(t *testing.T) {
+	dst := dto.NamespaceListItemDTO{
+		Name:             "app",
+		RowEnriched:      true,
+		SummaryState:     "warning",
+		PodCount:         3,
+		DeploymentCount:  2,
+		ProblematicCount: 1,
+		PodsWithRestarts: 1,
+		RestartHotspot:   true,
+	}
+
+	mergeNamespaceRowInto(&dst, dto.NamespaceListItemDTO{Name: "app"})
+
+	if !dst.RowEnriched || dst.PodCount != 3 || dst.DeploymentCount != 2 || dst.SummaryState != "warning" || !dst.RestartHotspot {
+		t.Fatalf("list-only patch should not reset enriched fields: %+v", dst)
+	}
+}

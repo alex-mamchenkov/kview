@@ -13,7 +13,7 @@ func TestBuildEnrichmentWorkOrder_Priority(t *testing.T) {
 		Recent:   []string{"kube-system", "apple"},
 		Favorite: map[string]struct{}{"zebra": {}},
 	}
-	got := buildEnrichmentWorkOrder(order, hints)
+	got := buildEnrichmentWorkOrder(order, hints, nsEnrichMaxTargets)
 	if len(got) != 4 {
 		t.Fatalf("len %d, want 4: %v", len(got), got)
 	}
@@ -40,7 +40,7 @@ func TestBuildEnrichmentWorkOrder_Cap(t *testing.T) {
 	for _, n := range order {
 		hints.Favorite[n] = struct{}{}
 	}
-	got := buildEnrichmentWorkOrder(order, hints)
+	got := buildEnrichmentWorkOrder(order, hints, nsEnrichMaxTargets)
 	if len(got) != nsEnrichMaxTargets {
 		t.Fatalf("len %d, want cap %d", len(got), nsEnrichMaxTargets)
 	}

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Box, CssBaseline, AppBar, Toolbar, Typography, Snackbar, Alert, IconButton, Tooltip } from "@mui/material";
 import Brightness7Icon from "@mui/icons-material/Brightness7";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
@@ -28,7 +28,7 @@ import PersistentVolumeClaimsTable from "./components/resources/persistentvolume
 import HelmReleasesTable from "./components/resources/helm/HelmReleasesTable";
 import HelmChartsTable from "./components/resources/helm/HelmChartsTable";
 import CustomResourceDefinitionsTable from "./components/resources/customresourcedefinitions/CustomResourceDefinitionsTable";
-import { apiGet, apiPost, toApiError } from "./api";
+import { apiGet, apiGetWithContext, apiPost, toApiError } from "./api";
 import type { ApiContextsResponse, ApiNamespacesListResponse } from "./types/api";
 import {
   loadState,
@@ -43,10 +43,10 @@ import { notifyApiFailure, notifyStatus, useConnectionState, type AppStatus } fr
 import ConnectionBanner from "./components/shared/ConnectionBanner";
 import DashboardView from "./components/resources/dashboard/DashboardView";
 import ActivityPanel from "./components/activity/ActivityPanel";
-import { ActiveContextProvider } from "./activeContext";
+import { ActiveContextProvider, useActiveContext } from "./activeContext";
 import MutationProvider from "./components/mutations/MutationProvider";
 import { ThemeProvider, useThemeMode } from "./theme/ThemeProvider";
-import { UserSettingsProvider } from "./settingsContext";
+import { UserSettingsProvider, useUserSettings } from "./settingsContext";
 import SettingsView from "./components/settings/SettingsView";
 import "./styles/theme.css";
 
@@ -57,6 +57,7 @@ function getToken(): string {
 
 function AppInner() {
   const token = useMemo(() => getToken(), []);
+  const { settings } = useUserSettings();
   const { activeIssue, lastRecoveryShownAt, retryNonce } = useConnectionState();
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [criticalOpen, setCriticalOpen] = useState(false);
@@ -78,8 +79,21 @@ function AppInner() {
   const [appState, setAppState] = useState(() => loadState());
 
   const namespacesListPath = useMemo(
-    () => namespacesListApiPath(appState, activeContext, namespace),
-    [appState, activeContext, namespace],
+    () =>
+      namespacesListApiPath(
+        appState,
+        activeContext,
+        namespace,
+        settings.dataplane.namespaceEnrichment.recentLimit,
+        settings.dataplane.namespaceEnrichment.favouriteLimit,
+      ),
+    [
+      appState,
+      activeContext,
+      namespace,
+      settings.dataplane.namespaceEnrichment.recentLimit,
+      settings.dataplane.namespaceEnrichment.favouriteLimit,
+    ],
   );
 
   // persist on change
@@ -265,8 +279,8 @@ function AppInner() {
 
   return (
     <ActiveContextProvider value={activeContext}>
-      <UserSettingsProvider>
         <MutationProvider>
+        <DataplaneSettingsSync token={token} />
         <Box
           sx={{
             display: "flex",
@@ -412,9 +426,58 @@ function AppInner() {
           <ActivityPanel token={token} covered={settingsOpen} />
         </Box>
         </MutationProvider>
-      </UserSettingsProvider>
     </ActiveContextProvider>
   );
+}
+
+function DataplaneSettingsSync({ token }: { token: string }) {
+  const { settings } = useUserSettings();
+  const activeContext = useActiveContext();
+  const lastSweepWarmKeyRef = useRef<string>("");
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      const dataplanePolicy = {
+        ...settings.dataplane,
+        dashboard: {
+          ...settings.dataplane.dashboard,
+          refreshSec: settings.appearance.dashboardRefreshSec,
+        },
+      };
+      apiPost("/api/dataplane/config", token, dataplanePolicy)
+        .then(() => {
+          const sweep = settings.dataplane.namespaceEnrichment.sweep;
+          const warmKey = settings.dataplane.namespaceEnrichment.enabled && sweep.enabled
+            ? [
+                activeContext,
+                settings.dataplane.profile,
+                sweep.maxNamespacesPerCycle,
+                sweep.maxNamespacesPerHour,
+                sweep.minReenrichIntervalMinutes,
+                sweep.includeSystemNamespaces,
+                settings.dataplane.namespaceEnrichment.warmResourceKinds.join(","),
+              ].join(":")
+            : "";
+          if (!activeContext || !warmKey || warmKey === lastSweepWarmKeyRef.current || cancelled) {
+            if (!warmKey) lastSweepWarmKeyRef.current = "";
+            return;
+          }
+          lastSweepWarmKeyRef.current = warmKey;
+          apiGetWithContext<ApiNamespacesListResponse>("/api/namespaces", token, activeContext).catch(() => {
+            /* Sweep warm-up is best-effort; connection banner handles backend failures. */
+          });
+        })
+        .catch(() => {
+          /* Settings sync is best-effort; connection banner handles backend failures. */
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [activeContext, settings.appearance.dashboardRefreshSec, settings.dataplane, token]);
+  return null;
 }
 
 function SettingsSelector({ open, onToggle }: { open: boolean; onToggle: () => void }) {
@@ -452,7 +515,9 @@ function ThemeSelector() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AppInner />
+      <UserSettingsProvider>
+        <AppInner />
+      </UserSettingsProvider>
     </ThemeProvider>
   );
 }

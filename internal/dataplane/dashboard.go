@@ -9,10 +9,6 @@ import (
 	"kview/internal/kube/dto"
 )
 
-const (
-	restartElevatedThreshold = int32(3)
-)
-
 // ClusterDashboardSummary is a bounded Stage 5C operator overview derived from dataplane snapshots.
 type ClusterDashboardSummary struct {
 	Plane         ClusterDashboardPlane           `json:"plane"`
@@ -69,17 +65,18 @@ type ClusterDashboardVisibilityPanel struct {
 
 // ClusterDashboardCoverage describes namespace visibility, row-enrichment progress, and workload-total scope.
 type ClusterDashboardCoverage struct {
-	VisibleNamespaces            int    `json:"visibleNamespaces"`
-	ListOnlyNamespaces           int    `json:"listOnlyNamespaces"`
-	DetailEnrichedNamespaces     int    `json:"detailEnrichedNamespaces"`
-	RelatedEnrichedNamespaces    int    `json:"relatedEnrichedNamespaces"`
-	AwaitingRelatedRowProjection int    `json:"awaitingRelatedRowProjection"`
-	EnrichmentTargets            int    `json:"enrichmentTargets,omitempty"`
-	HasActiveEnrichmentSession   bool   `json:"hasActiveEnrichmentSession,omitempty"`
-	ResourceTotalsCompleteness   string `json:"resourceTotalsCompleteness"`
-	NamespacesInResourceTotals   int    `json:"namespacesInResourceTotals"`
-	ResourceTotalsNote           string `json:"resourceTotalsNote,omitempty"`
-	Note                         string `json:"note,omitempty"`
+	VisibleNamespaces             int    `json:"visibleNamespaces"`
+	ListOnlyNamespaces            int    `json:"listOnlyNamespaces"`
+	DetailEnrichedNamespaces      int    `json:"detailEnrichedNamespaces"`
+	RelatedEnrichedNamespaces     int    `json:"relatedEnrichedNamespaces"`
+	AwaitingRelatedRowProjection  int    `json:"awaitingRelatedRowProjection"`
+	EnrichmentTargets             int    `json:"enrichmentTargets,omitempty"`
+	HasActiveEnrichmentSession    bool   `json:"hasActiveEnrichmentSession,omitempty"`
+	RowProjectionCachedNamespaces int    `json:"rowProjectionCachedNamespaces"`
+	ResourceTotalsCompleteness    string `json:"resourceTotalsCompleteness"`
+	NamespacesInResourceTotals    int    `json:"namespacesInResourceTotals"`
+	ResourceTotalsNote            string `json:"resourceTotalsNote,omitempty"`
+	Note                          string `json:"note,omitempty"`
 }
 
 // ClusterDashboardResourcesPanel sums workloads only for namespaces with cached dataplane list snapshots.
@@ -140,6 +137,7 @@ type ClusterDashboardWorkloadHints struct {
 // DashboardSummary builds a bounded cluster dashboard from cached snapshots.
 func (m *manager) DashboardSummary(ctx context.Context, clusterName string) ClusterDashboardSummary {
 	ctx = ContextWithWorkSourceIfUnset(ctx, WorkSourceDashboard)
+	policy := m.Policy()
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
 
@@ -148,12 +146,18 @@ func (m *manager) DashboardSummary(ctx context.Context, clusterName string) Clus
 
 	nsObs := "not_loaded"
 	nodeObs := "not_loaded"
+	if !policy.Observers.Enabled || !policy.Observers.NamespacesEnabled {
+		nsObs = "disabled"
+	}
+	if !policy.Observers.Enabled || !policy.Observers.NodesEnabled {
+		nodeObs = "disabled"
+	}
 	plane.obsMu.Lock()
 	if plane.observers != nil {
-		if plane.observers.namespacesState != "" {
+		if policy.Observers.Enabled && policy.Observers.NamespacesEnabled && plane.observers.namespacesState != "" {
 			nsObs = string(plane.observers.namespacesState)
 		}
-		if plane.observers.nodesState != "" {
+		if policy.Observers.Enabled && policy.Observers.NodesEnabled && plane.observers.nodesState != "" {
 			nodeObs = string(plane.observers.nodesState)
 		}
 	}
@@ -185,16 +189,19 @@ func (m *manager) DashboardSummary(ctx context.Context, clusterName string) Clus
 	}
 
 	resPanel, hotPanel, wh, cov := m.aggregateClusterDashboard(plane, nsNames, nsTotal, nsUnhealthy)
+	if policy.NamespaceEnrichment.Enabled && policy.NamespaceEnrichment.Sweep.Enabled && len(nsSnap.Items) > 0 && !m.hasNamespaceEnrichmentInFlight(clusterName) {
+		m.BeginNamespaceListProgressiveEnrichment(clusterName, nsSnap.Items, NamespaceEnrichHints{})
+	}
 
-	trust := "Namespace and node blocks reflect cluster-wide list snapshots. Resource totals and hotspots use only namespaces where the dataplane already has cached list snapshots (see coverage.resourceTotalsCompleteness and coverage.namespacesInResourceTotals)."
+	trust := "Namespace and node blocks reflect dataplane snapshots. Resource totals and hotspots use only namespaces where the dataplane already has cached list snapshots (see coverage.resourceTotalsCompleteness and coverage.namespacesInResourceTotals)."
 
 	return ClusterDashboardSummary{
 		Plane: ClusterDashboardPlane{
-			Profile:              string(plane.Profile()),
+			Profile:              string(policy.Profile),
 			DiscoveryMode:        string(plane.DiscoveryMode()),
-			ActivationMode:       "lazy_endpoint_driven",
-			ProfilesImplemented:  []string{string(ProfileFocused)},
-			DiscoveryImplemented: []string{string(DiscoveryModeTargeted)},
+			ActivationMode:       dashboardActivationMode(policy),
+			ProfilesImplemented:  []string{string(DataplaneProfileManual), string(DataplaneProfileFocused), string(DataplaneProfileBalanced), string(DataplaneProfileWide), string(DataplaneProfileDiagnostic)},
+			DiscoveryImplemented: []string{string(DiscoveryModeTargeted), "focused_enrichment", "background_sweep"},
 			Scope: ClusterDashboardPlaneScope{
 				Namespaces:    namespaceScope,
 				ResourceKinds: resourceScope,
@@ -229,6 +236,19 @@ func (m *manager) DashboardSummary(ctx context.Context, clusterName string) Clus
 		Hotspots:      hotPanel,
 		WorkloadHints: wh,
 	}
+}
+
+func dashboardActivationMode(policy DataplanePolicy) string {
+	if !policy.NamespaceEnrichment.Enabled && !policy.Observers.Enabled {
+		return "manual_dataplane_snapshots"
+	}
+	if policy.NamespaceEnrichment.Sweep.Enabled {
+		return "focused_plus_idle_sweep"
+	}
+	if policy.NamespaceEnrichment.Enabled {
+		return "focused_idle_enrichment"
+	}
+	return "dataplane_snapshots"
 }
 
 // formatSnapshotTime returns RFC3339 or empty when unset.

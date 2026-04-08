@@ -14,21 +14,26 @@ import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResource
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
 import { useActiveContext } from "../../../activeContext";
+import { useUserSettings } from "../../../settingsContext";
 
 type Namespace = NonNullable<ApiNamespacesListResponse["items"]>[number];
+type NamespaceProjectionUpdate = ApiNamespacesEnrichmentPoll["updates"][number];
 
 type Row = Namespace & { id: string };
 
 const resourceLabel = getResourceLabel("namespaces");
-
-/** Poll interval while namespace row details are loading (lighter than per-table list timers). */
-const namespaceRowDetailsPollMs = 1500;
 
 function dashNum(row: Row, key: "podCount" | "deploymentCount" | "problematicCount" | "podsWithRestarts"): string {
   if (!row.rowEnriched) return "—";
   const v = row[key];
   if (v === undefined || v === null) return "—";
   return String(v);
+}
+
+function mergeNamespaceProjection<T extends NamespaceProjectionUpdate>(base: T | undefined, patch: T): T {
+  if (!base || !base.rowEnriched) return patch;
+  if (!patch.rowEnriched) return base;
+  return { ...base, ...patch };
 }
 
 const columns: GridColDef<Row>[] = [
@@ -167,7 +172,18 @@ export default function NamespacesTable({
   const [rowProjection, setRowProjection] = useState<ApiNamespacesListResponse["rowProjection"] | null>(null);
   const [enrichRows, setEnrichRows] = useState<ApiNamespacesEnrichmentPoll["updates"] | null>(null);
   const [enrichPoll, setEnrichPoll] = useState<ApiNamespacesEnrichmentPoll | null>(null);
+  const [enrichedRowsByName, setEnrichedRowsByName] = useState<Map<string, NamespaceProjectionUpdate>>(
+    () => new Map(),
+  );
   const activeContext = useActiveContext();
+  const { settings } = useUserSettings();
+  const namespaceRowDetailsPollMs = settings.dataplane.namespaceEnrichment.pollMs;
+
+  useEffect(() => {
+    setEnrichRows(null);
+    setEnrichPoll(null);
+    setEnrichedRowsByName(new Map());
+  }, [activeContext]);
 
   const fetchRows = useCallback(async (contextName?: string) => {
     // Do not clear enrichRows/enrichPoll here: clearing before the request completes drops merged
@@ -187,16 +203,18 @@ export default function NamespacesTable({
   const mapRows = useCallback(
     (rows: Row[]) => {
       const listRev = rowProjection?.revision ?? 0;
-      if (!enrichRows?.length || !listRev) return rows;
-      // Ignore stale poll payloads (previous job or pre-first-poll) so we do not flash back to list-only.
-      if (enrichPoll == null || enrichPoll.revision !== listRev) return rows;
-      const u = new Map(enrichRows.map((n) => [n.name, n]));
+      if (enrichedRowsByName.size === 0 && !enrichRows?.length) return rows;
+      const currentRevisionRows =
+        listRev && enrichPoll != null && enrichPoll.revision === listRev && enrichRows?.length
+          ? new Map(enrichRows.map((n) => [n.name, n]))
+          : null;
       return rows.map((r) => {
-        const ex = u.get(r.name);
+        const current = currentRevisionRows?.get(r.name);
+        const ex = current?.rowEnriched ? current : enrichedRowsByName.get(r.name);
         return ex ? ({ ...r, ...ex, id: r.name } as Row) : r;
       });
     },
-    [enrichRows, enrichPoll, rowProjection?.revision],
+    [enrichRows, enrichPoll, enrichedRowsByName, rowProjection?.revision],
   );
 
   const revision = rowProjection?.revision ?? 0;
@@ -213,9 +231,27 @@ export default function NamespacesTable({
         const res = activeContext
           ? await apiGetWithContext<ApiNamespacesEnrichmentPoll>(path, token, activeContext)
           : await apiGet<ApiNamespacesEnrichmentPoll>(path, token);
-        if (cancelled || res.stale) return;
-        setEnrichRows(res.updates ?? []);
+        if (cancelled) return;
+        if (res.stale) {
+          if (res.latestRevision) {
+            setRowProjection((prev) => prev ? { ...prev, revision: res.latestRevision } : prev);
+          }
+          return;
+        }
+        const updates = res.updates ?? [];
+        setEnrichRows(updates);
         setEnrichPoll(res);
+        setEnrichedRowsByName((prev) => {
+          if (!updates.length) return prev;
+          let changed = false;
+          const next = new Map(prev);
+          for (const update of updates) {
+            if (!update.rowEnriched) continue;
+            next.set(update.name, mergeNamespaceProjection(next.get(update.name), update));
+            changed = true;
+          }
+          return changed ? next : prev;
+        });
         if (res.complete && id) window.clearInterval(id);
       } catch {
         /* ignore transient poll errors */
@@ -227,7 +263,7 @@ export default function NamespacesTable({
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [activeContext, revision, token]);
+  }, [activeContext, namespaceRowDetailsPollMs, revision, token]);
 
   const filterPredicate = useCallback((row: Row, q: string) => {
     const lc = q.toLowerCase();
@@ -252,6 +288,8 @@ export default function NamespacesTable({
     const d = p?.detailRows ?? 0;
     const r = p?.relatedRows ?? 0;
     const done = p?.complete ?? false;
+    const targets = p?.enrichTargets ?? rowProjection?.cap ?? 0;
+    const progressTotal = targets > 0 ? targets : total;
     const stageHint =
       rawStage === "complete" || done
         ? "Up to date"
@@ -259,14 +297,21 @@ export default function NamespacesTable({
           ? "Fetching namespace details"
           : rawStage === "related"
             ? "Loading workload counts"
+            : rawStage === "sweep_idle_wait"
+              ? "Waiting to sweep idle namespaces"
+              : rawStage === "sweep_enriching"
+                ? "Sweeping idle namespaces"
+                : rawStage === "focused_idle_wait"
+                  ? "Waiting to enrich focused namespaces"
+                  : rawStage === "focused_enriching"
+                    ? "Enriching focused namespaces"
             : "Preparing";
-    const targets = p?.enrichTargets;
     const priorityHint =
       targets != null && targets > 0 ? ` · ${targets} namespace${targets === 1 ? "" : "s"} prioritized` : "";
     return (
       <Typography variant="caption" color="text.secondary" display="block">
         {stageHint}
-        {!done ? ` · Details ${d}/${total} · Counts ${r}/${total}` : ""}
+        {!done ? ` · Details ${d}/${progressTotal} · Counts ${r}/${progressTotal}` : ""}
         {priorityHint}
         {rowProjection?.note ? ` — ${rowProjection.note}` : ""}
       </Typography>
@@ -279,13 +324,14 @@ export default function NamespacesTable({
       title={title}
       dataplaneMetaPrefix={listStatusPrefix}
       mapRows={mapRows}
-      mapRowsDeps={[enrichRows, enrichPoll, rowProjection?.revision]}
+      mapRowsDeps={[enrichRows, enrichPoll, enrichedRowsByName, rowProjection?.revision]}
       columns={columns}
       fetchRows={fetchRows}
       dataplaneRevisionPoll={{
         fetchRevision: dataplaneRevisionFetcher(token, "namespaces"),
         pollSec: defaultRevisionPollSec,
       }}
+      dataplaneRefreshSec={0}
       filterPredicate={filterPredicate}
       filterLabel="Filter (name, status, workload state, counts)"
       resourceLabel={resourceLabel}

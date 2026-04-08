@@ -26,7 +26,7 @@ func TestResourceTotalsCompletenessLabel(t *testing.T) {
 }
 
 func TestVisibleNamespacesWithCachedDataplaneLists(t *testing.T) {
-	p := newClusterPlane("c", ProfileFocused, DiscoveryModeTargeted, ObservationScope{})
+	p := newClusterPlane("c", ProfileFocused, DiscoveryModeTargeted, ObservationScope{}, nil)
 	now := time.Now().UTC()
 	meta := SnapshotMetadata{ObservedAt: now}
 	setNamespacedSnapshot(&p.helmReleasesStore, "bravo", HelmReleasesSnapshot{Items: []dto.HelmReleaseDTO{{Name: "rel1"}}, Meta: meta})
@@ -105,5 +105,97 @@ func TestAggregateClusterDashboard_NoCacheUnknownTotals(t *testing.T) {
 	res, _, _, cov := mm.aggregateClusterDashboard(plane, []string{"x", "y"}, 2, 0)
 	if res.Pods != 0 || cov.ResourceTotalsCompleteness != "unknown" || cov.NamespacesInResourceTotals != 0 {
 		t.Fatalf("res=%+v cov=%+v", res, cov)
+	}
+}
+
+func TestAggregateClusterDashboard_HonorsHotspotToggle(t *testing.T) {
+	dm := NewManager(ManagerConfig{})
+	mm := dm.(*manager)
+	policy := mm.Policy()
+	policy.Dashboard.IncludeHotspots = false
+	mm.SetPolicy(policy)
+
+	planeAny, _ := mm.PlaneForCluster(t.Context(), "ctx3")
+	plane := planeAny.(*clusterPlane)
+
+	ns := "app"
+	setNamespacedSnapshot(&plane.podsStore, ns, PodsSnapshot{
+		Meta: SnapshotMetadata{ObservedAt: time.Now().UTC()},
+		Items: []dto.PodListItemDTO{
+			{Name: "pod-a", Namespace: ns, Restarts: 10, Phase: "Running", Ready: "1/1"},
+		},
+	})
+
+	res, hot, wh, cov := mm.aggregateClusterDashboard(plane, []string{ns}, 1, 0)
+	if res.Pods != 1 {
+		t.Fatalf("pods: got %d, want 1", res.Pods)
+	}
+	if hot.PodsWithElevatedRestarts != 0 || len(hot.TopPodRestartHotspots) != 0 || hot.ProblematicResources != 0 {
+		t.Fatalf("hotspots should be disabled: %+v", hot)
+	}
+	if hot.Note == "" {
+		t.Fatal("expected disabled hotspot note")
+	}
+	if wh.PodsWithElevatedRestarts != 0 || len(wh.TopPodRestartHotspots) != 0 {
+		t.Fatalf("workload hints should not include hotspots: %+v", wh)
+	}
+	if cov.ResourceTotalsCompleteness != "complete" {
+		t.Fatalf("coverage: %+v", cov)
+	}
+}
+
+func TestBuildDashboardCoverageIncludesSweepTargets(t *testing.T) {
+	dm := NewManager(ManagerConfig{})
+	mm := dm.(*manager)
+	cluster := "ctx-sweep"
+	mm.nsEnrich.byCluster[cluster] = &nsEnrichSession{
+		workNames:  []string{"focused"},
+		sweepNames: []string{"cold"},
+		merged: map[string]dto.NamespaceListItemDTO{
+			"focused": {Name: "focused", RowEnriched: true},
+			"cold":    {Name: "cold", RowEnriched: true},
+		},
+		detailDone:  2,
+		relatedDone: 2,
+	}
+
+	cov := mm.buildDashboardCoverage(cluster, []string{"cold", "focused", "other"}, 3)
+	if cov.EnrichmentTargets != 2 {
+		t.Fatalf("targets: got %d, want 2", cov.EnrichmentTargets)
+	}
+	if cov.AwaitingRelatedRowProjection != 2 {
+		t.Fatalf("awaiting: got %d, want 2", cov.AwaitingRelatedRowProjection)
+	}
+	if cov.ListOnlyNamespaces != 3 {
+		t.Fatalf("list-only: got %d, want 3", cov.ListOnlyNamespaces)
+	}
+}
+
+func TestBuildDashboardCoverageCountsCachedRowProjectionNamespaces(t *testing.T) {
+	dm := NewManager(ManagerConfig{})
+	mm := dm.(*manager)
+	cluster := "ctx-cached-rows"
+	planeAny, _ := mm.PlaneForCluster(t.Context(), cluster)
+	plane := planeAny.(*clusterPlane)
+	setNamespacedSnapshot(&plane.podsStore, "focused", PodsSnapshot{
+		Meta:  SnapshotMetadata{ObservedAt: time.Now().UTC()},
+		Items: []dto.PodListItemDTO{{Name: "pod", Namespace: "focused"}},
+	})
+	mm.nsEnrich.byCluster[cluster] = &nsEnrichSession{
+		workNames:  []string{"focused"},
+		sweepNames: []string{"cold"},
+		merged:     map[string]dto.NamespaceListItemDTO{},
+		detailDone: 1,
+	}
+
+	cov := mm.buildDashboardCoverage(cluster, []string{"cold", "focused", "other"}, 3)
+	if cov.RelatedEnrichedNamespaces != 1 || cov.RowProjectionCachedNamespaces != 1 {
+		t.Fatalf("cached row projection counts: %+v", cov)
+	}
+	if cov.AwaitingRelatedRowProjection != 1 {
+		t.Fatalf("awaiting: got %d, want 1", cov.AwaitingRelatedRowProjection)
+	}
+	if cov.ListOnlyNamespaces != 2 {
+		t.Fatalf("list-only: got %d, want 2", cov.ListOnlyNamespaces)
 	}
 }

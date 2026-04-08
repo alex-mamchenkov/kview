@@ -66,6 +66,10 @@ func observerStateForError(n NormalizedError) ObserverState {
 }
 
 func (p *clusterPlane) EnsureObservers(ctx context.Context, sched *workScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
+	policy := p.currentPolicy()
+	if !policy.Observers.Enabled {
+		return
+	}
 	p.obsMu.Lock()
 	if p.observers != nil {
 		p.obsMu.Unlock()
@@ -79,6 +83,11 @@ func (p *clusterPlane) EnsureObservers(ctx context.Context, sched *workScheduler
 }
 
 func (p *clusterPlane) namespaceObserverTick(ctx context.Context, sched *workScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
+	policy := p.currentPolicy()
+	if !policy.Observers.Enabled || !policy.Observers.NamespacesEnabled {
+		p.setObserverState(observerKindNamespaces, ObserverStateStopped, rt)
+		return
+	}
 	// Run one refresh cycle immediately so observer state becomes truthful as soon
 	// as a dataplane-backed endpoint activates the plane.
 	obsCtx := ContextWithWorkSource(ctx, WorkSourceObserver)
@@ -97,26 +106,33 @@ func (p *clusterPlane) namespaceObserverTick(ctx context.Context, sched *workSch
 }
 
 func (p *clusterPlane) runNamespaceObserver(ctx context.Context, sched *workScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
-	interval := 30 * time.Second
-
 	p.setObserverState(observerKindNamespaces, ObserverStateStarting, rt)
 	p.namespaceObserverTick(ctx, sched, clients, rt)
 
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
 	for {
+		policy := p.currentPolicy()
+		interval := time.Duration(policy.Observers.NamespacesIntervalSec) * time.Second
+		if !policy.Observers.Enabled || !policy.Observers.NamespacesEnabled {
+			interval = 5 * time.Second
+		}
+		timer := time.NewTimer(interval)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			p.setObserverState(observerKindNamespaces, ObserverStateStopped, rt)
 			return
-		case <-ticker.C:
+		case <-timer.C:
 			p.namespaceObserverTick(ctx, sched, clients, rt)
 		}
 	}
 }
 
 func (p *clusterPlane) nodeObserverTick(ctx context.Context, sched *workScheduler, clients ClientsProvider, rt runtime.RuntimeManager, interval *time.Duration, ticker *time.Ticker) {
+	policy := p.currentPolicy()
+	if !policy.Observers.Enabled || !policy.Observers.NodesEnabled {
+		p.setObserverState(observerKindNodes, ObserverStateStopped, rt)
+		return
+	}
 	obsCtx := ContextWithWorkSource(ctx, WorkSourceObserver)
 	snap, err := p.NodesSnapshot(obsCtx, sched, clients, WorkPriorityLow)
 	if err != nil {
@@ -127,8 +143,12 @@ func (p *clusterPlane) nodeObserverTick(ctx context.Context, sched *workSchedule
 			// Simple backoff when access is blocked or upstream is degraded.
 			switch state {
 			case ObserverStateBlockedByAccess, ObserverStateBackoff:
-				if *interval < 5*60*time.Second {
+				maxBackoff := time.Duration(policy.Observers.NodesBackoffMaxSec) * time.Second
+				if *interval < maxBackoff {
 					*interval *= 2
+					if *interval > maxBackoff {
+						*interval = maxBackoff
+					}
 					ticker.Reset(*interval)
 					if rt != nil {
 						rt.Log(runtime.LogLevelInfo, "dataplane",
@@ -142,13 +162,13 @@ func (p *clusterPlane) nodeObserverTick(ctx context.Context, sched *workSchedule
 		return
 	}
 
-	*interval = 60 * time.Second
+	*interval = time.Duration(policy.Observers.NodesIntervalSec) * time.Second
 	ticker.Reset(*interval)
 	p.setObserverState(observerKindNodes, ObserverStateActive, rt)
 }
 
 func (p *clusterPlane) runNodeObserver(ctx context.Context, sched *workScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
-	baseInterval := 60 * time.Second
+	baseInterval := time.Duration(p.currentPolicy().Observers.NodesIntervalSec) * time.Second
 	interval := baseInterval
 
 	p.setObserverState(observerKindNodes, ObserverStateStarting, rt)

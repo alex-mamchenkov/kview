@@ -57,7 +57,7 @@ Notable projection:
 
 ## Namespaces list and row enrichment
 
-`GET /api/namespaces` returns the **namespaces snapshot** immediately with **`rowProjection.revision`** (and loading hints). Background work (scored subset, idle-gated) enriches rows; the UI polls **`GET /api/namespaces/enrichment?revision=…`** for merged rows.
+`GET /api/namespaces` returns the **namespaces snapshot** immediately with **`rowProjection.revision`** (and loading hints). Background work (scored subset, idle-gated) enriches rows; the UI polls **`GET /api/namespaces/enrichment?revision=…`** for merged rows. The browser-local NS Enrichment settings sync a process-local dataplane policy to the backend; settings change the dataplane policy, not the read ownership model.
 
 Design constraints (see `internal/dataplane` for implementation):
 
@@ -66,6 +66,7 @@ Design constraints (see `internal/dataplane` for implementation):
 - **Idle gate:** enrichment starts only after API **user activity** has been quiet for a short window; polling the enrichment endpoint **does not** reset that timer.
 - **Stable refresh:** a repeated namespace list refresh reuses the active enrichment revision when the list order and target set are unchanged. Refreshed base rows keep any already-enriched pod/deployment counts and restart signals.
 - **Activity identity:** namespace row enrichment uses one stable activity ID per cluster instead of revision-numbered activity rows.
+- **Opt-in sweep:** focused enrichment remains the default. When background sweep is enabled, the dataplane may add a small number of non-focused namespaces per idle cycle, constrained by per-cycle and per-hour caps, with one-worker default parallelism. This is intended as a slow radar sweep for large clusters, not a full immediate namespace scan.
 
 List rows for **pods**, **deployments**, and workload controllers can include small **projection-derived** fields from snapshot DTOs in the list handler (`Enrich*ListItemsForAPI`) without extra kube calls.
 
@@ -75,7 +76,26 @@ List rows for **pods**, **deployments**, and workload controllers can include sm
 
 - **Activation:** `EnsureObservers` runs when the UI touches dataplane-backed endpoints for the **active** context (e.g. namespaces list)—so only actively used clusters pay observation cost.
 - Namespaces and nodes observers refresh on an interval; state is coarse (`starting`, `active`, backoff classes, etc.) and transitions are logged under the **`dataplane`** runtime source.
+- Observer intervals and enablement are policy-controlled. Manual profile keeps dataplane snapshots but disables observers and namespace enrichment.
 - There is **no** global warm-up of every kube context in the kubeconfig.
+
+---
+
+## Policy settings
+
+`GET /api/dataplane/config` returns the current process-local dataplane policy and `POST /api/dataplane/config` replaces it with a validated policy. The Settings UI owns persistence in browser `localStorage` and syncs the current policy to the running backend.
+
+Current policy knobs include:
+
+- profile: manual, focused, balanced, wide, diagnostic
+- snapshot TTLs per dataplane-owned list kind
+- namespace and node observer intervals/backoff
+- focused namespace enrichment: current/recent/favourite inclusion, caps, parallelism, idle quiet window, and stage toggles for namespace details, pods, deployments
+- optional background namespace sweep: per-cycle cap, per-hour cap, re-enrich interval, idle gate, system namespace inclusion
+- scheduler budget: per-cluster concurrency, transient retries, long-run snapshot activity threshold
+- dashboard projection hints: restart threshold and hotspot limit
+
+Validation keeps hard bounds on all numeric controls so wide/sweep settings can increase observability without unbounded cluster scans.
 
 ---
 

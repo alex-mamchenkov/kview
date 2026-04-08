@@ -7,6 +7,7 @@ export type CustomCommandSafety = "safe" | "dangerous";
 export type CustomActionKind = "set" | "unset" | "patch";
 export type CustomActionTarget = "env" | "image";
 export type CustomActionPatchType = "json" | "merge";
+export type DataplaneProfile = "manual" | "focused" | "balanced" | "wide" | "diagnostic";
 
 export type SmartFilterRule = {
   id: string;
@@ -38,6 +39,65 @@ export type KviewUserSettingsV1 = {
   };
   customActions: {
     actions: CustomActionDefinition[];
+  };
+  dataplane: DataplaneSettings;
+};
+
+export type DataplaneSettings = {
+  profile: DataplaneProfile;
+  snapshots: {
+    ttlSec: Record<string, number>;
+    manualRefreshBypassesTtl: boolean;
+    invalidateAfterKnownMutations: boolean;
+  };
+  observers: {
+    enabled: boolean;
+    namespacesEnabled: boolean;
+    namespacesIntervalSec: number;
+    nodesEnabled: boolean;
+    nodesIntervalSec: number;
+    nodesBackoffMaxSec: number;
+  };
+  namespaceEnrichment: {
+    enabled: boolean;
+    includeFocus: boolean;
+    includeRecent: boolean;
+    recentLimit: number;
+    includeFavourites: boolean;
+    favouriteLimit: number;
+    maxTargets: number;
+    maxParallel: number;
+    idleQuietMs: number;
+    enrichDetails: boolean;
+    enrichPods: boolean;
+    enrichDeployments: boolean;
+    warmResourceKinds: string[];
+    pollMs: number;
+    sweep: {
+      enabled: boolean;
+      idleQuietMs: number;
+      maxNamespacesPerCycle: number;
+      maxNamespacesPerHour: number;
+      minReenrichIntervalMinutes: number;
+      maxParallel: number;
+      pauseOnUserActivity: boolean;
+      pauseWhenSchedulerBusy: boolean;
+      pauseOnRateLimitOrConnectivityIssues: boolean;
+      includeSystemNamespaces: boolean;
+    };
+  };
+  backgroundBudget: {
+    maxConcurrentPerCluster: number;
+    maxBackgroundConcurrentPerCluster: number;
+    longRunNoticeSec: number;
+    transientRetries: number;
+  };
+  dashboard: {
+    refreshSec: number;
+    useCachedTotalsOnly: boolean;
+    includeHotspots: boolean;
+    restartElevatedThreshold: number;
+    hotspotLimit: number;
   };
 };
 
@@ -96,7 +156,32 @@ const allowedCommandSafety = new Set<CustomCommandSafety>(["safe", "dangerous"])
 const allowedActionKinds = new Set<CustomActionKind>(["set", "unset", "patch"]);
 const allowedActionTargets = new Set<CustomActionTarget>(["env", "image"]);
 const allowedActionPatchTypes = new Set<CustomActionPatchType>(["json", "merge"]);
+const allowedDataplaneProfiles = new Set<DataplaneProfile>(["manual", "focused", "balanced", "wide", "diagnostic"]);
 const customActionResourceKeys: ListResourceKey[] = ["deployments", "daemonsets", "statefulsets", "replicasets"];
+export const dataplaneTTLResourceKeys = [
+  "namespaces",
+  "nodes",
+  "pods",
+  "deployments",
+  "daemonsets",
+  "statefulsets",
+  "replicasets",
+  "jobs",
+  "cronjobs",
+  "services",
+  "ingresses",
+  "persistentvolumeclaims",
+  "configmaps",
+  "secrets",
+  "serviceaccounts",
+  "roles",
+  "rolebindings",
+  "helmreleases",
+] as const;
+
+export const dataplaneNamespaceWarmResourceKeys = dataplaneTTLResourceKeys.filter(
+  (key) => key !== "namespaces" && key !== "nodes",
+);
 
 export function defaultUserSettings(): KviewUserSettingsV1 {
   return {
@@ -187,7 +272,131 @@ export function defaultUserSettings(): KviewUserSettingsV1 {
         },
       ],
     },
+    dataplane: defaultDataplaneSettings(),
   };
+}
+
+export function defaultDataplaneSettings(): DataplaneSettings {
+  return {
+    profile: "focused",
+    snapshots: {
+      ttlSec: {
+        namespaces: 120,
+        nodes: 120,
+        pods: 15,
+        deployments: 45,
+        daemonsets: 45,
+        statefulsets: 45,
+        replicasets: 30,
+        jobs: 30,
+        cronjobs: 30,
+        services: 60,
+        ingresses: 60,
+        persistentvolumeclaims: 60,
+        configmaps: 120,
+        secrets: 120,
+        serviceaccounts: 180,
+        roles: 180,
+        rolebindings: 180,
+        helmreleases: 120,
+      },
+      manualRefreshBypassesTtl: true,
+      invalidateAfterKnownMutations: true,
+    },
+    observers: {
+      enabled: true,
+      namespacesEnabled: true,
+      namespacesIntervalSec: 120,
+      nodesEnabled: true,
+      nodesIntervalSec: 180,
+      nodesBackoffMaxSec: 300,
+    },
+    namespaceEnrichment: {
+      enabled: true,
+      includeFocus: true,
+      includeRecent: true,
+      recentLimit: 20,
+      includeFavourites: true,
+      favouriteLimit: 40,
+      maxTargets: 32,
+      maxParallel: 2,
+      idleQuietMs: 2000,
+      enrichDetails: true,
+      enrichPods: true,
+      enrichDeployments: true,
+      warmResourceKinds: ["pods", "deployments"],
+      pollMs: 1500,
+      sweep: {
+        enabled: false,
+        idleQuietMs: 30000,
+        maxNamespacesPerCycle: 2,
+        maxNamespacesPerHour: 30,
+        minReenrichIntervalMinutes: 360,
+        maxParallel: 1,
+        pauseOnUserActivity: true,
+        pauseWhenSchedulerBusy: true,
+        pauseOnRateLimitOrConnectivityIssues: true,
+        includeSystemNamespaces: false,
+      },
+    },
+    backgroundBudget: {
+      maxConcurrentPerCluster: 4,
+      maxBackgroundConcurrentPerCluster: 2,
+      longRunNoticeSec: 2,
+      transientRetries: 3,
+    },
+    dashboard: {
+      refreshSec: 10,
+      useCachedTotalsOnly: true,
+      includeHotspots: true,
+      restartElevatedThreshold: 3,
+      hotspotLimit: 10,
+    },
+  };
+}
+
+export function dataplaneSettingsForProfile(profile: DataplaneProfile): DataplaneSettings {
+  const next: DataplaneSettings = JSON.parse(JSON.stringify(defaultDataplaneSettings()));
+  next.profile = profile;
+  switch (profile) {
+    case "manual":
+      next.observers.enabled = false;
+      next.namespaceEnrichment.enabled = false;
+      next.namespaceEnrichment.sweep.enabled = false;
+      break;
+    case "balanced":
+      next.namespaceEnrichment.maxTargets = 48;
+      next.namespaceEnrichment.maxParallel = 3;
+      next.namespaceEnrichment.warmResourceKinds = ["pods", "deployments", "services", "ingresses"];
+      next.backgroundBudget.maxConcurrentPerCluster = 5;
+      break;
+    case "wide":
+      next.namespaceEnrichment.maxTargets = 64;
+      next.namespaceEnrichment.maxParallel = 3;
+      next.namespaceEnrichment.warmResourceKinds = [...dataplaneNamespaceWarmResourceKeys];
+      next.namespaceEnrichment.sweep.enabled = true;
+      next.namespaceEnrichment.sweep.maxNamespacesPerCycle = 3;
+      next.namespaceEnrichment.sweep.maxNamespacesPerHour = 60;
+      next.backgroundBudget.maxConcurrentPerCluster = 6;
+      break;
+    case "diagnostic":
+      next.namespaceEnrichment.maxTargets = 100;
+      next.namespaceEnrichment.maxParallel = 4;
+      next.namespaceEnrichment.idleQuietMs = 1000;
+      next.namespaceEnrichment.warmResourceKinds = [...dataplaneNamespaceWarmResourceKeys];
+      next.namespaceEnrichment.sweep.enabled = true;
+      next.namespaceEnrichment.sweep.idleQuietMs = 10000;
+      next.namespaceEnrichment.sweep.maxNamespacesPerCycle = 5;
+      next.namespaceEnrichment.sweep.maxNamespacesPerHour = 120;
+      next.namespaceEnrichment.sweep.minReenrichIntervalMinutes = 60;
+      next.backgroundBudget.maxConcurrentPerCluster = 8;
+      next.backgroundBudget.longRunNoticeSec = 1;
+      break;
+    case "focused":
+    default:
+      break;
+  }
+  return next;
 }
 
 export function newSmartFilterRule(): SmartFilterRule {
@@ -261,8 +470,22 @@ function validMinCount(value: unknown, fallback: number): number {
   return rounded;
 }
 
+function validNumber(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  const rounded = Math.round(value);
+  if (rounded < min || rounded > max) return fallback;
+  return rounded;
+}
+
 function isListResourceKey(value: unknown): value is ListResourceKey {
   return typeof value === "string" && allListResourceKeys.includes(value as ListResourceKey);
+}
+
+function normalizeWarmResourceKinds(value: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(value)) return [...fallback];
+  const allowed = new Set<string>(dataplaneNamespaceWarmResourceKeys);
+  const out = Array.from(new Set(value.filter((item): item is string => typeof item === "string" && allowed.has(item))));
+  return out.length ? out : [...fallback];
 }
 
 function normalizeRule(input: unknown, fallbackId: string): SmartFilterRule | null {
@@ -398,6 +621,188 @@ function normalizeCustomAction(input: unknown, fallbackId: string): CustomAction
   };
 }
 
+function normalizeDataplaneSettings(input: unknown): DataplaneSettings {
+  const defaults = defaultDataplaneSettings();
+  if (!input || typeof input !== "object") return defaults;
+  const raw = input as Partial<DataplaneSettings>;
+  const rawSnapshots = (raw.snapshots ?? {}) as Partial<DataplaneSettings["snapshots"]>;
+  const rawObservers = (raw.observers ?? {}) as Partial<DataplaneSettings["observers"]>;
+  const rawEnrichment = (raw.namespaceEnrichment ?? {}) as Partial<DataplaneSettings["namespaceEnrichment"]>;
+  const rawSweep = (rawEnrichment.sweep ?? {}) as Partial<DataplaneSettings["namespaceEnrichment"]["sweep"]>;
+  const rawBudget = (raw.backgroundBudget ?? {}) as Partial<DataplaneSettings["backgroundBudget"]>;
+  const rawDashboard = (raw.dashboard ?? {}) as Partial<DataplaneSettings["dashboard"]>;
+  const rawTtls = (rawSnapshots.ttlSec ?? {}) as Record<string, unknown>;
+  const profile = allowedDataplaneProfiles.has(raw.profile as DataplaneProfile)
+    ? (raw.profile as DataplaneProfile)
+    : defaults.profile;
+  const profileDefaults = dataplaneSettingsForProfile(profile);
+  const ttlSec: Record<string, number> = {};
+  for (const key of dataplaneTTLResourceKeys) {
+    ttlSec[key] = validNumber(rawTtls[key], 5, 3600, defaults.snapshots.ttlSec[key]);
+  }
+
+  const maxConcurrent = validNumber(
+    rawBudget.maxConcurrentPerCluster,
+    1,
+    16,
+    defaults.backgroundBudget.maxConcurrentPerCluster,
+  );
+
+  const normalized: DataplaneSettings = {
+    profile,
+    snapshots: {
+      ttlSec,
+      manualRefreshBypassesTtl:
+        typeof rawSnapshots.manualRefreshBypassesTtl === "boolean"
+          ? rawSnapshots.manualRefreshBypassesTtl
+          : defaults.snapshots.manualRefreshBypassesTtl,
+      invalidateAfterKnownMutations:
+        typeof rawSnapshots.invalidateAfterKnownMutations === "boolean"
+          ? rawSnapshots.invalidateAfterKnownMutations
+          : defaults.snapshots.invalidateAfterKnownMutations,
+    },
+    observers: {
+      enabled: typeof rawObservers.enabled === "boolean" ? rawObservers.enabled : defaults.observers.enabled,
+      namespacesEnabled:
+        typeof rawObservers.namespacesEnabled === "boolean"
+          ? rawObservers.namespacesEnabled
+          : defaults.observers.namespacesEnabled,
+      namespacesIntervalSec: validNumber(
+        rawObservers.namespacesIntervalSec,
+        10,
+        3600,
+        defaults.observers.namespacesIntervalSec,
+      ),
+      nodesEnabled:
+        typeof rawObservers.nodesEnabled === "boolean" ? rawObservers.nodesEnabled : defaults.observers.nodesEnabled,
+      nodesIntervalSec: validNumber(rawObservers.nodesIntervalSec, 10, 3600, defaults.observers.nodesIntervalSec),
+      nodesBackoffMaxSec: validNumber(
+        rawObservers.nodesBackoffMaxSec,
+        30,
+        3600,
+        defaults.observers.nodesBackoffMaxSec,
+      ),
+    },
+    namespaceEnrichment: {
+      enabled:
+        typeof rawEnrichment.enabled === "boolean" ? rawEnrichment.enabled : defaults.namespaceEnrichment.enabled,
+      includeFocus:
+        typeof rawEnrichment.includeFocus === "boolean"
+          ? rawEnrichment.includeFocus
+          : defaults.namespaceEnrichment.includeFocus,
+      includeRecent:
+        typeof rawEnrichment.includeRecent === "boolean"
+          ? rawEnrichment.includeRecent
+          : defaults.namespaceEnrichment.includeRecent,
+      recentLimit: validNumber(rawEnrichment.recentLimit, 0, 200, defaults.namespaceEnrichment.recentLimit),
+      includeFavourites:
+        typeof rawEnrichment.includeFavourites === "boolean"
+          ? rawEnrichment.includeFavourites
+          : defaults.namespaceEnrichment.includeFavourites,
+      favouriteLimit: validNumber(
+        rawEnrichment.favouriteLimit,
+        0,
+        200,
+        defaults.namespaceEnrichment.favouriteLimit,
+      ),
+      maxTargets: validNumber(rawEnrichment.maxTargets, 0, 250, defaults.namespaceEnrichment.maxTargets),
+      maxParallel: validNumber(rawEnrichment.maxParallel, 1, 8, defaults.namespaceEnrichment.maxParallel),
+      idleQuietMs: validNumber(rawEnrichment.idleQuietMs, 0, 60000, defaults.namespaceEnrichment.idleQuietMs),
+      enrichDetails:
+        typeof rawEnrichment.enrichDetails === "boolean"
+          ? rawEnrichment.enrichDetails
+          : defaults.namespaceEnrichment.enrichDetails,
+      enrichPods:
+        typeof rawEnrichment.enrichPods === "boolean"
+          ? rawEnrichment.enrichPods
+          : defaults.namespaceEnrichment.enrichPods,
+      enrichDeployments:
+        typeof rawEnrichment.enrichDeployments === "boolean"
+          ? rawEnrichment.enrichDeployments
+          : defaults.namespaceEnrichment.enrichDeployments,
+      warmResourceKinds: normalizeWarmResourceKinds(rawEnrichment.warmResourceKinds, profileDefaults.namespaceEnrichment.warmResourceKinds),
+      pollMs: validNumber(rawEnrichment.pollMs, 500, 60000, defaults.namespaceEnrichment.pollMs),
+      sweep: {
+        enabled:
+          typeof rawSweep.enabled === "boolean" ? rawSweep.enabled : defaults.namespaceEnrichment.sweep.enabled,
+        idleQuietMs: validNumber(rawSweep.idleQuietMs, 5000, 300000, defaults.namespaceEnrichment.sweep.idleQuietMs),
+        maxNamespacesPerCycle: validNumber(
+          rawSweep.maxNamespacesPerCycle,
+          1,
+          25,
+          defaults.namespaceEnrichment.sweep.maxNamespacesPerCycle,
+        ),
+        maxNamespacesPerHour: validNumber(
+          rawSweep.maxNamespacesPerHour,
+          1,
+          500,
+          defaults.namespaceEnrichment.sweep.maxNamespacesPerHour,
+        ),
+        minReenrichIntervalMinutes: validNumber(
+          rawSweep.minReenrichIntervalMinutes,
+          5,
+          1440,
+          defaults.namespaceEnrichment.sweep.minReenrichIntervalMinutes,
+        ),
+        maxParallel: validNumber(rawSweep.maxParallel, 1, 4, defaults.namespaceEnrichment.sweep.maxParallel),
+        pauseOnUserActivity:
+          typeof rawSweep.pauseOnUserActivity === "boolean"
+            ? rawSweep.pauseOnUserActivity
+            : defaults.namespaceEnrichment.sweep.pauseOnUserActivity,
+        pauseWhenSchedulerBusy:
+          typeof rawSweep.pauseWhenSchedulerBusy === "boolean"
+            ? rawSweep.pauseWhenSchedulerBusy
+            : defaults.namespaceEnrichment.sweep.pauseWhenSchedulerBusy,
+        pauseOnRateLimitOrConnectivityIssues:
+          typeof rawSweep.pauseOnRateLimitOrConnectivityIssues === "boolean"
+            ? rawSweep.pauseOnRateLimitOrConnectivityIssues
+            : defaults.namespaceEnrichment.sweep.pauseOnRateLimitOrConnectivityIssues,
+        includeSystemNamespaces:
+          typeof rawSweep.includeSystemNamespaces === "boolean"
+            ? rawSweep.includeSystemNamespaces
+            : defaults.namespaceEnrichment.sweep.includeSystemNamespaces,
+      },
+    },
+    backgroundBudget: {
+      maxConcurrentPerCluster: maxConcurrent,
+      maxBackgroundConcurrentPerCluster: validNumber(
+        rawBudget.maxBackgroundConcurrentPerCluster,
+        1,
+        maxConcurrent,
+        defaults.backgroundBudget.maxBackgroundConcurrentPerCluster,
+      ),
+      longRunNoticeSec: validNumber(rawBudget.longRunNoticeSec, 0, 300, defaults.backgroundBudget.longRunNoticeSec),
+      transientRetries: validNumber(rawBudget.transientRetries, 1, 6, defaults.backgroundBudget.transientRetries),
+    },
+    dashboard: {
+      refreshSec: validNumber(rawDashboard.refreshSec, 0, 3600, defaults.dashboard.refreshSec),
+      useCachedTotalsOnly:
+        typeof rawDashboard.useCachedTotalsOnly === "boolean"
+          ? rawDashboard.useCachedTotalsOnly
+          : defaults.dashboard.useCachedTotalsOnly,
+      includeHotspots:
+        typeof rawDashboard.includeHotspots === "boolean"
+          ? rawDashboard.includeHotspots
+          : defaults.dashboard.includeHotspots,
+      restartElevatedThreshold: validNumber(
+        rawDashboard.restartElevatedThreshold,
+        1,
+        1000,
+        defaults.dashboard.restartElevatedThreshold,
+      ),
+      hotspotLimit: validNumber(rawDashboard.hotspotLimit, 1, 100, defaults.dashboard.hotspotLimit),
+    },
+  };
+
+  if (normalized.profile === "manual") {
+    normalized.observers.enabled = false;
+    normalized.namespaceEnrichment.enabled = false;
+    normalized.namespaceEnrichment.sweep.enabled = false;
+  }
+
+  return normalized;
+}
+
 export function validateUserSettings(input: unknown): KviewUserSettingsV1 | null {
   if (!input || typeof input !== "object") return null;
   const raw = input as Partial<KviewUserSettingsV1>;
@@ -457,6 +862,7 @@ export function validateUserSettings(input: unknown): KviewUserSettingsV1 | null
     customActions: {
       actions: actionsProvided ? normalizedActions : defaults.customActions.actions,
     },
+    dataplane: normalizeDataplaneSettings(raw.dataplane),
   };
 }
 

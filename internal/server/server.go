@@ -128,6 +128,27 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, s.dp.SchedulerLiveWork())
 		})
 
+		api.Get("/dataplane/config", func(w http.ResponseWriter, _ *http.Request) {
+			if s.dp == nil {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "dataplane unavailable"})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"item": s.dp.Policy()})
+		})
+
+		api.Post("/dataplane/config", func(w http.ResponseWriter, r *http.Request) {
+			if s.dp == nil {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "dataplane unavailable"})
+				return
+			}
+			var body dataplane.DataplanePolicy
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid dataplane config"})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"item": s.dp.SetPolicy(body)})
+		})
+
 		api.Get("/activity/{id}/logs", func(w http.ResponseWriter, r *http.Request) {
 			id := chi.URLParam(r, "id")
 			if id == "" {
@@ -207,6 +228,7 @@ func (s *Server) Router() http.Handler {
 				logStructured(s.rt, runtime.LogLevelInfo, "sessions", "success",
 					fmt.Sprintf("stopped session %s (%s)", sess.ID, sess.Title),
 					"session_id", sess.ID, "kind", string(sess.Type))
+				s.stopConnectivityActivityIfUnused(sess.TargetCluster)
 			}
 
 			writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -628,11 +650,16 @@ func (s *Server) Router() http.Handler {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid body"})
 				return
 			}
+			previous := s.mgr.ActiveContext()
 			if err := s.mgr.SetActiveContext(body.Name); err != nil {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]any{"active": s.mgr.ActiveContext()})
+			active := s.mgr.ActiveContext()
+			if previous != active {
+				s.stopConnectivityActivityIfUnused(previous)
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"active": active})
 		})
 
 		api.Get("/namespaces", func(w http.ResponseWriter, r *http.Request) {
@@ -659,20 +686,27 @@ func (s *Server) Router() http.Handler {
 			items := snap.Items
 			hints := dataplane.ParseNamespaceEnrichHints(r.URL.Query())
 			rev := s.dp.BeginNamespaceListProgressiveEnrichment(active, items, hints)
+			policy := s.dp.Policy().NamespaceEnrichment
 			rowProj := dto.NamespaceListRowProjectionMetaDTO{
 				TotalRows:    len(items),
 				EnrichedRows: 0,
-				Cap:          0,
+				Cap:          policy.MaxTargets,
 				Revision:     rev,
 				Loading:      rev != 0,
 				Stage:        "list",
-				Note:         "Pod and deployment counts for namespaces you use often appear shortly after you stop interacting with the app.",
+				Note:         "Pod and deployment counts for current, recent, and favourite namespaces appear shortly after you stop interacting with the app.",
 			}
 			if rev == 0 {
 				rowProj.Loading = false
 				if len(items) > 0 {
-					rowProj.Note = "Row metrics run only for current, recent, and favourite namespaces after idle. Select a namespace, browse resources, or star namespaces."
+					if !policy.Enabled {
+						rowProj.Note = "Namespace row enrichment is disabled in settings."
+					} else {
+						rowProj.Note = "Row metrics run only for current, recent, and favourite namespaces after idle. Select a namespace, browse resources, or star namespaces."
+					}
 				}
+			} else if policy.Sweep.Enabled {
+				rowProj.Note = "Focused namespace enrichment is active; the opt-in background sweep may add a few extra idle namespaces per cycle."
 			}
 
 			writeJSON(w, http.StatusOK, map[string]any{
@@ -2749,11 +2783,27 @@ func (s *Server) dataplaneUserActivityMiddleware(next http.Handler) http.Handler
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Namespace enrichment idle gate: background polling routes must not count as "activity".
 		p := strings.TrimSuffix(r.URL.Path, "/")
-		if p != "/api/namespaces/enrichment" && p != "/api/status" {
+		if !isBackgroundPollingPath(p) {
 			s.dp.NoteUserActivity()
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isBackgroundPollingPath(p string) bool {
+	switch p {
+	case "/api/namespaces/enrichment",
+		"/api/status",
+		"/api/activity",
+		"/api/activity/runtime/logs",
+		"/api/dataplane/work/live",
+		"/api/dataplane/config",
+		"/api/dashboard/cluster",
+		"/api/sessions":
+		return true
+	default:
+		return p == "/api/dataplane/revision"
+	}
 }
 
 func (s *Server) serveUI(w http.ResponseWriter, r *http.Request) {
@@ -2956,6 +3006,8 @@ type statusDTO struct {
 	CheckedAt     time.Time        `json:"checkedAt"`
 }
 
+const connectivityActivityTTL = 3 * time.Minute
+
 func (s *Server) buildStatus(parent context.Context, contextName string) statusDTO {
 	checkedAt := time.Now().UTC()
 	clusterStatus := statusClusterDTO{Context: contextName}
@@ -2987,6 +3039,7 @@ func (s *Server) buildStatus(parent context.Context, contextName string) statusD
 	}
 
 	s.updateConnectivityActivity(clusterStatus)
+	s.stopInactiveConnectivityActivitiesExcept(clusterStatus.Context)
 	s.logClusterStatusTransition(clusterStatus)
 
 	return statusDTO{
@@ -3061,6 +3114,83 @@ func (s *Server) updateConnectivityActivity(clusterStatus statusClusterDTO) {
 		ResourceType: "cluster:connectivity",
 		Metadata:     metadata,
 	})
+}
+
+func (s *Server) stopInactiveConnectivityActivitiesExcept(activeContext string) {
+	if s == nil || s.rt == nil || s.rt.Registry() == nil {
+		return
+	}
+	activities, err := s.rt.Registry().List(context.Background())
+	if err != nil {
+		return
+	}
+	for _, act := range activities {
+		if act.Type != runtime.ActivityTypeConnectivity {
+			continue
+		}
+		contextName := act.Metadata["context"]
+		if contextName == "" {
+			contextName = strings.TrimPrefix(act.ID, "connectivity:")
+		}
+		if contextName == "" || contextName == activeContext {
+			continue
+		}
+		s.stopConnectivityActivityIfUnused(contextName)
+	}
+}
+
+func (s *Server) stopConnectivityActivityIfUnused(contextName string) {
+	contextName = strings.TrimSpace(contextName)
+	if contextName == "" || s == nil || s.rt == nil || s.rt.Registry() == nil {
+		return
+	}
+	if s.hasOpenSessionForContext(context.Background(), contextName) {
+		return
+	}
+
+	id := fmt.Sprintf("connectivity:%s", contextName)
+	act, ok, err := s.rt.Registry().Get(context.Background(), id)
+	if err != nil || !ok || act.Type != runtime.ActivityTypeConnectivity {
+		return
+	}
+	if act.Status == runtime.ActivityStatusStopped {
+		return
+	}
+	act.Status = runtime.ActivityStatusStopped
+	act.UpdatedAt = time.Now().UTC()
+	if act.Metadata == nil {
+		act.Metadata = map[string]string{}
+	}
+	act.Metadata["context"] = contextName
+	act.Metadata["state"] = "inactive"
+	act.Metadata["reason"] = "context not active"
+	_ = s.rt.Registry().Update(context.Background(), act)
+	runtime.ScheduleActivityTTLRemoval(s.rt.Registry(), id, act.UpdatedAt, connectivityActivityTTL)
+}
+
+func (s *Server) hasOpenSessionForContext(ctx context.Context, contextName string) bool {
+	if s == nil || s.sessions == nil || contextName == "" {
+		return false
+	}
+	items, err := s.sessions.List(ctx)
+	if err != nil {
+		return false
+	}
+	for _, item := range items {
+		if item.TargetCluster != contextName {
+			continue
+		}
+		if item.Type != session.TypeTerminal && item.Type != session.TypePortForward {
+			continue
+		}
+		if item.Status == session.StatusPending ||
+			item.Status == session.StatusStarting ||
+			item.Status == session.StatusRunning ||
+			item.Status == session.StatusStopping {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) logClusterStatusTransition(clusterStatus statusClusterDTO) {

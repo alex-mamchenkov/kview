@@ -183,6 +183,10 @@ type workScheduler struct {
 	// Optional: record very slow snapshot runs into the activity registry (set from NewManager).
 	longRunMin time.Duration
 	onLongRun  func(key workKey, priority WorkPriority, d time.Duration, err error)
+
+	retries        int
+	initialBackoff time.Duration
+	maxBackoff     time.Duration
 }
 
 func newWorkScheduler(maxPerCluster int) *workScheduler {
@@ -190,18 +194,51 @@ func newWorkScheduler(maxPerCluster int) *workScheduler {
 		maxPerCluster = 4
 	}
 	s := &workScheduler{
-		inFlight:      make(map[workKey]*inFlight),
-		lanes:         make(map[string]*clusterLane),
-		maxPerCluster: maxPerCluster,
-		stats:         newRunStats(),
+		inFlight:       make(map[workKey]*inFlight),
+		lanes:          make(map[string]*clusterLane),
+		maxPerCluster:  maxPerCluster,
+		stats:          newRunStats(),
+		retries:        3,
+		initialBackoff: 100 * time.Millisecond,
+		maxBackoff:     1500 * time.Millisecond,
 	}
 	s.cond = sync.NewCond(&s.mu)
 	return s
 }
 
+func (s *workScheduler) configureRetries(retries int, initialBackoff, maxBackoff time.Duration) {
+	if retries <= 0 {
+		retries = 3
+	}
+	if initialBackoff <= 0 {
+		initialBackoff = 100 * time.Millisecond
+	}
+	if maxBackoff < initialBackoff {
+		maxBackoff = initialBackoff
+	}
+	s.mu.Lock()
+	s.retries = retries
+	s.initialBackoff = initialBackoff
+	s.maxBackoff = maxBackoff
+	s.mu.Unlock()
+}
+
 func (s *workScheduler) configureLongRun(min time.Duration, fn func(workKey, WorkPriority, time.Duration, error)) {
 	s.longRunMin = min
 	s.onLongRun = fn
+}
+
+func (s *workScheduler) setMaxPerCluster(maxPerCluster int) {
+	if maxPerCluster <= 0 {
+		maxPerCluster = 4
+	}
+	s.mu.Lock()
+	s.maxPerCluster = maxPerCluster
+	for _, lane := range s.lanes {
+		s.grantNextWaitersLocked(lane)
+	}
+	s.mu.Unlock()
+	s.cond.Broadcast()
 }
 
 func (s *workScheduler) StatsSnapshot() SchedulerRunStatsSnapshot {
@@ -392,10 +429,13 @@ func (s *workScheduler) Run(ctx context.Context, priority WorkPriority, key work
 		}
 	}()
 
-	backoff := 100 * time.Millisecond
-	maxBackoff := 1500 * time.Millisecond
+	s.mu.Lock()
+	retries := s.retries
+	backoff := s.initialBackoff
+	maxBackoff := s.maxBackoff
+	s.mu.Unlock()
 
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := 0; attempt < retries; attempt++ {
 		if attempt > 0 {
 			select {
 			case <-time.After(backoff):

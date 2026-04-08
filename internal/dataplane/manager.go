@@ -120,6 +120,11 @@ type DataPlaneManager interface {
 	// NamespaceSummaryProjection builds namespace summary from dataplane snapshots (projection-led).
 	NamespaceSummaryProjection(ctx context.Context, clusterName, namespace string) (NamespaceSummaryProjection, error)
 
+	// Policy returns the current dataplane behavior policy.
+	Policy() DataplanePolicy
+	// SetPolicy updates the current dataplane behavior policy for existing and future planes.
+	SetPolicy(policy DataplanePolicy) DataplanePolicy
+
 	// SchedulerRunStats returns cumulative snapshot-run durations by priority and resource kind.
 	SchedulerRunStats() SchedulerRunStatsSnapshot
 
@@ -137,6 +142,9 @@ type ManagerConfig struct {
 	Profile Profile
 	// DiscoveryMode is the system-wide default discovery mode. If empty, DiscoveryModeTargeted is used.
 	DiscoveryMode DiscoveryMode
+
+	// Policy controls TTLs, observers, enrichment, and background budgets.
+	Policy DataplanePolicy
 }
 
 // ClientsProvider exposes per-context Kubernetes clients to the dataplane.
@@ -166,7 +174,15 @@ type manager struct {
 	scheduler *workScheduler
 	clients   ClientsProvider
 
+	policyMu sync.RWMutex
+	policy   DataplanePolicy
+
 	nsEnrich *nsEnrichmentCoordinator
+
+	nsSweepMu        sync.Mutex
+	nsSweepLast      map[string]map[string]time.Time
+	nsSweepHourStart map[string]time.Time
+	nsSweepHourCount map[string]int
 
 	// Last HTTP activity (Unix nano) for namespace enrichment idle gating.
 	uiActivityUnix atomic.Int64
@@ -188,10 +204,13 @@ func NewManager(cfg ManagerConfig) DataPlaneManager {
 		cp = managerClients{m: cfg.ClusterManager}
 	}
 
-	sched := newWorkScheduler(4)
+	policy := ValidateDataplanePolicy(cfg.Policy)
+
+	sched := newWorkScheduler(policy.BackgroundBudget.MaxConcurrentPerCluster)
+	sched.configureRetries(policy.BackgroundBudget.TransientRetries, 100*time.Millisecond, 1500*time.Millisecond)
 	if cfg.Runtime != nil {
 		reg := cfg.Runtime.Registry()
-		sched.configureLongRun(2*time.Second, newDataplaneLongRunRecorder(reg))
+		sched.configureLongRun(time.Duration(policy.BackgroundBudget.LongRunNoticeSec)*time.Second, newDataplaneLongRunRecorder(reg))
 	}
 	return &manager{
 		rt:                   cfg.Runtime,
@@ -200,8 +219,31 @@ func NewManager(cfg ManagerConfig) DataPlaneManager {
 		planes:               map[string]*clusterPlane{},
 		scheduler:            sched,
 		clients:              cp,
+		policy:               policy,
 		nsEnrich:             newNsEnrichmentCoordinator(),
+		nsSweepLast:          map[string]map[string]time.Time{},
+		nsSweepHourStart:     map[string]time.Time{},
+		nsSweepHourCount:     map[string]int{},
 	}
+}
+
+func (m *manager) Policy() DataplanePolicy {
+	m.policyMu.RLock()
+	defer m.policyMu.RUnlock()
+	return ValidateDataplanePolicy(m.policy)
+}
+
+func (m *manager) SetPolicy(policy DataplanePolicy) DataplanePolicy {
+	next := ValidateDataplanePolicy(policy)
+	m.policyMu.Lock()
+	m.policy = next
+	m.policyMu.Unlock()
+	if m.scheduler != nil {
+		m.scheduler.setMaxPerCluster(next.BackgroundBudget.MaxConcurrentPerCluster)
+		m.scheduler.configureRetries(next.BackgroundBudget.TransientRetries, 100*time.Millisecond, 1500*time.Millisecond)
+		m.scheduler.configureLongRun(time.Duration(next.BackgroundBudget.LongRunNoticeSec)*time.Second, newDataplaneLongRunRecorder(m.activityReg()))
+	}
+	return next
 }
 
 func (m *manager) DefaultProfile() Profile {
@@ -231,7 +273,7 @@ func (m *manager) PlaneForCluster(_ context.Context, clusterName string) (Cluste
 		Namespaces:    nil,
 		ResourceKinds: nil,
 	}
-	p := newClusterPlane(clusterName, m.defaultProfile, m.defaultDiscoveryMode, scope)
+	p := newClusterPlane(clusterName, m.defaultProfile, m.defaultDiscoveryMode, scope, m.Policy)
 	m.planes[clusterName] = p
 	return p, nil
 }
@@ -273,9 +315,14 @@ type clusterPlane struct {
 	// Observers state for this cluster.
 	obsMu     sync.Mutex
 	observers *clusterObservers
+
+	policy func() DataplanePolicy
 }
 
-func newClusterPlane(name string, profile Profile, mode DiscoveryMode, scope ObservationScope) *clusterPlane {
+func newClusterPlane(name string, profile Profile, mode DiscoveryMode, scope ObservationScope, policy func() DataplanePolicy) *clusterPlane {
+	if policy == nil {
+		policy = func() DataplanePolicy { return DefaultDataplanePolicy() }
+	}
 	return &clusterPlane{
 		name:              name,
 		profile:           profile,
@@ -299,6 +346,7 @@ func newClusterPlane(name string, profile Profile, mode DiscoveryMode, scope Obs
 		rsStore:           newNamespacedSnapshotStore[ReplicaSetsSnapshot](),
 		jobsStore:         newNamespacedSnapshotStore[JobsSnapshot](),
 		cjStore:           newNamespacedSnapshotStore[CronJobsSnapshot](),
+		policy:            policy,
 	}
 }
 
@@ -322,6 +370,13 @@ func (p *clusterPlane) Health() PlaneHealth {
 	p.healthMu.RLock()
 	defer p.healthMu.RUnlock()
 	return p.health
+}
+
+func (p *clusterPlane) currentPolicy() DataplanePolicy {
+	if p.policy == nil {
+		return DefaultDataplanePolicy()
+	}
+	return p.policy()
 }
 
 // Snapshot is the shared raw snapshot container across dataplane-owned resources.
@@ -357,7 +412,7 @@ type CronJobsSnapshot = Snapshot[dto.CronJobDTO]
 func (p *clusterPlane) NamespacesSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, prio WorkPriority) (NamespaceSnapshot, error) {
 	desc := clusterSnapshotDescriptor[dto.NamespaceListItemDTO]{
 		kind:        ResourceKindNamespaces,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindNamespaces),
 		capGroup:    "",
 		capResource: "namespaces",
 		capScope:    CapabilityScopeCluster,
@@ -370,7 +425,7 @@ func (p *clusterPlane) NamespacesSnapshot(ctx context.Context, sched *workSchedu
 func (p *clusterPlane) NodesSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, prio WorkPriority) (NodesSnapshot, error) {
 	desc := clusterSnapshotDescriptor[dto.NodeListItemDTO]{
 		kind:        ResourceKindNodes,
-		ttl:         30 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindNodes),
 		capGroup:    "",
 		capResource: "nodes",
 		capScope:    CapabilityScopeCluster,
@@ -383,7 +438,7 @@ func (p *clusterPlane) NodesSnapshot(ctx context.Context, sched *workScheduler, 
 func (p *clusterPlane) PodsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (PodsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.PodListItemDTO]{
 		kind:        ResourceKindPods,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindPods),
 		capGroup:    "",
 		capResource: "pods",
 		capScope:    CapabilityScopeNamespace,
@@ -396,7 +451,7 @@ func (p *clusterPlane) PodsSnapshot(ctx context.Context, sched *workScheduler, c
 func (p *clusterPlane) DeploymentsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (DeploymentsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.DeploymentListItemDTO]{
 		kind:        ResourceKindDeployments,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindDeployments),
 		capGroup:    "",
 		capResource: "deployments",
 		capScope:    CapabilityScopeNamespace,
@@ -409,7 +464,7 @@ func (p *clusterPlane) DeploymentsSnapshot(ctx context.Context, sched *workSched
 func (p *clusterPlane) ServicesSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (ServicesSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.ServiceListItemDTO]{
 		kind:        ResourceKindServices,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindServices),
 		capGroup:    "",
 		capResource: "services",
 		capScope:    CapabilityScopeNamespace,
@@ -422,7 +477,7 @@ func (p *clusterPlane) ServicesSnapshot(ctx context.Context, sched *workSchedule
 func (p *clusterPlane) IngressesSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (IngressesSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.IngressListItemDTO]{
 		kind:        ResourceKindIngresses,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindIngresses),
 		capGroup:    "networking.k8s.io",
 		capResource: "ingresses",
 		capScope:    CapabilityScopeNamespace,
@@ -435,7 +490,7 @@ func (p *clusterPlane) IngressesSnapshot(ctx context.Context, sched *workSchedul
 func (p *clusterPlane) PVCsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (PVCsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.PersistentVolumeClaimDTO]{
 		kind:        ResourceKindPVCs,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindPVCs),
 		capGroup:    "",
 		capResource: "persistentvolumeclaims",
 		capScope:    CapabilityScopeNamespace,
@@ -448,7 +503,7 @@ func (p *clusterPlane) PVCsSnapshot(ctx context.Context, sched *workScheduler, c
 func (p *clusterPlane) ConfigMapsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (ConfigMapsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.ConfigMapDTO]{
 		kind:        ResourceKindConfigMaps,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindConfigMaps),
 		capGroup:    "",
 		capResource: "configmaps",
 		capScope:    CapabilityScopeNamespace,
@@ -461,7 +516,7 @@ func (p *clusterPlane) ConfigMapsSnapshot(ctx context.Context, sched *workSchedu
 func (p *clusterPlane) SecretsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (SecretsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.SecretDTO]{
 		kind:        ResourceKindSecrets,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindSecrets),
 		capGroup:    "",
 		capResource: "secrets",
 		capScope:    CapabilityScopeNamespace,
@@ -474,7 +529,7 @@ func (p *clusterPlane) SecretsSnapshot(ctx context.Context, sched *workScheduler
 func (p *clusterPlane) ServiceAccountsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (ServiceAccountsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.ServiceAccountListItemDTO]{
 		kind:        ResourceKindServiceAccounts,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindServiceAccounts),
 		capGroup:    "",
 		capResource: "serviceaccounts",
 		capScope:    CapabilityScopeNamespace,
@@ -487,7 +542,7 @@ func (p *clusterPlane) ServiceAccountsSnapshot(ctx context.Context, sched *workS
 func (p *clusterPlane) RolesSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (RolesSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.RoleListItemDTO]{
 		kind:        ResourceKindRoles,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindRoles),
 		capGroup:    "rbac.authorization.k8s.io",
 		capResource: "roles",
 		capScope:    CapabilityScopeNamespace,
@@ -500,7 +555,7 @@ func (p *clusterPlane) RolesSnapshot(ctx context.Context, sched *workScheduler, 
 func (p *clusterPlane) RoleBindingsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (RoleBindingsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.RoleBindingListItemDTO]{
 		kind:        ResourceKindRoleBindings,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindRoleBindings),
 		capGroup:    "rbac.authorization.k8s.io",
 		capResource: "rolebindings",
 		capScope:    CapabilityScopeNamespace,
@@ -513,7 +568,7 @@ func (p *clusterPlane) RoleBindingsSnapshot(ctx context.Context, sched *workSche
 func (p *clusterPlane) HelmReleasesSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (HelmReleasesSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.HelmReleaseDTO]{
 		kind:        ResourceKindHelmReleases,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindHelmReleases),
 		capGroup:    "",
 		capResource: "secrets",
 		capScope:    CapabilityScopeNamespace,
@@ -526,7 +581,7 @@ func (p *clusterPlane) HelmReleasesSnapshot(ctx context.Context, sched *workSche
 func (p *clusterPlane) DaemonSetsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (DaemonSetsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.DaemonSetDTO]{
 		kind:        ResourceKindDaemonSets,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindDaemonSets),
 		capGroup:    "",
 		capResource: "daemonsets",
 		capScope:    CapabilityScopeNamespace,
@@ -539,7 +594,7 @@ func (p *clusterPlane) DaemonSetsSnapshot(ctx context.Context, sched *workSchedu
 func (p *clusterPlane) StatefulSetsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (StatefulSetsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.StatefulSetDTO]{
 		kind:        ResourceKindStatefulSets,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindStatefulSets),
 		capGroup:    "",
 		capResource: "statefulsets",
 		capScope:    CapabilityScopeNamespace,
@@ -552,7 +607,7 @@ func (p *clusterPlane) StatefulSetsSnapshot(ctx context.Context, sched *workSche
 func (p *clusterPlane) ReplicaSetsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (ReplicaSetsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.ReplicaSetDTO]{
 		kind:        ResourceKindReplicaSets,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindReplicaSets),
 		capGroup:    "",
 		capResource: "replicasets",
 		capScope:    CapabilityScopeNamespace,
@@ -565,7 +620,7 @@ func (p *clusterPlane) ReplicaSetsSnapshot(ctx context.Context, sched *workSched
 func (p *clusterPlane) JobsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (JobsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.JobDTO]{
 		kind:        ResourceKindJobs,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindJobs),
 		capGroup:    "batch",
 		capResource: "jobs",
 		capScope:    CapabilityScopeNamespace,
@@ -578,7 +633,7 @@ func (p *clusterPlane) JobsSnapshot(ctx context.Context, sched *workScheduler, c
 func (p *clusterPlane) CronJobsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (CronJobsSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.CronJobDTO]{
 		kind:        ResourceKindCronJobs,
-		ttl:         15 * time.Second,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindCronJobs),
 		capGroup:    "batch",
 		capResource: "cronjobs",
 		capScope:    CapabilityScopeNamespace,

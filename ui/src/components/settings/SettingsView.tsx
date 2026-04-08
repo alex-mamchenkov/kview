@@ -28,6 +28,9 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import {
   allListResourceKeys,
   customActionResourceKeys,
+  dataplaneNamespaceWarmResourceKeys,
+  dataplaneSettingsForProfile,
+  dataplaneTTLResourceKeys,
   exportUserSettingsJSON,
   newCustomActionDefinition,
   newCustomCommandDefinition,
@@ -42,6 +45,8 @@ import {
   type CustomCommandDefinition,
   type CustomCommandOutputType,
   type CustomCommandSafety,
+  type DataplaneProfile,
+  type DataplaneSettings,
   type KviewUserSettingsV1,
   type SettingsResourceScopeMode,
   type SettingsScopeMode,
@@ -60,6 +65,11 @@ type Props = {
   activeNamespace: string;
   onClose: () => void;
 };
+
+function dataplaneWarmResourceLabel(kind: string): string {
+  if (kind === "helmreleases") return "Helm Releases";
+  return getResourceLabel(kind as ListResourceKey);
+}
 
 const sections: Array<{ id: SettingsSection; label: string }> = [
   { id: "appearance", label: "Appearance" },
@@ -152,6 +162,13 @@ function updateCustomActions(
   };
 }
 
+function updateDataplane(settings: KviewUserSettingsV1, patch: Partial<DataplaneSettings>): KviewUserSettingsV1 {
+  return {
+    ...settings,
+    dataplane: { ...settings.dataplane, ...patch },
+  };
+}
+
 function rulePatternError(rule: SmartFilterRule): string | null {
   if (!rule.pattern.trim()) return "Pattern is required.";
   try {
@@ -241,6 +258,49 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
       );
       return updateCustomActions(prev, { actions });
     });
+  };
+
+  const setDataplane = (patch: Partial<DataplaneSettings>) => {
+    setSettings((prev) => updateDataplane(prev, patch));
+  };
+
+  const setNamespaceEnrichment = (patch: Partial<DataplaneSettings["namespaceEnrichment"]>) => {
+    setSettings((prev) => updateDataplane(prev, {
+      namespaceEnrichment: { ...prev.dataplane.namespaceEnrichment, ...patch },
+    }));
+  };
+
+  const setNamespaceSweep = (patch: Partial<DataplaneSettings["namespaceEnrichment"]["sweep"]>) => {
+    setSettings((prev) => updateDataplane(prev, {
+      namespaceEnrichment: {
+        ...prev.dataplane.namespaceEnrichment,
+        sweep: { ...prev.dataplane.namespaceEnrichment.sweep, ...patch },
+      },
+    }));
+  };
+
+  const setDataplaneSnapshots = (patch: Partial<DataplaneSettings["snapshots"]>) => {
+    setSettings((prev) => updateDataplane(prev, {
+      snapshots: { ...prev.dataplane.snapshots, ...patch },
+    }));
+  };
+
+  const setDataplaneObservers = (patch: Partial<DataplaneSettings["observers"]>) => {
+    setSettings((prev) => updateDataplane(prev, {
+      observers: { ...prev.dataplane.observers, ...patch },
+    }));
+  };
+
+  const setDataplaneBudget = (patch: Partial<DataplaneSettings["backgroundBudget"]>) => {
+    setSettings((prev) => updateDataplane(prev, {
+      backgroundBudget: { ...prev.dataplane.backgroundBudget, ...patch },
+    }));
+  };
+
+  const setDataplaneDashboard = (patch: Partial<DataplaneSettings["dashboard"]>) => {
+    setSettings((prev) => updateDataplane(prev, {
+      dashboard: { ...prev.dataplane.dashboard, ...patch },
+    }));
   };
 
   const importSettingsText = (text: string) => {
@@ -849,16 +909,234 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
     </Box>
   );
 
-  const renderPlaceholder = (title: string, text: string) => (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
-      <Typography variant="h6">{title}</Typography>
-      <Paper variant="outlined" sx={panelBoxSx}>
-        <Typography variant="body2" color="text.secondary">
-          {text}
-        </Typography>
-      </Paper>
-    </Box>
+  const numField = (
+    label: string,
+    value: number,
+    onChange: (value: number) => void,
+    helperText?: string,
+  ) => (
+    <TextField
+      size="small"
+      type="number"
+      label={label}
+      value={value}
+      onChange={(e) => onChange(Math.round(Number(e.target.value) || 0))}
+      helperText={helperText}
+    />
   );
+
+  const renderNsEnrichment = () => {
+    const dp = settings.dataplane;
+    const ne = dp.namespaceEnrichment;
+    const sweep = ne.sweep;
+    const estimatedSweepHours = sweep.maxNamespacesPerHour > 0 && namespaces.length > 0
+      ? Math.ceil(namespaces.length / sweep.maxNamespacesPerHour)
+      : 0;
+
+    return (
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
+        <Box>
+          <Typography variant="h6">NS Enrichment</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Dataplane stays in front of all list reads. Focused enrichment covers current, recent, and favourite namespaces;
+            the background sweep is opt-in for slow discovery across large clusters.
+          </Typography>
+        </Box>
+
+        <Paper variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
+          <Typography variant="subtitle2">Profile</Typography>
+          <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+            <TextField
+              select
+              size="small"
+              label="Dataplane profile"
+              value={dp.profile}
+              onChange={(e) => setDataplane(dataplaneSettingsForProfile(e.target.value as DataplaneProfile))}
+              helperText="Manual keeps dataplane snapshots but disables background enhancement."
+            >
+              <MenuItem value="manual">Manual: user interaction only</MenuItem>
+              <MenuItem value="focused">Focused: current, recent, favourites</MenuItem>
+              <MenuItem value="balanced">Balanced</MenuItem>
+              <MenuItem value="wide">Wide</MenuItem>
+              <MenuItem value="diagnostic">Diagnostic</MenuItem>
+            </TextField>
+            {numField("Scheduler concurrency", dp.backgroundBudget.maxConcurrentPerCluster, (value) =>
+              setDataplaneBudget({ maxConcurrentPerCluster: value }),
+              "Max snapshot workers per cluster.",
+            )}
+            {numField("Long-run notice (sec)", dp.backgroundBudget.longRunNoticeSec, (value) =>
+              setDataplaneBudget({ longRunNoticeSec: value }),
+              "0 disables long-running snapshot activity notices.",
+            )}
+            {numField("Transient retries", dp.backgroundBudget.transientRetries, (value) =>
+              setDataplaneBudget({ transientRetries: value }),
+            )}
+          </Box>
+          {dp.profile === "manual" ? (
+            <Alert severity="info">
+              Manual mode keeps the dataplane cache and metadata, but disables observers, focused enrichment, and sweep.
+            </Alert>
+          ) : null}
+        </Paper>
+
+        <Paper variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
+          <Typography variant="subtitle2">Focused Namespace Enrichment</Typography>
+          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+            <FormControlLabel
+              control={<Switch checked={ne.enabled} onChange={(e) => setNamespaceEnrichment({ enabled: e.target.checked })} />}
+              label="Enabled"
+            />
+            <FormControlLabel
+              control={<Switch checked={ne.includeFocus} onChange={(e) => setNamespaceEnrichment({ includeFocus: e.target.checked })} />}
+              label="Current namespace"
+            />
+            <FormControlLabel
+              control={<Switch checked={ne.includeRecent} onChange={(e) => setNamespaceEnrichment({ includeRecent: e.target.checked })} />}
+              label="Recent"
+            />
+            <FormControlLabel
+              control={<Switch checked={ne.includeFavourites} onChange={(e) => setNamespaceEnrichment({ includeFavourites: e.target.checked })} />}
+              label="Favourites"
+            />
+          </Box>
+          <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
+            {numField("Max targets", ne.maxTargets, (value) => setNamespaceEnrichment({ maxTargets: value }))}
+            {numField("Max parallel", ne.maxParallel, (value) => setNamespaceEnrichment({ maxParallel: value }))}
+            {numField("Idle quiet (ms)", ne.idleQuietMs, (value) => setNamespaceEnrichment({ idleQuietMs: value }))}
+            {numField("Poll interval (ms)", ne.pollMs, (value) => setNamespaceEnrichment({ pollMs: value }))}
+            {numField("Recent hint limit", ne.recentLimit, (value) => setNamespaceEnrichment({ recentLimit: value }))}
+            {numField("Favourite hint limit", ne.favouriteLimit, (value) => setNamespaceEnrichment({ favouriteLimit: value }))}
+          </Box>
+          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+            <FormControlLabel
+              control={<Switch checked={ne.enrichDetails} onChange={(e) => setNamespaceEnrichment({ enrichDetails: e.target.checked })} />}
+              label="Namespace details"
+            />
+            <FormControlLabel
+              control={<Switch checked={ne.enrichPods} onChange={(e) => setNamespaceEnrichment({ enrichPods: e.target.checked })} />}
+              label="Pods"
+            />
+            <FormControlLabel
+              control={<Switch checked={ne.enrichDeployments} onChange={(e) => setNamespaceEnrichment({ enrichDeployments: e.target.checked })} />}
+              label="Deployments"
+            />
+          </Box>
+          <FormControl size="small" fullWidth>
+            <InputLabel id="namespace-warm-kinds-label">Resource snapshots warmed by enrichment</InputLabel>
+            <Select
+              labelId="namespace-warm-kinds-label"
+              multiple
+              label="Resource snapshots warmed by enrichment"
+              value={ne.warmResourceKinds}
+              onChange={(e: SelectChangeEvent<string[]>) => {
+                const value = e.target.value;
+                setNamespaceEnrichment({
+                  warmResourceKinds: typeof value === "string" ? value.split(",") : value,
+                });
+              }}
+              renderValue={(selected) => selected.map(dataplaneWarmResourceLabel).join(", ")}
+            >
+              {dataplaneNamespaceWarmResourceKeys.map((kind) => (
+                <MenuItem key={kind} value={kind}>
+                  <Checkbox checked={ne.warmResourceKinds.includes(kind)} />
+                  <ListItemText primary={dataplaneWarmResourceLabel(kind)} />
+                </MenuItem>
+              ))}
+            </Select>
+            <Typography variant="caption" color="text.secondary">
+              Focused defaults to pods and deployments. Wide and diagnostic warm every namespaced dataplane list kind slowly within the same target and sweep caps.
+            </Typography>
+          </FormControl>
+        </Paper>
+
+        <Paper variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
+          <Typography variant="subtitle2">Background Namespace Sweep</Typography>
+          <Alert severity={sweep.enabled ? "warning" : "info"}>
+            Sweep slowly enriches namespaces outside the focused set while the app is idle. On this context,{" "}
+            {namespaces.length || "unknown"} namespaces would take about {estimatedSweepHours || "?"} idle hour(s) at the current hourly cap.
+          </Alert>
+          <FormControlLabel
+            control={<Switch checked={sweep.enabled} onChange={(e) => setNamespaceSweep({ enabled: e.target.checked })} />}
+            label="Enable background sweep"
+          />
+          <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
+            {numField("Idle quiet (ms)", sweep.idleQuietMs, (value) => setNamespaceSweep({ idleQuietMs: value }))}
+            {numField("Namespaces / cycle", sweep.maxNamespacesPerCycle, (value) => setNamespaceSweep({ maxNamespacesPerCycle: value }))}
+            {numField("Namespaces / hour", sweep.maxNamespacesPerHour, (value) => setNamespaceSweep({ maxNamespacesPerHour: value }))}
+            {numField("Re-enrich after (min)", sweep.minReenrichIntervalMinutes, (value) => setNamespaceSweep({ minReenrichIntervalMinutes: value }))}
+            {numField("Max parallel", sweep.maxParallel, (value) => setNamespaceSweep({ maxParallel: value }))}
+          </Box>
+          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+            <FormControlLabel
+              control={<Switch checked={sweep.pauseOnUserActivity} onChange={(e) => setNamespaceSweep({ pauseOnUserActivity: e.target.checked })} />}
+              label="Pause on activity"
+            />
+            <FormControlLabel
+              control={<Switch checked={sweep.pauseWhenSchedulerBusy} onChange={(e) => setNamespaceSweep({ pauseWhenSchedulerBusy: e.target.checked })} />}
+              label="Pause when busy"
+            />
+            <FormControlLabel
+              control={<Switch checked={sweep.pauseOnRateLimitOrConnectivityIssues} onChange={(e) => setNamespaceSweep({ pauseOnRateLimitOrConnectivityIssues: e.target.checked })} />}
+              label="Pause on rate limits"
+            />
+            <FormControlLabel
+              control={<Switch checked={sweep.includeSystemNamespaces} onChange={(e) => setNamespaceSweep({ includeSystemNamespaces: e.target.checked })} />}
+              label="Include system namespaces"
+            />
+          </Box>
+        </Paper>
+
+        <Paper variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
+          <Typography variant="subtitle2">Observers and Dashboard</Typography>
+          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+            <FormControlLabel
+              control={<Switch checked={dp.observers.enabled} onChange={(e) => setDataplaneObservers({ enabled: e.target.checked })} />}
+              label="Observers"
+            />
+            <FormControlLabel
+              control={<Switch checked={dp.observers.namespacesEnabled} onChange={(e) => setDataplaneObservers({ namespacesEnabled: e.target.checked })} />}
+              label="Namespace observer"
+            />
+            <FormControlLabel
+              control={<Switch checked={dp.observers.nodesEnabled} onChange={(e) => setDataplaneObservers({ nodesEnabled: e.target.checked })} />}
+              label="Node observer"
+            />
+          </Box>
+          <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
+            {numField("Namespace observer (sec)", dp.observers.namespacesIntervalSec, (value) => setDataplaneObservers({ namespacesIntervalSec: value }))}
+            {numField("Node observer (sec)", dp.observers.nodesIntervalSec, (value) => setDataplaneObservers({ nodesIntervalSec: value }))}
+            {numField("Node backoff max (sec)", dp.observers.nodesBackoffMaxSec, (value) => setDataplaneObservers({ nodesBackoffMaxSec: value }))}
+            {numField("Restart threshold", dp.dashboard.restartElevatedThreshold, (value) => setDataplaneDashboard({ restartElevatedThreshold: value }))}
+            {numField("Hotspot limit", dp.dashboard.hotspotLimit, (value) => setDataplaneDashboard({ hotspotLimit: value }))}
+          </Box>
+        </Paper>
+
+        <Paper variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
+          <Typography variant="subtitle2">Snapshot TTLs</Typography>
+          <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
+            {dataplaneTTLResourceKeys.map((key) => (
+              <TextField
+                key={key}
+                size="small"
+                type="number"
+                label={`${getResourceLabel(key as ListResourceKey)} TTL`}
+                value={dp.snapshots.ttlSec[key]}
+                onChange={(e) =>
+                  setDataplaneSnapshots({
+                    ttlSec: {
+                      ...dp.snapshots.ttlSec,
+                      [key]: Math.round(Number(e.target.value) || 0),
+                    },
+                  })
+                }
+                helperText="seconds"
+              />
+            ))}
+          </Box>
+        </Paper>
+      </Box>
+    );
+  };
 
   const renderImportExport = () => (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
@@ -973,12 +1251,7 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
         {section === "smartFilters" ? renderSmartFilters() : null}
         {section === "commands" ? renderCustomCommands() : null}
         {section === "actions" ? renderCustomActions() : null}
-        {section === "nsEnrichment"
-          ? renderPlaceholder(
-              "NS Enrichment",
-              "Namespace enrichment tuning is currently backend-owned and hardcoded. A later pack will expose the target cap, parallelism, idle quiet window, and related behavior after the browser-local settings model is verified.",
-            )
-          : null}
+        {section === "nsEnrichment" ? renderNsEnrichment() : null}
         {section === "importExport" ? renderImportExport() : null}
       </Box>
     </Box>

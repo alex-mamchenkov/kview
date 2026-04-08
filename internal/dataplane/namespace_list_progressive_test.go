@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"kview/internal/cluster"
 	"kview/internal/kube/dto"
@@ -31,6 +32,28 @@ func TestNamespaceListEnrichmentReusesStableRevisionForSameWorkset(t *testing.T)
 	}
 	if rev2 != rev1 {
 		t.Fatalf("expected stable revision reuse, got %d then %d", rev1, rev2)
+	}
+
+	m.nsEnrich.byCluster["ctx"].cancel()
+}
+
+func TestNamespaceListEnrichmentReusesCompletedRevisionForSameWorkset(t *testing.T) {
+	m := &manager{
+		scheduler: newWorkScheduler(1),
+		clients:   failingClientsProvider{},
+		nsEnrich:  newNsEnrichmentCoordinator(),
+	}
+	items := []dto.NamespaceListItemDTO{{Name: "default"}, {Name: "prod"}}
+	hints := NamespaceEnrichHints{Focus: "default", Favorite: map[string]struct{}{}}
+
+	rev1 := m.BeginNamespaceListProgressiveEnrichment("ctx", items, hints)
+	m.nsEnrich.byCluster["ctx"].complete = true
+	rev2 := m.BeginNamespaceListProgressiveEnrichment("ctx", items, hints)
+	if rev1 == 0 {
+		t.Fatal("expected enrichment revision")
+	}
+	if rev2 != rev1 {
+		t.Fatalf("expected completed same workset to reuse revision, got %d then %d", rev1, rev2)
 	}
 
 	m.nsEnrich.byCluster["ctx"].cancel()
@@ -82,6 +105,65 @@ func TestNamespaceEnrichSessionUpdateBaseRowsKeepsEnrichedFields(t *testing.T) {
 	}
 	if !got.RowEnriched || got.PodCount != 3 || got.DeploymentCount != 1 || got.SummaryState != "ok" {
 		t.Fatalf("expected enriched fields to be preserved, got %+v", got)
+	}
+}
+
+func TestNamespaceEnrichSessionMergeExistingRowsIntoKeepsEnrichedFieldsAcrossRevision(t *testing.T) {
+	sess := &nsEnrichSession{
+		order: []string{"default"},
+		merged: map[string]dto.NamespaceListItemDTO{
+			"default": {
+				Name:             "default",
+				Phase:            "Active",
+				RowEnriched:      true,
+				SummaryState:     "warning",
+				PodCount:         7,
+				DeploymentCount:  2,
+				ProblematicCount: 1,
+			},
+		},
+	}
+
+	nextRows := sess.mergeExistingRowsInto([]string{"default"}, map[string]dto.NamespaceListItemDTO{
+		"default": {Name: "default", Phase: "Terminating"},
+	})
+
+	got := nextRows["default"]
+	if got.Phase != "Terminating" {
+		t.Fatalf("expected base row fields to refresh, got phase %q", got.Phase)
+	}
+	if !got.RowEnriched || got.PodCount != 7 || got.DeploymentCount != 2 || got.SummaryState != "warning" || got.ProblematicCount != 1 {
+		t.Fatalf("expected enriched fields to be preserved, got %+v", got)
+	}
+}
+
+func TestNamespaceListEnrichmentPollUsesCachedRowProjection(t *testing.T) {
+	dm := NewManager(ManagerConfig{})
+	mm := dm.(*manager)
+	cluster := "ctx-cache-poll"
+	planeAny, _ := mm.PlaneForCluster(t.Context(), cluster)
+	plane := planeAny.(*clusterPlane)
+	setNamespacedSnapshot(&plane.podsStore, "app", PodsSnapshot{
+		Meta:  SnapshotMetadata{ObservedAt: time.Now().UTC()},
+		Items: []dto.PodListItemDTO{{Name: "pod", Namespace: "app"}},
+	})
+	mm.nsEnrich.byCluster[cluster] = &nsEnrichSession{
+		rev:       1,
+		order:     []string{"app"},
+		workNames: []string{"app"},
+		merged: map[string]dto.NamespaceListItemDTO{
+			"app": {Name: "app"},
+		},
+		complete: true,
+		total:    1,
+	}
+
+	got := mm.NamespaceListEnrichmentPoll(cluster, 1)
+	if len(got.Updates) != 1 {
+		t.Fatalf("updates: got %d", len(got.Updates))
+	}
+	if !got.Updates[0].RowEnriched || got.Updates[0].PodCount != 1 {
+		t.Fatalf("expected cached row projection, got %+v", got.Updates[0])
 	}
 }
 

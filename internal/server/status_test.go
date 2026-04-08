@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"kview/internal/runtime"
+	"kview/internal/session"
 )
 
 func TestUpdateConnectivityActivity_RegistersConnectedActivity(t *testing.T) {
@@ -86,5 +87,108 @@ func TestUpdateConnectivityActivity_UpdatesExistingActivityToFailed(t *testing.T
 	}
 	if second.Metadata["message"] != "dial tcp: connection refused" {
 		t.Fatalf("message: got %q", second.Metadata["message"])
+	}
+}
+
+func TestStopInactiveConnectivityActivitiesExceptStopsUnusedContext(t *testing.T) {
+	rt := runtime.NewManager()
+	s := &Server{rt: rt, sessions: session.NewInMemoryManager(rt.Registry())}
+
+	s.updateConnectivityActivity(statusClusterDTO{OK: true, Context: "old"})
+	s.updateConnectivityActivity(statusClusterDTO{OK: true, Context: "new"})
+
+	s.stopInactiveConnectivityActivitiesExcept("new")
+
+	oldAct, ok, err := rt.Registry().Get(context.Background(), "connectivity:old")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("old connectivity activity disappeared")
+	}
+	if oldAct.Status != runtime.ActivityStatusStopped {
+		t.Fatalf("old status: got %q, want %q", oldAct.Status, runtime.ActivityStatusStopped)
+	}
+	if oldAct.Metadata["state"] != "inactive" {
+		t.Fatalf("old state: got %q, want inactive", oldAct.Metadata["state"])
+	}
+
+	newAct, ok, err := rt.Registry().Get(context.Background(), "connectivity:new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("new connectivity activity disappeared")
+	}
+	if newAct.Status != runtime.ActivityStatusRunning {
+		t.Fatalf("new status: got %q, want %q", newAct.Status, runtime.ActivityStatusRunning)
+	}
+}
+
+func TestStopInactiveConnectivityActivitiesExceptKeepsContextWithOpenSession(t *testing.T) {
+	rt := runtime.NewManager()
+	sessions := session.NewInMemoryManager(rt.Registry())
+	s := &Server{rt: rt, sessions: sessions}
+
+	s.updateConnectivityActivity(statusClusterDTO{OK: true, Context: "old"})
+	s.updateConnectivityActivity(statusClusterDTO{OK: true, Context: "new"})
+	_, err := sessions.Create(context.Background(), session.Session{
+		ID:            "sess-old",
+		Type:          session.TypeTerminal,
+		Title:         "old shell",
+		Status:        session.StatusRunning,
+		TargetCluster: "old",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s.stopInactiveConnectivityActivitiesExcept("new")
+
+	oldAct, ok, err := rt.Registry().Get(context.Background(), "connectivity:old")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("old connectivity activity disappeared")
+	}
+	if oldAct.Status != runtime.ActivityStatusRunning {
+		t.Fatalf("old status: got %q, want %q", oldAct.Status, runtime.ActivityStatusRunning)
+	}
+
+	if err := sessions.Stop(context.Background(), "sess-old"); err != nil {
+		t.Fatal(err)
+	}
+	s.stopInactiveConnectivityActivitiesExcept("new")
+
+	oldAct, ok, err = rt.Registry().Get(context.Background(), "connectivity:old")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("old connectivity activity disappeared")
+	}
+	if oldAct.Status != runtime.ActivityStatusStopped {
+		t.Fatalf("old status after session stop: got %q, want %q", oldAct.Status, runtime.ActivityStatusStopped)
+	}
+}
+
+func TestIsBackgroundPollingPath(t *testing.T) {
+	polling := []string{
+		"/api/status",
+		"/api/activity",
+		"/api/dashboard/cluster",
+		"/api/dataplane/work/live",
+		"/api/dataplane/revision",
+		"/api/namespaces/enrichment",
+		"/api/sessions",
+	}
+	for _, path := range polling {
+		if !isBackgroundPollingPath(path) {
+			t.Fatalf("%s should be treated as background polling", path)
+		}
+	}
+	if isBackgroundPollingPath("/api/namespaces") {
+		t.Fatal("/api/namespaces should be treated as user/request activity")
 	}
 }

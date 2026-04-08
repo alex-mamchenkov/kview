@@ -1,13 +1,10 @@
 package dataplane
 
 import (
+	"context"
 	"sort"
 
 	"kview/internal/kube/dto"
-)
-
-const (
-	clusterDashboardHotspotMergeLimit = 10
 )
 
 // resourceTotalsCompletenessLabel returns complete | partial | unknown for visible vs cached dataplane-list namespaces.
@@ -29,6 +26,7 @@ func resourceTotalsCompletenessLabel(visible, withCachedDataplaneLists int) stri
 // intersected with the current namespace list snapshot. No alphabetical sampling and no implicit cluster-wide totals.
 func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted []string, nsTotal int, nsUnhealthy int) (ClusterDashboardResourcesPanel, ClusterDashboardHotspotsPanel, ClusterDashboardWorkloadHints, ClusterDashboardCoverage) {
 	cov := m.buildDashboardCoverage(plane.name, nsNamesSorted, nsTotal)
+	policy := m.Policy().Dashboard
 
 	knownNS := visibleNamespacesWithCachedDataplaneLists(plane, nsNamesSorted)
 	cov.NamespacesInResourceTotals = len(knownNS)
@@ -94,19 +92,23 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 
 		if podsOK && podsSnap.Err == nil {
 			res.Pods += len(podsSnap.Items)
-			hot.PodsWithElevatedRestarts += CountPodsWithRestartThreshold(podsSnap, restartElevatedThreshold)
 			aggregateMetas = append(aggregateMetas, podsSnap.Meta)
-			hList := ProjectRestartHotspotsFromPods(ns, podsSnap, defaultRestartHotspotLimit)
-			if len(hList.Items) > 0 {
-				hotspotLists = append(hotspotLists, hList.Items)
+			if policy.IncludeHotspots {
+				hot.PodsWithElevatedRestarts += CountPodsWithRestartThreshold(podsSnap, int32(policy.RestartElevatedThreshold))
+				hList := ProjectRestartHotspotsFromPods(ns, podsSnap, defaultRestartHotspotLimit)
+				if len(hList.Items) > 0 {
+					hotspotLists = append(hotspotLists, hList.Items)
+				}
 			}
 		}
 		if depsOK && depsSnap.Err == nil {
 			res.Deployments += len(depsSnap.Items)
-			enriched := EnrichDeploymentListItemsForAPI(depsSnap.Items)
-			for _, d := range enriched {
-				if d.HealthBucket == deployBucketDegraded || d.RolloutNeedsAttention {
-					hot.DegradedDeployments++
+			if policy.IncludeHotspots {
+				enriched := EnrichDeploymentListItemsForAPI(depsSnap.Items)
+				for _, d := range enriched {
+					if d.HealthBucket == deployBucketDegraded || d.RolloutNeedsAttention {
+						hot.DegradedDeployments++
+					}
 				}
 			}
 		}
@@ -167,30 +169,39 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 			aggregateMetas = append(aggregateMetas, helmReleasesSnap.Meta)
 		}
 
-		var probPods []dto.ProblematicResource
-		if podsOK && podsSnap.Err == nil {
-			probPods = podProblematicFromListUnbounded(podsSnap.Items)
+		if policy.IncludeHotspots {
+			var probPods []dto.ProblematicResource
+			if podsOK && podsSnap.Err == nil {
+				probPods = podProblematicFromListUnbounded(podsSnap.Items)
+			}
+			var probDeps []dto.ProblematicResource
+			if depsOK && depsSnap.Err == nil {
+				probDeps = deploymentProblematicListUnbounded(depsSnap.Items)
+			}
+			var probWorkloads []dto.ProblematicResource
+			if dsOK && dsSnap.Err == nil || stsOK && stsSnap.Err == nil || jobsOK && jobsSnap.Err == nil || cjOK && cjSnap.Err == nil {
+				probWorkloads = WorkloadProblematicCandidates(
+					nil,
+					dsSnap.Items,
+					stsSnap.Items,
+					jobsSnap.Items,
+					cjSnap.Items,
+					policy.HotspotLimit,
+				)
+			}
+			pc := countUniqueProblematic(probPods, probDeps, probWorkloads)
+			hot.ProblematicResources += pc
+			if pc > 0 {
+				scores = append(scores, nsScore{ns: ns, score: pc})
+			}
 		}
-		var probDeps []dto.ProblematicResource
-		if depsOK && depsSnap.Err == nil {
-			probDeps = deploymentProblematicListUnbounded(depsSnap.Items)
-		}
-		var probWorkloads []dto.ProblematicResource
-		if dsOK && dsSnap.Err == nil || stsOK && stsSnap.Err == nil || jobsOK && jobsSnap.Err == nil || cjOK && cjSnap.Err == nil {
-			probWorkloads = WorkloadProblematicCandidates(
-				nil,
-				dsSnap.Items,
-				stsSnap.Items,
-				jobsSnap.Items,
-				cjSnap.Items,
-				clusterDashboardHotspotMergeLimit,
-			)
-		}
-		pc := countUniqueProblematic(probPods, probDeps, probWorkloads)
-		hot.ProblematicResources += pc
-		if pc > 0 {
-			scores = append(scores, nsScore{ns: ns, score: pc})
-		}
+	}
+
+	if !policy.IncludeHotspots {
+		hot.Note = "Hotspot projection is disabled in dataplane settings."
+		wh.AggregateFreshness = res.AggregateFreshness
+		wh.AggregateDegradation = res.AggregateDegradation
+		return res, hot, wh, cov
 	}
 
 	sort.Slice(scores, func(i, j int) bool {
@@ -206,7 +217,7 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 		})
 	}
 
-	hot.TopPodRestartHotspots = MergeRestartHotspots(clusterDashboardHotspotMergeLimit, hotspotLists...)
+	hot.TopPodRestartHotspots = MergeRestartHotspots(policy.HotspotLimit, hotspotLists...)
 	for _, item := range hot.TopPodRestartHotspots {
 		if item.Severity == restartSeverityHigh {
 			hot.HighSeverityHotspotsInTopN++
@@ -296,6 +307,29 @@ func namespaceHasCachedDataplaneList(plane *clusterPlane, ns string) bool {
 	return false
 }
 
+func visibleNamespacesWithCachedRowProjection(plane *clusterPlane, visibleSorted []string) []string {
+	if plane == nil || len(visibleSorted) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(visibleSorted))
+	for _, ns := range visibleSorted {
+		if namespaceHasCachedRowProjection(plane, ns) {
+			out = append(out, ns)
+		}
+	}
+	return out
+}
+
+func namespaceHasCachedRowProjection(plane *clusterPlane, ns string) bool {
+	if _, ok := plane.podsStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.depsStore.getCached(ns); ok {
+		return true
+	}
+	return false
+}
+
 func (m *manager) buildDashboardCoverage(cluster string, visibleSorted []string, visibleCount int) ClusterDashboardCoverage {
 	cov := ClusterDashboardCoverage{
 		VisibleNamespaces: visibleCount,
@@ -306,32 +340,39 @@ func (m *manager) buildDashboardCoverage(cluster string, visibleSorted []string,
 		return cov
 	}
 
+	var plane *clusterPlane
+	if planeAny, err := m.PlaneForCluster(context.Background(), cluster); err == nil {
+		plane, _ = planeAny.(*clusterPlane)
+	}
+	rowProjectionCached := visibleNamespacesWithCachedRowProjection(plane, visibleSorted)
+	rowProjectionCachedSet := make(map[string]struct{}, len(rowProjectionCached))
+	for _, ns := range rowProjectionCached {
+		rowProjectionCachedSet[ns] = struct{}{}
+	}
+	cov.RowProjectionCachedNamespaces = len(rowProjectionCached)
+	cov.RelatedEnrichedNamespaces = len(rowProjectionCached)
+	cov.ListOnlyNamespaces = visibleCount - len(rowProjectionCached)
+	if cov.ListOnlyNamespaces < 0 {
+		cov.ListOnlyNamespaces = 0
+	}
+
 	m.nsEnrich.mu.Lock()
 	sess, ok := m.nsEnrich.byCluster[cluster]
 	m.nsEnrich.mu.Unlock()
 	if !ok || sess == nil {
-		cov.ListOnlyNamespaces = visibleCount
-		cov.Note = "No active namespace row-enrichment session; list-only counts assume the namespace list snapshot until enrichment runs."
+		cov.Note = "No active namespace row-enrichment session; row projection coverage is derived from cached pod/deployment snapshots."
 		return cov
 	}
 
 	sess.mu.Lock()
-	workSet := make(map[string]struct{}, len(sess.workNames))
+	workSet := make(map[string]struct{}, len(sess.workNames)+len(sess.sweepNames))
 	for _, n := range sess.workNames {
 		workSet[n] = struct{}{}
 	}
-	detailDone := sess.detailDone
-	relatedEnriched := 0
-	listOnlyNeverQueued := 0
-	for _, name := range visibleSorted {
-		if _, w := workSet[name]; !w {
-			listOnlyNeverQueued++
-			continue
-		}
-		if row, ok := sess.merged[name]; ok && row.RowEnriched {
-			relatedEnriched++
-		}
+	for _, n := range sess.sweepNames {
+		workSet[n] = struct{}{}
 	}
+	detailDone := sess.detailDone
 	sess.mu.Unlock()
 
 	cov.HasActiveEnrichmentSession = true
@@ -340,11 +381,12 @@ func (m *manager) buildDashboardCoverage(cluster string, visibleSorted []string,
 	if detailDone > cov.EnrichmentTargets {
 		cov.DetailEnrichedNamespaces = cov.EnrichmentTargets
 	}
-	cov.RelatedEnrichedNamespaces = relatedEnriched
-	cov.ListOnlyNamespaces = listOnlyNeverQueued
-	cov.AwaitingRelatedRowProjection = visibleCount - listOnlyNeverQueued - relatedEnriched
-	if cov.AwaitingRelatedRowProjection < 0 {
-		cov.AwaitingRelatedRowProjection = 0
+	awaiting := 0
+	for name := range workSet {
+		if _, ok := rowProjectionCachedSet[name]; !ok {
+			awaiting++
+		}
 	}
+	cov.AwaitingRelatedRowProjection = awaiting
 	return cov
 }

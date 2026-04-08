@@ -20,13 +20,13 @@ const (
 	nsEnrichScoreFavorite = 10_000
 	nsEnrichScoreRecent   = 500
 	nsEnrichMaxTargets    = 32
-	nsEnrichMaxParallel   = 2
 )
 
 // ParseNamespaceEnrichHints reads optional GET /api/namespaces query parameters:
 //   - enrichFocus: current namespace
 //   - enrichRecent: comma-separated MRU names (most significant first in the string)
 //   - enrichFav: comma-separated favourites
+//
 // Repeated query keys for enrichRecent / enrichFav are merged in order.
 func ParseNamespaceEnrichHints(q url.Values) NamespaceEnrichHints {
 	h := NamespaceEnrichHints{Favorite: make(map[string]struct{})}
@@ -86,7 +86,7 @@ func namespaceEnrichScore(name string, hints NamespaceEnrichHints, recentRank ma
 
 // buildEnrichmentWorkOrder returns namespaces to enrich, highest score first, capped.
 // itemOrder is the list snapshot order (used only for stable tie-break; no alphabetical scan).
-func buildEnrichmentWorkOrder(itemOrder []string, hints NamespaceEnrichHints) []string {
+func buildEnrichmentWorkOrder(itemOrder []string, hints NamespaceEnrichHints, maxTargets int) []string {
 	present := make(map[string]bool, len(itemOrder))
 	pos := make(map[string]int, len(itemOrder))
 	for i, n := range itemOrder {
@@ -141,8 +141,36 @@ func buildEnrichmentWorkOrder(itemOrder []string, hints NamespaceEnrichHints) []
 		return pos[a] < pos[b]
 	})
 
-	if len(candidates) > nsEnrichMaxTargets {
-		candidates = candidates[:nsEnrichMaxTargets]
+	if maxTargets <= 0 {
+		maxTargets = nsEnrichMaxTargets
+	}
+	if len(candidates) > maxTargets {
+		candidates = candidates[:maxTargets]
 	}
 	return candidates
+}
+
+func applyNamespaceEnrichmentPolicyHints(hints NamespaceEnrichHints, policy NamespaceEnrichmentPolicy) NamespaceEnrichHints {
+	out := NamespaceEnrichHints{Favorite: make(map[string]struct{})}
+	if policy.IncludeFocus {
+		out.Focus = hints.Focus
+	}
+	if policy.IncludeRecent && policy.RecentLimit > 0 {
+		limit := policy.RecentLimit
+		if len(hints.Recent) < limit {
+			limit = len(hints.Recent)
+		}
+		out.Recent = append(out.Recent, hints.Recent[:limit]...)
+	}
+	if policy.IncludeFavourites && policy.FavouriteLimit > 0 {
+		count := 0
+		for n := range hints.Favorite {
+			if count >= policy.FavouriteLimit {
+				break
+			}
+			out.Favorite[n] = struct{}{}
+			count++
+		}
+	}
+	return out
 }

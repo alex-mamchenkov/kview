@@ -133,6 +133,7 @@ export default function DashboardView(props: Props) {
             const ns = visibility.namespaces;
             const nodes = visibility.nodes;
             const cov = coverage;
+            const hotspotsEnabled = settings.dataplane.dashboard.includeHotspots;
 
             return (
               <>
@@ -149,6 +150,11 @@ export default function DashboardView(props: Props) {
                     <Chip size="small" label={`When active: ${plane.activationMode}`} variant="outlined" />
                     <Chip
                       size="small"
+                      label={`Refresh: ${dashboardRefreshSec > 0 ? `${dashboardRefreshSec}s` : "manual"}`}
+                      variant="outlined"
+                    />
+                    <Chip
+                      size="small"
                       label={`Namespaces: ${plane.scope.namespaces}`}
                       variant="outlined"
                       sx={{ maxWidth: "100%" }}
@@ -158,7 +164,7 @@ export default function DashboardView(props: Props) {
                     <Chip size="small" label={`Node list: ${nodes.observerState || "—"}`} variant="outlined" />
                   </Box>
                   <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
-                    Available views: {plane.profilesImplemented?.join(", ") || "—"} · Namespace modes:{" "}
+                    Available profiles: {plane.profilesImplemented?.join(", ") || "—"} · Dataplane modes:{" "}
                     {plane.discoveryImplemented?.join(", ") || "—"}
                   </Typography>
                 </Paper>
@@ -249,12 +255,13 @@ export default function DashboardView(props: Props) {
                     <TableBody>
                       <StatCell label="Visible namespaces" value={cov.visibleNamespaces} />
                       <StatCell
-                        label="Not targeted for background row enrichment"
+                        label="Without cached row projection"
                         value={cov.listOnlyNamespaces}
                       />
                       <StatCell label="Detail fetches completed (session)" value={cov.detailEnrichedNamespaces} />
-                      <StatCell label="Related row projections (pods/deployments)" value={cov.relatedEnrichedNamespaces} />
-                      <StatCell label="Awaiting related projection" value={cov.awaitingRelatedRowProjection} />
+                      <StatCell label="Cached row projections (pods/deployments)" value={cov.relatedEnrichedNamespaces} />
+                      <StatCell label="Cached row projection namespaces" value={cov.rowProjectionCachedNamespaces} />
+                      <StatCell label="Active targets awaiting row projection" value={cov.awaitingRelatedRowProjection} />
                       {cov.enrichmentTargets != null && cov.enrichmentTargets > 0 && (
                         <StatCell label="Enrichment target namespaces" value={cov.enrichmentTargets} />
                       )}
@@ -315,8 +322,9 @@ export default function DashboardView(props: Props) {
                     5 · Hotspots (known namespaces)
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    Same cached-namespace scope as resource totals. Pods with at least 3 container restarts are flagged;
-                    merged top lists are capped.
+                    {hotspotsEnabled
+                      ? "Same cached-namespace scope as resource totals. Restart and problematic-resource lists are capped by dataplane settings."
+                      : "Hotspot projection is disabled in dataplane settings."}
                   </Typography>
                   {hotspots.note && hotspots.note !== resources.note && (
                     <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
@@ -342,12 +350,21 @@ export default function DashboardView(props: Props) {
                   <Table size="small">
                     <TableBody>
                       <StatCell label="Unhealthy namespaces (from cluster list)" value={hotspots.unhealthyNamespaces} />
-                      <StatCell label="Deployments needing attention (cached scope)" value={hotspots.degradedDeployments} />
-                      <StatCell label="Pods with many restarts (≥3, cached scope)" value={hotspots.podsWithElevatedRestarts} />
-                      <StatCell label="Other flagged resources (cached scope)" value={hotspots.problematicResources} />
+                      <StatCell
+                        label="Deployments needing attention (cached scope)"
+                        value={hotspotsEnabled ? hotspots.degradedDeployments : "disabled"}
+                      />
+                      <StatCell
+                        label={`Pods with many restarts (≥${settings.dataplane.dashboard.restartElevatedThreshold}, cached scope)`}
+                        value={hotspotsEnabled ? hotspots.podsWithElevatedRestarts : "disabled"}
+                      />
+                      <StatCell
+                        label="Other flagged resources (cached scope)"
+                        value={hotspotsEnabled ? hotspots.problematicResources : "disabled"}
+                      />
                     </TableBody>
                   </Table>
-                  {hotspots.topProblematicNamespaces && hotspots.topProblematicNamespaces.length > 0 && (
+                  {hotspotsEnabled && hotspots.topProblematicNamespaces && hotspots.topProblematicNamespaces.length > 0 && (
                     <>
                       <Divider sx={{ my: 1.5 }} />
                       <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
@@ -366,7 +383,7 @@ export default function DashboardView(props: Props) {
                       </Box>
                     </>
                   )}
-                  {hotspots.topPodRestartHotspots && hotspots.topPodRestartHotspots.length > 0 && (
+                  {hotspotsEnabled && hotspots.topPodRestartHotspots && hotspots.topPodRestartHotspots.length > 0 && (
                     <>
                       <Divider sx={{ my: 1.5 }} />
                       <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>

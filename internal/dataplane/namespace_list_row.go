@@ -8,6 +8,9 @@ import (
 )
 
 func mergeNamespaceRowInto(dst *dto.NamespaceListItemDTO, src dto.NamespaceListItemDTO) {
+	if !src.RowEnriched {
+		return
+	}
 	dst.RowEnriched = src.RowEnriched
 	dst.SummaryState = src.SummaryState
 	dst.PodCount = src.PodCount
@@ -71,6 +74,53 @@ func buildNamespaceListRowProjection(podsSnap PodsSnapshot, depsSnap Deployments
 	}
 
 	return out
+}
+
+func buildCachedNamespaceListRowProjection(plane *clusterPlane, namespace string) (dto.NamespaceListItemDTO, bool) {
+	if plane == nil || namespace == "" {
+		return dto.NamespaceListItemDTO{}, false
+	}
+	podsSnap, podsOK := plane.podsStore.getCached(namespace)
+	depsSnap, depsOK := plane.depsStore.getCached(namespace)
+	if !podsOK && !depsOK {
+		return dto.NamespaceListItemDTO{}, false
+	}
+
+	var out dto.NamespaceListItemDTO
+	out.RowEnriched = true
+
+	var firstErr *NormalizedError
+	meaningful := 0
+	var probPods []dto.ProblematicResource
+	var probDeps []dto.ProblematicResource
+	if podsOK {
+		firstErr = FirstNonNilNormalizedError(firstErr, podsSnap.Err)
+		if podsSnap.Err == nil {
+			out.PodCount = len(podsSnap.Items)
+			meaningful += out.PodCount
+			probPods = podProblematicFromListUnbounded(podsSnap.Items)
+			for _, p := range podsSnap.Items {
+				if p.Restarts > 0 {
+					out.PodsWithRestarts++
+				}
+				switch ListRestartSeverity(p.Restarts) {
+				case listRestartMedium, listRestartHigh:
+					out.RestartHotspot = true
+				}
+			}
+		}
+	}
+	if depsOK {
+		firstErr = FirstNonNilNormalizedError(firstErr, depsSnap.Err)
+		if depsSnap.Err == nil {
+			out.DeploymentCount = len(depsSnap.Items)
+			meaningful += out.DeploymentCount
+			probDeps = deploymentProblematicListUnbounded(depsSnap.Items)
+		}
+	}
+	out.ProblematicCount = countUniqueProblematic(probPods, probDeps, nil)
+	out.SummaryState = ProjectionCoarseState(firstErr, meaningful)
+	return out, true
 }
 
 func podProblematicFromListUnbounded(items []dto.PodListItemDTO) []dto.ProblematicResource {
