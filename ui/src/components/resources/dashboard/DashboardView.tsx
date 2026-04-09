@@ -4,7 +4,6 @@ import {
   Button,
   Chip,
   CircularProgress,
-  Divider,
   IconButton,
   Paper,
   Table,
@@ -114,6 +113,21 @@ function PanelTitle({ title, hint }: { title: string; hint: string }) {
     </Box>
   );
 }
+
+const dashboardPanelSx = {
+  p: 2,
+  height: "100%",
+  display: "flex",
+  flexDirection: "column",
+  gap: 1.5,
+};
+
+const dashboardPanelSectionSx = {
+  border: "1px solid var(--panel-border)",
+  borderRadius: 1,
+  p: 1.25,
+  backgroundColor: "var(--bg-secondary)",
+};
 
 function FindingHintIcons({ likelyCause, suggestedAction }: { likelyCause?: string; suggestedAction?: string }) {
   if (!likelyCause && !suggestedAction) return null;
@@ -475,148 +489,162 @@ export default function DashboardView(props: Props) {
                   />
                 </Box>
 
-                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.35fr) minmax(0, 1fr)" }, gap: 2 }}>
-                  <Paper variant="outlined" sx={{ p: 2 }}>
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0, 1fr))" },
+                    gap: 2,
+                    alignItems: "stretch",
+                  }}
+                >
+                  <Paper variant="outlined" sx={dashboardPanelSx}>
                     <PanelTitle
                       title="Attention"
                       hint={findings?.note || "Click a chip to filter the list. Top priority is capped; category chips show all matching cached-scope findings."}
                     />
-                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mb: 1.5 }}>
-                      <FindingFilterChip
-                        filter="top"
-                        count={topFindings.length}
-                        selected={findingFilter === "top"}
-                        onSelect={setFindingFilter}
-                      />
-                      <FindingFilterChip
-                        filter="high"
-                        count={findings?.high ?? 0}
-                        color={(findings?.high || 0) > 0 ? "error" : "default"}
-                        selected={findingFilter === "high"}
-                        onSelect={setFindingFilter}
-                      />
-                      <FindingFilterChip
-                        filter="medium"
-                        count={findings?.medium ?? 0}
-                        color={(findings?.medium || 0) > 0 ? "warning" : "default"}
-                        selected={findingFilter === "medium"}
-                        onSelect={setFindingFilter}
-                      />
-                      <FindingFilterChip
-                        filter="low"
-                        count={findings?.low ?? 0}
-                        color={(findings?.low || 0) > 0 ? "info" : "default"}
-                        selected={findingFilter === "low"}
-                        onSelect={setFindingFilter}
-                      />
-                      <FindingFilterChip
-                        filter="Namespace"
-                        count={findings?.emptyNamespaces ?? 0}
-                        selected={findingFilter === "Namespace"}
-                        onSelect={setFindingFilter}
-                      />
-                      <FindingFilterChip
-                        filter="HelmRelease"
-                        count={findings?.stuckHelmReleases ?? 0}
-                        selected={findingFilter === "HelmRelease"}
-                        onSelect={setFindingFilter}
-                      />
-                      <FindingFilterChip
-                        filter="Job"
-                        count={findings?.abnormalJobs ?? 0}
-                        selected={findingFilter === "Job"}
-                        onSelect={setFindingFilter}
-                      />
-                      <FindingFilterChip
-                        filter="CronJob"
-                        count={findings?.abnormalCronJobs ?? 0}
-                        selected={findingFilter === "CronJob"}
-                        onSelect={setFindingFilter}
-                      />
-                      <FindingFilterChip
-                        filter="ConfigMap"
-                        count={findings?.emptyConfigMaps ?? 0}
-                        selected={findingFilter === "ConfigMap"}
-                        onSelect={setFindingFilter}
-                      />
-                      <FindingFilterChip
-                        filter="Secret"
-                        count={findings?.emptySecrets ?? 0}
-                        selected={findingFilter === "Secret"}
-                        onSelect={setFindingFilter}
-                      />
-                      <FindingFilterChip
-                        filter="PersistentVolumeClaim"
-                        count={findings?.potentiallyUnusedPVCs ?? 0}
-                        selected={findingFilter === "PersistentVolumeClaim"}
-                        onSelect={setFindingFilter}
-                      />
-                      <FindingFilterChip
-                        filter="ServiceAccount"
-                        count={findings?.potentiallyUnusedServiceAccounts ?? 0}
-                        selected={findingFilter === "ServiceAccount"}
-                        onSelect={setFindingFilter}
-                      />
-                      <FindingFilterChip
-                        filter="ResourceQuota"
-                        count={findings?.quotaWarnings ?? 0}
-                        color={(findings?.quotaWarnings || 0) > 0 ? "warning" : "default"}
-                        selected={findingFilter === "ResourceQuota"}
-                        onSelect={setFindingFilter}
-                      />
-                    </Box>
-                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                      Showing {visibleFindings.length} {findingFilterLabel(findingFilter).toLowerCase()} finding
-                      {visibleFindings.length === 1 ? "" : "s"}.
-                    </Typography>
-                    {visibleFindings.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary">
-                        No cached-scope findings for this filter.
+                    <Box sx={dashboardPanelSectionSx}>
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                        Filter cached-scope findings by severity or resource type.
                       </Typography>
-                    ) : (
-                      <Table size="small">
-                        <TableBody>
-                          {visibleFindings.map((f) => (
-                            <TableRow key={`${f.kind}/${f.namespace || ""}/${f.name || ""}/${f.reason}`}>
-                              <TableCell sx={{ border: 0, py: 0.6, pl: 0, width: 118 }}>
-                                <Chip size="small" color={severityColor(f.severity)} label={f.severity} />
-                              </TableCell>
-                              <TableCell sx={{ border: 0, py: 0.6 }}>
-                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                {f.kind} {findingTarget(f)}
-                                <FindingHintIcons likelyCause={f.likelyCause} suggestedAction={f.suggestedAction} />
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {f.reason} {f.confidence ? `Confidence: ${f.confidence}.` : ""}
-                              </Typography>
-                            </TableCell>
-                              <TableCell sx={{ border: 0, py: 0.6, pr: 0, textAlign: "right", width: 110 }}>
-                                {inspectTargetFromFinding(f) ? (
-                                  <Button
-                                    size="small"
-                                    variant="outlined"
-                                    onClick={() => setInspectTarget(inspectTargetFromFinding(f))}
-                                  >
-                                    Inspect
-                                  </Button>
-                                ) : null}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+                        <FindingFilterChip
+                          filter="top"
+                          count={topFindings.length}
+                          selected={findingFilter === "top"}
+                          onSelect={setFindingFilter}
+                        />
+                        <FindingFilterChip
+                          filter="high"
+                          count={findings?.high ?? 0}
+                          color={(findings?.high || 0) > 0 ? "error" : "default"}
+                          selected={findingFilter === "high"}
+                          onSelect={setFindingFilter}
+                        />
+                        <FindingFilterChip
+                          filter="medium"
+                          count={findings?.medium ?? 0}
+                          color={(findings?.medium || 0) > 0 ? "warning" : "default"}
+                          selected={findingFilter === "medium"}
+                          onSelect={setFindingFilter}
+                        />
+                        <FindingFilterChip
+                          filter="low"
+                          count={findings?.low ?? 0}
+                          color={(findings?.low || 0) > 0 ? "info" : "default"}
+                          selected={findingFilter === "low"}
+                          onSelect={setFindingFilter}
+                        />
+                        <FindingFilterChip
+                          filter="Namespace"
+                          count={findings?.emptyNamespaces ?? 0}
+                          selected={findingFilter === "Namespace"}
+                          onSelect={setFindingFilter}
+                        />
+                        <FindingFilterChip
+                          filter="HelmRelease"
+                          count={findings?.stuckHelmReleases ?? 0}
+                          selected={findingFilter === "HelmRelease"}
+                          onSelect={setFindingFilter}
+                        />
+                        <FindingFilterChip
+                          filter="Job"
+                          count={findings?.abnormalJobs ?? 0}
+                          selected={findingFilter === "Job"}
+                          onSelect={setFindingFilter}
+                        />
+                        <FindingFilterChip
+                          filter="CronJob"
+                          count={findings?.abnormalCronJobs ?? 0}
+                          selected={findingFilter === "CronJob"}
+                          onSelect={setFindingFilter}
+                        />
+                        <FindingFilterChip
+                          filter="ConfigMap"
+                          count={findings?.emptyConfigMaps ?? 0}
+                          selected={findingFilter === "ConfigMap"}
+                          onSelect={setFindingFilter}
+                        />
+                        <FindingFilterChip
+                          filter="Secret"
+                          count={findings?.emptySecrets ?? 0}
+                          selected={findingFilter === "Secret"}
+                          onSelect={setFindingFilter}
+                        />
+                        <FindingFilterChip
+                          filter="PersistentVolumeClaim"
+                          count={findings?.potentiallyUnusedPVCs ?? 0}
+                          selected={findingFilter === "PersistentVolumeClaim"}
+                          onSelect={setFindingFilter}
+                        />
+                        <FindingFilterChip
+                          filter="ServiceAccount"
+                          count={findings?.potentiallyUnusedServiceAccounts ?? 0}
+                          selected={findingFilter === "ServiceAccount"}
+                          onSelect={setFindingFilter}
+                        />
+                        <FindingFilterChip
+                          filter="ResourceQuota"
+                          count={findings?.quotaWarnings ?? 0}
+                          color={(findings?.quotaWarnings || 0) > 0 ? "warning" : "default"}
+                          selected={findingFilter === "ResourceQuota"}
+                          onSelect={setFindingFilter}
+                        />
+                      </Box>
+                    </Box>
+                    <Box sx={{ ...dashboardPanelSectionSx, flex: 1 }}>
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                        Showing {visibleFindings.length} {findingFilterLabel(findingFilter).toLowerCase()} finding
+                        {visibleFindings.length === 1 ? "" : "s"}.
+                      </Typography>
+                      {visibleFindings.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">
+                          No cached-scope findings for this filter.
+                        </Typography>
+                      ) : (
+                        <Table size="small">
+                          <TableBody>
+                            {visibleFindings.map((f) => (
+                              <TableRow key={`${f.kind}/${f.namespace || ""}/${f.name || ""}/${f.reason}`}>
+                                <TableCell sx={{ border: 0, py: 0.6, pl: 0, width: 118, verticalAlign: "top" }}>
+                                  <Chip size="small" color={severityColor(f.severity)} label={f.severity} />
+                                </TableCell>
+                                <TableCell sx={{ border: 0, py: 0.6, verticalAlign: "top" }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                    {f.kind} {findingTarget(f)}
+                                    <FindingHintIcons likelyCause={f.likelyCause} suggestedAction={f.suggestedAction} />
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {f.reason} {f.confidence ? `Confidence: ${f.confidence}.` : ""}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell sx={{ border: 0, py: 0.6, pr: 0, textAlign: "right", width: 110, verticalAlign: "top" }}>
+                                  {inspectTargetFromFinding(f) ? (
+                                    <Button
+                                      size="small"
+                                      variant="outlined"
+                                      onClick={() => setInspectTarget(inspectTargetFromFinding(f))}
+                                    >
+                                      Inspect
+                                    </Button>
+                                  ) : null}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </Box>
                   </Paper>
 
                   {hotspotsEnabled && (hotspots.topProblematicNamespaces?.length || hotspots.topPodRestartHotspots?.length) ? (
-                    <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Paper variant="outlined" sx={dashboardPanelSx}>
                       <PanelTitle
                         title="Hotspots"
                         hint="Compatibility view for restart-heavy pods and older problematic-resource scoring."
                       />
                       {hotspots.topProblematicNamespaces && hotspots.topProblematicNamespaces.length > 0 ? (
-                        <>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                        <Box sx={dashboardPanelSectionSx}>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.75 }}>
                             Namespaces with the most flagged resources
                           </Typography>
                           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
@@ -631,19 +659,21 @@ export default function DashboardView(props: Props) {
                               />
                             ))}
                           </Box>
-                        </>
+                        </Box>
                       ) : null}
                       {hotspots.topPodRestartHotspots && hotspots.topPodRestartHotspots.length > 0 ? (
-                        <>
-                          {hotspots.topProblematicNamespaces && hotspots.topProblematicNamespaces.length > 0 ? <Divider sx={{ my: 1.5 }} /> : null}
+                        <Box sx={{ ...dashboardPanelSectionSx, flex: 1 }}>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.75 }}>
+                            Top pod restart hotspots in cached scope
+                          </Typography>
                           <Table size="small">
                             <TableBody>
                               {hotspots.topPodRestartHotspots.slice(0, 8).map((h) => (
                                 <TableRow key={`${h.namespace}/${h.name}`}>
-                                  <TableCell sx={{ border: 0, py: 0.35, pl: 0 }}>
+                                  <TableCell sx={{ border: 0, py: 0.5, pl: 0, verticalAlign: "top" }}>
                                     {h.namespace}/{h.name}
                                   </TableCell>
-                                  <TableCell sx={{ border: 0, py: 0.35 }}>
+                                  <TableCell sx={{ border: 0, py: 0.5, verticalAlign: "top" }}>
                                     <Box sx={{ display: "flex", flexDirection: "column" }}>
                                       <Typography variant="body2">
                                         {h.restartRatePerDay ? formatRestartRatePerDay(h.restartRatePerDay) : `${h.restarts} restarts`}
@@ -654,10 +684,10 @@ export default function DashboardView(props: Props) {
                                       </Typography>
                                     </Box>
                                   </TableCell>
-                                  <TableCell sx={{ border: 0, py: 0.35 }}>
+                                  <TableCell sx={{ border: 0, py: 0.5, verticalAlign: "top", width: 92 }}>
                                     <Chip size="small" label={h.severity} color={h.severity === "high" ? "error" : "warning"} />
                                   </TableCell>
-                                  <TableCell sx={{ border: 0, py: 0.35, pr: 0, textAlign: "right" }}>
+                                  <TableCell sx={{ border: 0, py: 0.5, pr: 0, textAlign: "right", verticalAlign: "top", width: 110 }}>
                                     <Button
                                       size="small"
                                       variant="outlined"
@@ -670,7 +700,7 @@ export default function DashboardView(props: Props) {
                               ))}
                             </TableBody>
                           </Table>
-                        </>
+                        </Box>
                       ) : null}
                     </Paper>
                   ) : null}
