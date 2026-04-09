@@ -18,6 +18,7 @@ type ClusterDashboardSummary struct {
 	Hotspots      ClusterDashboardHotspotsPanel   `json:"hotspots"`
 	Findings      ClusterDashboardFindingsPanel   `json:"findings"`
 	WorkloadHints ClusterDashboardWorkloadHints   `json:"workloadHints"`
+	Dataplane     ClusterDashboardDataplaneStats  `json:"dataplane"`
 }
 
 type ClusterDashboardPlane struct {
@@ -172,6 +173,65 @@ type ClusterDashboardWorkloadHints struct {
 	AggregateDegradation        string                     `json:"aggregateDegradation,omitempty"`
 }
 
+type ClusterDashboardDataplaneStats struct {
+	StartedAt string                                  `json:"startedAt,omitempty"`
+	UptimeSec int64                                   `json:"uptimeSec"`
+	Requests  ClusterDashboardDataplaneRequestStats   `json:"requests"`
+	Cache     ClusterDashboardDataplaneCacheStats     `json:"cache"`
+	Traffic   ClusterDashboardDataplaneTrafficStats   `json:"traffic"`
+	Execution ClusterDashboardDataplaneExecutionStats `json:"execution"`
+	Sources   []ClusterDashboardDataplaneSourceStats  `json:"sources,omitempty"`
+	Kinds     []ClusterDashboardDataplaneKindStats    `json:"kinds,omitempty"`
+}
+
+type ClusterDashboardDataplaneRequestStats struct {
+	Total      uint64  `json:"total"`
+	FreshHits  uint64  `json:"freshHits"`
+	Misses     uint64  `json:"misses"`
+	Fetches    uint64  `json:"fetches"`
+	Errors     uint64  `json:"errors"`
+	HitRatio   float64 `json:"hitRatio"`
+	FetchRatio float64 `json:"fetchRatio"`
+}
+
+type ClusterDashboardDataplaneCacheStats struct {
+	SnapshotsStored     uint64 `json:"snapshotsStored"`
+	CurrentBytes        uint64 `json:"currentBytes"`
+	AvgBytesPerSnapshot uint64 `json:"avgBytesPerSnapshot"`
+}
+
+type ClusterDashboardDataplaneTrafficStats struct {
+	LiveBytes        uint64  `json:"liveBytes"`
+	HydratedBytes    uint64  `json:"hydratedBytes"`
+	AvgBytesPerFetch uint64  `json:"avgBytesPerFetch"`
+	RequestsPerMin   float64 `json:"requestsPerMin"`
+	LiveBytesPerMin  float64 `json:"liveBytesPerMin"`
+}
+
+type ClusterDashboardDataplaneExecutionStats struct {
+	Runs        uint64 `json:"runs"`
+	AvgRunMs    uint64 `json:"avgRunMs"`
+	MaxRunMs    uint64 `json:"maxRunMs"`
+	Preemptions uint64 `json:"preemptions"`
+}
+
+type ClusterDashboardDataplaneSourceStats struct {
+	Source    string `json:"source"`
+	Requests  uint64 `json:"requests"`
+	FreshHits uint64 `json:"freshHits"`
+	Misses    uint64 `json:"misses"`
+	Fetches   uint64 `json:"fetches"`
+	Errors    uint64 `json:"errors"`
+}
+
+type ClusterDashboardDataplaneKindStats struct {
+	Kind         string `json:"kind"`
+	Fetches      uint64 `json:"fetches"`
+	CurrentBytes uint64 `json:"currentBytes"`
+	Snapshots    uint64 `json:"snapshots"`
+	LiveBytes    uint64 `json:"liveBytes"`
+}
+
 // DashboardSummary builds a bounded cluster dashboard from cached snapshots.
 func (m *manager) DashboardSummary(ctx context.Context, clusterName string) ClusterDashboardSummary {
 	ctx = ContextWithWorkSourceIfUnset(ctx, WorkSourceDashboard)
@@ -227,6 +287,7 @@ func (m *manager) DashboardSummary(ctx context.Context, clusterName string) Clus
 	}
 
 	resPanel, hotPanel, findingsPanel, wh, cov := m.aggregateClusterDashboard(plane, nsNames, nsTotal, nsUnhealthy)
+	dpStats := dashboardDataplaneStatsFromSnapshots(m.stats.snapshot(), m.scheduler.StatsSnapshot(), time.Now().UTC())
 	if policy.NamespaceEnrichment.Enabled && policy.NamespaceEnrichment.Sweep.Enabled && len(nsSnap.Items) > 0 && !m.hasNamespaceEnrichmentInFlight(clusterName) {
 		m.BeginNamespaceListProgressiveEnrichment(clusterName, nsSnap.Items, NamespaceEnrichHints{})
 	}
@@ -274,6 +335,7 @@ func (m *manager) DashboardSummary(ctx context.Context, clusterName string) Clus
 		Hotspots:      hotPanel,
 		Findings:      findingsPanel,
 		WorkloadHints: wh,
+		Dataplane:     dpStats,
 	}
 }
 
@@ -296,4 +358,114 @@ func formatSnapshotTime(t time.Time) string {
 		return ""
 	}
 	return t.UTC().Format(time.RFC3339Nano)
+}
+
+func dashboardDataplaneStatsFromSnapshots(session DataplaneSessionStatsSnapshot, runs SchedulerRunStatsSnapshot, now time.Time) ClusterDashboardDataplaneStats {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	uptimeMin := now.Sub(session.StartedAt).Minutes()
+	if session.StartedAt.IsZero() || uptimeMin < 0 {
+		uptimeMin = 0
+	}
+	uptimeSec := int64(0)
+	if !session.StartedAt.IsZero() {
+		uptimeSec = int64(now.Sub(session.StartedAt).Seconds())
+		if uptimeSec < 0 {
+			uptimeSec = 0
+		}
+	}
+
+	var totalRunCount uint64
+	var totalRunDuration time.Duration
+	var maxRun time.Duration
+	for _, p := range runs.ByPriority {
+		totalRunCount += p.Runs
+		totalRunDuration += p.Total
+		if p.Max > maxRun {
+			maxRun = p.Max
+		}
+	}
+
+	out := ClusterDashboardDataplaneStats{
+		StartedAt: formatSnapshotTime(session.StartedAt),
+		UptimeSec: uptimeSec,
+		Requests: ClusterDashboardDataplaneRequestStats{
+			Total:      session.RequestsTotal,
+			FreshHits:  session.FreshHits,
+			Misses:     session.Misses,
+			Fetches:    session.FetchAttempts,
+			Errors:     session.FetchErrors,
+			HitRatio:   ratioPercent(session.FreshHits, session.RequestsTotal),
+			FetchRatio: ratioPercent(session.FetchAttempts, session.RequestsTotal),
+		},
+		Cache: ClusterDashboardDataplaneCacheStats{
+			SnapshotsStored:     session.CurrentCells,
+			CurrentBytes:        session.CurrentBytes,
+			AvgBytesPerSnapshot: avgUint(session.CurrentBytes, session.CurrentCells),
+		},
+		Traffic: ClusterDashboardDataplaneTrafficStats{
+			LiveBytes:        session.LiveBytes,
+			HydratedBytes:    session.HydratedBytes,
+			AvgBytesPerFetch: avgUint(session.LiveBytes, session.FetchAttempts),
+			RequestsPerMin:   ratePerMinute(session.RequestsTotal, uptimeMin),
+			LiveBytesPerMin:  ratePerMinute(session.LiveBytes, uptimeMin),
+		},
+		Execution: ClusterDashboardDataplaneExecutionStats{
+			Runs:        totalRunCount,
+			AvgRunMs:    durationAvgMs(totalRunDuration, totalRunCount),
+			MaxRunMs:    uint64(maxRun.Milliseconds()),
+			Preemptions: runs.Preemptions,
+		},
+		Sources: make([]ClusterDashboardDataplaneSourceStats, 0, len(session.BySource)),
+		Kinds:   make([]ClusterDashboardDataplaneKindStats, 0, len(session.ByKind)),
+	}
+	for _, src := range session.BySource {
+		out.Sources = append(out.Sources, ClusterDashboardDataplaneSourceStats{
+			Source:    src.Source,
+			Requests:  src.Requests,
+			FreshHits: src.FreshHits,
+			Misses:    src.Misses,
+			Fetches:   src.FetchAttempts,
+			Errors:    src.FetchErrors,
+		})
+	}
+	for _, kind := range session.ByKind {
+		out.Kinds = append(out.Kinds, ClusterDashboardDataplaneKindStats{
+			Kind:         string(kind.Kind),
+			Fetches:      kind.FetchAttempts,
+			CurrentBytes: kind.CurrentBytes,
+			Snapshots:    kind.CurrentCells,
+			LiveBytes:    kind.LiveBytes,
+		})
+	}
+	return out
+}
+
+func ratioPercent(v uint64, total uint64) float64 {
+	if total == 0 {
+		return 0
+	}
+	return float64(v) * 100 / float64(total)
+}
+
+func ratePerMinute(v uint64, minutes float64) float64 {
+	if minutes <= 0 {
+		return 0
+	}
+	return float64(v) / minutes
+}
+
+func avgUint(v uint64, total uint64) uint64 {
+	if total == 0 {
+		return 0
+	}
+	return v / total
+}
+
+func durationAvgMs(total time.Duration, runs uint64) uint64 {
+	if runs == 0 {
+		return 0
+	}
+	return uint64(total.Milliseconds()) / runs
 }

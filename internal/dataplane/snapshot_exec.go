@@ -64,8 +64,15 @@ func executeClusterSnapshot[I any](
 	store *snapshotStore[Snapshot[I]],
 	desc clusterSnapshotDescriptor[I],
 ) (Snapshot[I], error) {
+	source := workSourceOrAPI(ctx)
 	if cached, ok := store.getFresh(desc.ttl); ok {
+		if p.stats != nil {
+			p.stats.recordRequest(source, desc.kind, true)
+		}
 		return cached, nil
+	}
+	if p.stats != nil {
+		p.stats.recordRequest(source, desc.kind, false)
 	}
 
 	var persisted Snapshot[I]
@@ -87,10 +94,16 @@ func executeClusterSnapshot[I any](
 
 	var out Snapshot[I]
 	runErr := sched.Run(ctx, prio, key, func(runCtx context.Context) error {
+		if p.stats != nil {
+			p.stats.recordFetchAttempt(source, desc.kind)
+		}
 		now := time.Now().UTC()
 		if clients == nil {
 			out.Err = nil
 			out.Meta = p.snapshotMetaUnknown(now)
+			if p.stats != nil {
+				p.stats.recordFetchResult(source, desc.kind, 0, nil)
+			}
 			return nil
 		}
 
@@ -99,6 +112,9 @@ func executeClusterSnapshot[I any](
 			n := NormalizeError(err)
 			out.Err = &n
 			out.Meta = p.snapshotMetaUnknown(now)
+			if p.stats != nil {
+				p.stats.recordFetchResult(source, desc.kind, 0, err)
+			}
 			return err
 		}
 
@@ -109,6 +125,9 @@ func executeClusterSnapshot[I any](
 			out.Items = nil
 			out.Meta = p.snapshotMetaCold(now)
 			p.capRegistry.LearnReadResult(p.name, desc.capGroup, desc.capResource, "", "list", desc.capScope, err)
+			if p.stats != nil {
+				p.stats.recordFetchResult(source, desc.kind, 0, err)
+			}
 			return err
 		}
 
@@ -116,6 +135,9 @@ func executeClusterSnapshot[I any](
 		out.Items = items
 		out.Meta = p.snapshotMetaHot(now)
 		p.capRegistry.LearnReadResult(p.name, desc.capGroup, desc.capResource, "", "list", desc.capScope, nil)
+		if p.stats != nil {
+			p.stats.recordFetchResult(source, desc.kind, estimateSnapshotPayloadBytes(out), nil)
+		}
 		return nil
 	})
 
@@ -143,8 +165,15 @@ func executeNamespacedSnapshot[I any](
 	store *namespacedSnapshotStore[Snapshot[I]],
 	desc namespacedSnapshotDescriptor[I],
 ) (Snapshot[I], error) {
+	source := workSourceOrAPI(ctx)
 	if cached, ok := store.getFresh(namespace, desc.ttl); ok {
+		if p.stats != nil {
+			p.stats.recordRequest(source, desc.kind, true)
+		}
 		return cached, nil
+	}
+	if p.stats != nil {
+		p.stats.recordRequest(source, desc.kind, false)
 	}
 
 	var persisted Snapshot[I]
@@ -166,10 +195,16 @@ func executeNamespacedSnapshot[I any](
 
 	var out Snapshot[I]
 	runErr := sched.Run(ctx, prio, key, func(runCtx context.Context) error {
+		if p.stats != nil {
+			p.stats.recordFetchAttempt(source, desc.kind)
+		}
 		now := time.Now().UTC()
 		if clients == nil {
 			out.Err = nil
 			out.Meta = p.snapshotMetaUnknown(now)
+			if p.stats != nil {
+				p.stats.recordFetchResult(source, desc.kind, 0, nil)
+			}
 			return nil
 		}
 
@@ -178,6 +213,9 @@ func executeNamespacedSnapshot[I any](
 			n := NormalizeError(err)
 			out.Err = &n
 			out.Meta = p.snapshotMetaUnknown(now)
+			if p.stats != nil {
+				p.stats.recordFetchResult(source, desc.kind, 0, err)
+			}
 			return err
 		}
 
@@ -188,6 +226,9 @@ func executeNamespacedSnapshot[I any](
 			out.Items = nil
 			out.Meta = p.snapshotMetaCold(now)
 			p.capRegistry.LearnReadResult(p.name, desc.capGroup, desc.capResource, namespace, "list", desc.capScope, err)
+			if p.stats != nil {
+				p.stats.recordFetchResult(source, desc.kind, 0, err)
+			}
 			return err
 		}
 
@@ -195,6 +236,9 @@ func executeNamespacedSnapshot[I any](
 		out.Items = items
 		out.Meta = p.snapshotMetaHot(now)
 		p.capRegistry.LearnReadResult(p.name, desc.capGroup, desc.capResource, namespace, "list", desc.capScope, nil)
+		if p.stats != nil {
+			p.stats.recordFetchResult(source, desc.kind, estimateSnapshotPayloadBytes(out), nil)
+		}
 		return nil
 	})
 

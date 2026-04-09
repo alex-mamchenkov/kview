@@ -105,7 +105,7 @@ func TestMergeNamespaceRowIntoIgnoresListOnlyPatch(t *testing.T) {
 }
 
 func TestBuildCachedNamespaceListRowProjection_QuotaAndLimits(t *testing.T) {
-	plane := newClusterPlane("ctx", ProfileFocused, DiscoveryModeTargeted, ObservationScope{}, nil, nil)
+	plane := newClusterPlane("ctx", ProfileFocused, DiscoveryModeTargeted, ObservationScope{}, nil, nil, nil)
 	ratio := 0.91
 	setNamespacedSnapshot(&plane.rqStore, "app", ResourceQuotasSnapshot{
 		Meta: SnapshotMetadata{ObservedAt: time.Now().UTC()},
@@ -133,7 +133,7 @@ func TestMergeCachedNamespaceRowProjectionOverlaysItems(t *testing.T) {
 	m := &manager{
 		planes: map[string]*clusterPlane{},
 	}
-	plane := newClusterPlane("ctx", ProfileFocused, DiscoveryModeTargeted, ObservationScope{}, nil, nil)
+	plane := newClusterPlane("ctx", ProfileFocused, DiscoveryModeTargeted, ObservationScope{}, nil, nil, nil)
 	m.planes["ctx"] = plane
 
 	setNamespacedSnapshot(&plane.podsStore, "app", PodsSnapshot{

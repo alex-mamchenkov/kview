@@ -10,9 +10,16 @@ type observedAtGetter interface {
 }
 
 type snapshotStore[T observedAtGetter] struct {
-	mu   sync.RWMutex
-	rev  uint64
-	snap T
+	mu        sync.RWMutex
+	rev       uint64
+	snap      T
+	telemetry snapshotStoreTelemetry
+}
+
+type snapshotStoreTelemetry struct {
+	stats   *dataplaneSessionStats
+	cluster string
+	kind    ResourceKind
 }
 
 func (s *snapshotStore[T]) getFresh(ttl time.Duration) (T, bool) {
@@ -34,6 +41,7 @@ func (s *snapshotStore[T]) set(snap T) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.snap = snap
+	s.telemetry.recordCacheWrite("", snap)
 }
 
 // setClusterSnapshot stores a cluster-wide snapshot and bumps the monotonic revision for that list.
@@ -43,6 +51,7 @@ func setClusterSnapshot[I any](s *snapshotStore[Snapshot[I]], snap Snapshot[I]) 
 	s.rev++
 	snap.Meta.Revision = s.rev
 	s.snap = snap
+	s.telemetry.recordCacheWrite("", snap)
 }
 
 func peekClusterSnapshot[I any](s *snapshotStore[Snapshot[I]]) (snap Snapshot[I], ok bool) {
@@ -55,13 +64,22 @@ func peekClusterSnapshot[I any](s *snapshotStore[Snapshot[I]]) (snap Snapshot[I]
 }
 
 type namespacedSnapshotStore[T observedAtGetter] struct {
-	mu    sync.RWMutex
-	snaps map[string]T
-	nsRev map[string]uint64
+	mu        sync.RWMutex
+	snaps     map[string]T
+	nsRev     map[string]uint64
+	telemetry snapshotStoreTelemetry
 }
 
 func newNamespacedSnapshotStore[T observedAtGetter]() namespacedSnapshotStore[T] {
 	return namespacedSnapshotStore[T]{snaps: make(map[string]T)}
+}
+
+func (s *snapshotStore[T]) configureTelemetry(stats *dataplaneSessionStats, cluster string, kind ResourceKind) {
+	s.telemetry = snapshotStoreTelemetry{stats: stats, cluster: cluster, kind: kind}
+}
+
+func (s *namespacedSnapshotStore[T]) configureTelemetry(stats *dataplaneSessionStats, cluster string, kind ResourceKind) {
+	s.telemetry = snapshotStoreTelemetry{stats: stats, cluster: cluster, kind: kind}
 }
 
 func (s *namespacedSnapshotStore[T]) getFresh(namespace string, ttl time.Duration) (T, bool) {
@@ -101,6 +119,7 @@ func (s *namespacedSnapshotStore[T]) set(namespace string, snap T) {
 		s.snaps = make(map[string]T)
 	}
 	s.snaps[namespace] = snap
+	s.telemetry.recordCacheWrite(namespace, snap)
 }
 
 // setNamespacedSnapshot stores a per-namespace snapshot and bumps revision for that namespace key.
@@ -116,6 +135,7 @@ func setNamespacedSnapshot[I any](s *namespacedSnapshotStore[Snapshot[I]], names
 	s.nsRev[namespace]++
 	snap.Meta.Revision = s.nsRev[namespace]
 	s.snaps[namespace] = snap
+	s.telemetry.recordCacheWrite(namespace, snap)
 }
 
 func clearNamespacedSnapshot[I any](s *namespacedSnapshotStore[Snapshot[I]], namespace string) {
@@ -129,6 +149,7 @@ func clearNamespacedSnapshot[I any](s *namespacedSnapshotStore[Snapshot[I]], nam
 	}
 	s.nsRev[namespace]++
 	delete(s.snaps, namespace)
+	s.telemetry.recordCacheDelete(namespace)
 }
 
 func peekNamespacedSnapshot[I any](s *namespacedSnapshotStore[Snapshot[I]], namespace string) (snap Snapshot[I], ok bool) {
@@ -152,4 +173,18 @@ func peekAllNamespacedSnapshots[I any](s *namespacedSnapshotStore[Snapshot[I]]) 
 		out[namespace] = snap
 	}
 	return out
+}
+
+func (t snapshotStoreTelemetry) recordCacheWrite(namespace string, snap any) {
+	if t.stats == nil || t.kind == "" {
+		return
+	}
+	t.stats.recordCacheWrite(t.cluster, t.kind, namespace, estimateSnapshotPayloadBytes(snap))
+}
+
+func (t snapshotStoreTelemetry) recordCacheDelete(namespace string) {
+	if t.stats == nil || t.kind == "" {
+		return
+	}
+	t.stats.recordCacheDelete(t.cluster, t.kind, namespace)
 }

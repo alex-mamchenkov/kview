@@ -186,6 +186,7 @@ type manager struct {
 
 	scheduler *workScheduler
 	clients   ClientsProvider
+	stats     *dataplaneSessionStats
 
 	policyMu sync.RWMutex
 	policy   DataplanePolicy
@@ -235,6 +236,7 @@ func NewManager(cfg ManagerConfig) DataPlaneManager {
 		planes:               map[string]*clusterPlane{},
 		scheduler:            sched,
 		clients:              cp,
+		stats:                newDataplaneSessionStats(time.Now().UTC()),
 		policy:               policy,
 		nsEnrich:             newNsEnrichmentCoordinator(),
 		nsSweepLast:          map[string]map[string]time.Time{},
@@ -349,7 +351,7 @@ func (m *manager) PlaneForCluster(_ context.Context, clusterName string) (Cluste
 		Namespaces:    nil,
 		ResourceKinds: nil,
 	}
-	p := newClusterPlane(clusterName, m.defaultProfile, m.defaultDiscoveryMode, scope, m.Policy, m.currentPersistence)
+	p := newClusterPlane(clusterName, m.defaultProfile, m.defaultDiscoveryMode, scope, m.Policy, m.currentPersistence, m.stats)
 	m.planes[clusterName] = p
 	policy := m.Policy()
 	if policy.Persistence.Enabled {
@@ -400,16 +402,17 @@ type clusterPlane struct {
 
 	policy      func() DataplanePolicy
 	persistence func() snapshotPersistence
+	stats       *dataplaneSessionStats
 }
 
-func newClusterPlane(name string, profile Profile, mode DiscoveryMode, scope ObservationScope, policy func() DataplanePolicy, persistence func() snapshotPersistence) *clusterPlane {
+func newClusterPlane(name string, profile Profile, mode DiscoveryMode, scope ObservationScope, policy func() DataplanePolicy, persistence func() snapshotPersistence, stats *dataplaneSessionStats) *clusterPlane {
 	if policy == nil {
 		policy = func() DataplanePolicy { return DefaultDataplanePolicy() }
 	}
 	if persistence == nil {
 		persistence = func() snapshotPersistence { return nil }
 	}
-	return &clusterPlane{
+	p := &clusterPlane{
 		name:              name,
 		profile:           profile,
 		discoveryMode:     mode,
@@ -436,7 +439,29 @@ func newClusterPlane(name string, profile Profile, mode DiscoveryMode, scope Obs
 		lrStore:           newNamespacedSnapshotStore[LimitRangesSnapshot](),
 		policy:            policy,
 		persistence:       persistence,
+		stats:             stats,
 	}
+	p.nsStore.configureTelemetry(stats, name, ResourceKindNamespaces)
+	p.nodesStore.configureTelemetry(stats, name, ResourceKindNodes)
+	p.podsStore.configureTelemetry(stats, name, ResourceKindPods)
+	p.depsStore.configureTelemetry(stats, name, ResourceKindDeployments)
+	p.svcsStore.configureTelemetry(stats, name, ResourceKindServices)
+	p.ingStore.configureTelemetry(stats, name, ResourceKindIngresses)
+	p.pvcsStore.configureTelemetry(stats, name, ResourceKindPVCs)
+	p.cmsStore.configureTelemetry(stats, name, ResourceKindConfigMaps)
+	p.secsStore.configureTelemetry(stats, name, ResourceKindSecrets)
+	p.saStore.configureTelemetry(stats, name, ResourceKindServiceAccounts)
+	p.rolesStore.configureTelemetry(stats, name, ResourceKindRoles)
+	p.roleBindingsStore.configureTelemetry(stats, name, ResourceKindRoleBindings)
+	p.helmReleasesStore.configureTelemetry(stats, name, ResourceKindHelmReleases)
+	p.dsStore.configureTelemetry(stats, name, ResourceKindDaemonSets)
+	p.stsStore.configureTelemetry(stats, name, ResourceKindStatefulSets)
+	p.rsStore.configureTelemetry(stats, name, ResourceKindReplicaSets)
+	p.jobsStore.configureTelemetry(stats, name, ResourceKindJobs)
+	p.cjStore.configureTelemetry(stats, name, ResourceKindCronJobs)
+	p.rqStore.configureTelemetry(stats, name, ResourceKindResourceQuotas)
+	p.lrStore.configureTelemetry(stats, name, ResourceKindLimitRanges)
+	return p
 }
 
 func (p *clusterPlane) ClusterName() string {
@@ -559,6 +584,9 @@ func hydratePersistedClusterSnapshotInto[I any](store *snapshotStore[Snapshot[I]
 		return err
 	}
 	if markPersistedSnapshot(&snap, maxAge) {
+		if store.telemetry.stats != nil {
+			store.telemetry.stats.recordHydration(store.telemetry.kind, len(payload))
+		}
 		setClusterSnapshot(store, snap)
 	}
 	return nil
@@ -573,6 +601,9 @@ func hydratePersistedNamespacedSnapshotInto[I any](store *namespacedSnapshotStor
 		return err
 	}
 	if markPersistedSnapshot(&snap, maxAge) {
+		if store.telemetry.stats != nil {
+			store.telemetry.stats.recordHydration(store.telemetry.kind, len(payload))
+		}
 		setNamespacedSnapshot(store, namespace, snap)
 	}
 	return nil

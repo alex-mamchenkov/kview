@@ -93,6 +93,36 @@ function formatAgeShort(ageSec?: number): string {
   return `${(ageSec / 86400).toFixed(1)}d`;
 }
 
+function formatBytes(value?: number): string {
+  if (value == null || !Number.isFinite(value) || value <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let next = value;
+  let idx = 0;
+  while (next >= 1024 && idx < units.length - 1) {
+    next /= 1024;
+    idx++;
+  }
+  return `${next >= 100 || idx === 0 ? Math.round(next) : next.toFixed(1)} ${units[idx]}`;
+}
+
+function formatRate(value?: number, suffix = "/min"): string {
+  if (value == null || !Number.isFinite(value) || value <= 0) return `0${suffix}`;
+  if (value >= 100) return `${Math.round(value)}${suffix}`;
+  if (value >= 10) return `${value.toFixed(1)}${suffix}`;
+  return `${value.toFixed(2)}${suffix}`;
+}
+
+function formatByteRate(value?: number): string {
+  if (value == null || !Number.isFinite(value) || value <= 0) return "0 B/min";
+  return `${formatBytes(value)}/min`;
+}
+
+function formatPercent(value?: number): string {
+  if (value == null || !Number.isFinite(value) || value <= 0) return "0%";
+  if (value >= 100) return "100%";
+  return `${value.toFixed(1)}%`;
+}
+
 function InfoHint({ title }: { title: string }) {
   return (
     <Tooltip title={title}>
@@ -183,6 +213,116 @@ function MetricCard({
         {value}
       </Typography>
     </Paper>
+  );
+}
+
+type BarSegment = {
+  label: string;
+  value: number;
+  color: string;
+};
+
+function StackedMetricBar({ segments }: { segments: BarSegment[] }) {
+  const total = segments.reduce((sum, segment) => sum + Math.max(0, segment.value || 0), 0);
+  if (total <= 0) {
+    return (
+      <Box
+        sx={{
+          height: 18,
+          borderRadius: 999,
+          border: "1px solid var(--panel-border)",
+          backgroundColor: "rgba(0,0,0,0.05)",
+        }}
+      />
+    );
+  }
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        width: "100%",
+        height: 18,
+        overflow: "hidden",
+        borderRadius: 999,
+        border: "1px solid var(--panel-border)",
+        backgroundColor: "rgba(0,0,0,0.04)",
+      }}
+    >
+      {segments
+        .filter((segment) => segment.value > 0)
+        .map((segment) => (
+          <Tooltip key={segment.label} title={`${segment.label}: ${segment.value}`}>
+            <Box
+              sx={{
+                width: `${(segment.value / total) * 100}%`,
+                backgroundColor: segment.color,
+                minWidth: segment.value > 0 ? 8 : 0,
+              }}
+            />
+          </Tooltip>
+        ))}
+    </Box>
+  );
+}
+
+function MetricGauge({
+  value,
+  color,
+  trackColor = "rgba(0,0,0,0.08)",
+}: {
+  value: number;
+  color: string;
+  trackColor?: string;
+}) {
+  const clamped = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+  return (
+    <Box
+      sx={{
+        position: "relative",
+        width: "100%",
+        height: 18,
+        borderRadius: 999,
+        overflow: "hidden",
+        border: "1px solid var(--panel-border)",
+        backgroundColor: trackColor,
+      }}
+    >
+      <Box
+        sx={{
+          width: `${clamped}%`,
+          height: "100%",
+          borderRadius: 999,
+          backgroundColor: color,
+        }}
+      />
+    </Box>
+  );
+}
+
+function DataplaneVisualRow({
+  label,
+  hint,
+  visual,
+  summary,
+}: {
+  label: string;
+  hint?: string;
+  visual: React.ReactNode;
+  summary: React.ReactNode;
+}) {
+  return (
+    <TableRow>
+      <TableCell sx={{ width: "24%", py: 0.8, pl: 0, fontWeight: 600, border: 0 }}>
+        <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+          <span>{label}</span>
+          {hint ? <InfoHint title={hint} /> : null}
+        </Box>
+      </TableCell>
+      <TableCell sx={{ width: "46%", py: 0.8, border: 0 }}>{visual}</TableCell>
+      <TableCell sx={{ width: "30%", py: 0.8, pr: 0, textAlign: "right", whiteSpace: "nowrap", border: 0 }}>
+        {summary}
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -444,7 +584,7 @@ export default function DashboardView(props: Props) {
       {!loading && !err && data?.item && (
         <Box sx={{ px: 2, display: "flex", flexDirection: "column", gap: 2 }}>
           {(() => {
-            const { plane, visibility, coverage, resources, hotspots, findings } = data.item;
+            const { plane, visibility, coverage, resources, hotspots, findings, dataplane } = data.item;
             const ns = visibility.namespaces;
             const nodes = visibility.nodes;
             const cov = coverage;
@@ -797,6 +937,106 @@ export default function DashboardView(props: Props) {
                     </Table>
                   </Paper>
                 </Box>
+
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <PanelTitle
+                    title="Dataplane Stats"
+                    hint="Session-lifetime dataplane metrics since app startup. This tracks dataplane snapshot traffic and cache state only, not direct kube reads outside dataplane."
+                  />
+                  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mb: 1 }}>
+                    <Chip size="small" variant="outlined" label={`Uptime ${formatAgeShort(dataplane.uptimeSec) || "0m"}`} />
+                    <Chip size="small" variant="outlined" label={`Requests ${formatRate(dataplane.traffic.requestsPerMin)}`} />
+                    <Chip size="small" variant="outlined" label={`Traffic ${formatByteRate(dataplane.traffic.liveBytesPerMin)}`} />
+                    <Chip size="small" variant="outlined" label={`Avg fetch ${formatBytes(dataplane.traffic.avgBytesPerFetch)}`} />
+                  </Box>
+                  <Box sx={dashboardPanelSectionSx}>
+                    <Table size="small">
+                      <TableBody>
+                        <DataplaneVisualRow
+                          label="Requests"
+                          hint="All dataplane snapshot requests since app startup. Green is served from fresh cache; yellow needed a fetch."
+                          visual={
+                            <StackedMetricBar
+                              segments={[
+                                { label: "Fresh Hit", value: dataplane.requests.freshHits, color: "#2e7d32" },
+                                { label: "Miss", value: dataplane.requests.misses, color: "#ed6c02" },
+                              ]}
+                            />
+                          }
+                          summary={`${formatPercent(dataplane.requests.hitRatio)} hit · ${dataplane.requests.freshHits}/${dataplane.requests.total} req`}
+                        />
+                        <DataplaneVisualRow
+                          label="Traffic Mix"
+                          hint="Payload bytes handled by dataplane. Green is restored from hydrated cache; yellow is newly fetched live payload."
+                          visual={
+                            <StackedMetricBar
+                              segments={[
+                                { label: "Hydrated Bytes", value: dataplane.traffic.hydratedBytes, color: "#2e7d32" },
+                                { label: "Live Bytes", value: dataplane.traffic.liveBytes, color: "#ed6c02" },
+                              ]}
+                            />
+                          }
+                          summary={`${formatBytes(dataplane.traffic.liveBytes)} live · ${formatBytes(dataplane.traffic.hydratedBytes)} restored`}
+                        />
+                        <DataplaneVisualRow
+                          label="Cache Footprint"
+                          hint="Current cached snapshot bytes compared with session live payload volume. Green is retained cache bytes; yellow is live bytes fetched this session."
+                          visual={
+                            <StackedMetricBar
+                              segments={[
+                                { label: "Cache Bytes", value: dataplane.cache.currentBytes, color: "#2e7d32" },
+                                { label: "Session Live Bytes", value: dataplane.traffic.liveBytes, color: "#ed6c02" },
+                              ]}
+                            />
+                          }
+                          summary={`${dataplane.cache.snapshotsStored} snapshots · ${formatBytes(dataplane.cache.avgBytesPerSnapshot)} avg`}
+                        />
+                        <DataplaneVisualRow
+                          label="Execution"
+                          hint="Scheduler run-time spread. Green is average run duration; yellow is the remaining distance up to the slowest observed run."
+                          visual={
+                            <Tooltip title={`Avg ${dataplane.execution.avgRunMs}ms of max ${dataplane.execution.maxRunMs}ms`}>
+                              <Box>
+                                <StackedMetricBar
+                                  segments={[
+                                    { label: "Average Run", value: dataplane.execution.avgRunMs, color: "#2e7d32" },
+                                    {
+                                      label: "Headroom To Max",
+                                      value: Math.max(0, dataplane.execution.maxRunMs - dataplane.execution.avgRunMs),
+                                      color: "#ed6c02",
+                                    },
+                                  ]}
+                                />
+                              </Box>
+                            </Tooltip>
+                          }
+                          summary={`${dataplane.execution.avgRunMs}ms avg · ${dataplane.execution.maxRunMs}ms max · ${dataplane.execution.preemptions} preempt`}
+                        />
+                        {dataplane.sources?.map((source) => (
+                          <DataplaneVisualRow
+                            key={source.source}
+                            label={`${source.source.charAt(0).toUpperCase()}${source.source.slice(1)} Hit/Miss`}
+                            hint={`Dataplane requests attributed to ${source.source}. Green is requests satisfied without a new fetch; yellow needed a fetch; red ended in error.`}
+                            visual={
+                              <StackedMetricBar
+                                segments={[
+                                  {
+                                    label: `${source.source} Hit`,
+                                    value: Math.max(0, source.requests - source.fetches),
+                                    color: "#2e7d32",
+                                  },
+                                  { label: `${source.source} Fetch`, value: source.fetches, color: "#ed6c02" },
+                                  { label: `${source.source} Error`, value: source.errors, color: "#d32f2f" },
+                                ]}
+                              />
+                            }
+                            summary={`${formatPercent(source.requests > 0 ? ((source.requests - source.fetches) * 100) / source.requests : 0)} hit · ${Math.max(0, source.requests - source.fetches)}/${source.requests} req`}
+                          />
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </Box>
+                </Paper>
               </>
             );
           })()}

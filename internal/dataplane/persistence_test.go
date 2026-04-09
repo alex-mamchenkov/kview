@@ -131,7 +131,7 @@ func TestExecuteNamespacedSnapshotUsesPersistedFallbackOnLiveFailure(t *testing.
 		return policy
 	}, func() snapshotPersistence {
 		return store
-	})
+	}, nil)
 
 	snap, err := plane.PodsSnapshot(context.Background(), newWorkScheduler(1), persistenceFailingClientsProvider{}, "app", WorkPriorityCritical)
 	if err == nil {

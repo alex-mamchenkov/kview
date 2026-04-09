@@ -311,6 +311,52 @@ export type ApiDashboardClusterResponse = {
       aggregateFreshness?: string;
       aggregateDegradation?: string;
     };
+    dataplane: {
+      startedAt?: string;
+      uptimeSec: number;
+      requests: {
+        total: number;
+        freshHits: number;
+        misses: number;
+        fetches: number;
+        errors: number;
+        hitRatio: number;
+        fetchRatio: number;
+      };
+      cache: {
+        snapshotsStored: number;
+        currentBytes: number;
+        avgBytesPerSnapshot: number;
+      };
+      traffic: {
+        liveBytes: number;
+        hydratedBytes: number;
+        avgBytesPerFetch: number;
+        requestsPerMin: number;
+        liveBytesPerMin: number;
+      };
+      execution: {
+        runs: number;
+        avgRunMs: number;
+        maxRunMs: number;
+        preemptions: number;
+      };
+      sources?: Array<{
+        source: string;
+        requests: number;
+        freshHits: number;
+        misses: number;
+        fetches: number;
+        errors: number;
+      }>;
+      kinds?: Array<{
+        kind: string;
+        fetches: number;
+        currentBytes: number;
+        snapshots: number;
+        liveBytes: number;
+      }>;
+    };
   };
 };
 

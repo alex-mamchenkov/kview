@@ -11,6 +11,7 @@ import {
   TableHead,
   TableRow,
   Tabs,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import { apiGet } from "../../../api";
@@ -291,6 +292,7 @@ function kvRowsFromMap(values?: Record<string, string>): Array<{ label: string; 
 }
 
 type HealthBarSegment = {
+  label: string;
   count: number;
   color: string;
 };
@@ -322,7 +324,15 @@ function stackedHealthBar(segments: HealthBarSegment[]) {
     >
       {segments.map((segment, index) =>
         segment.count > 0 ? (
-          <Box key={`${segment.color}-${index}`} sx={{ width: `${(segment.count / total) * 100}%`, backgroundColor: segment.color }} />
+          <Tooltip key={`${segment.label}-${index}`} title={`${segment.label}: ${segment.count}`}>
+            <Box
+              sx={{
+                width: `${(segment.count / total) * 100}%`,
+                backgroundColor: segment.color,
+                minWidth: segment.count > 0 ? 6 : 0,
+              }}
+            />
+          </Tooltip>
         ) : null
       )}
     </Box>
@@ -564,11 +574,11 @@ export default function NamespaceDrawer(props: {
                               <TableCell sx={{ fontWeight: 600 }}>Pods</TableCell>
                               <TableCell>
                                 {stackedHealthBar([
-                                  { count: podHealth.running, color: "#2e7d32" },
-                                  { count: podHealth.pending, color: "#ed6c02" },
-                                  { count: podHealth.failed, color: "#d32f2f" },
-                                  { count: podHealth.succeeded, color: "#607d8b" },
-                                  { count: podHealth.unknown, color: "#8e24aa" },
+                                  { label: "Running", count: podHealth.running, color: "#2e7d32" },
+                                  { label: "Pending", count: podHealth.pending, color: "#ed6c02" },
+                                  { label: "Failed", count: podHealth.failed, color: "#d32f2f" },
+                                  { label: "Succeeded", count: podHealth.succeeded, color: "#607d8b" },
+                                  { label: "Unknown", count: podHealth.unknown, color: "#8e24aa" },
                                 ])}
                               </TableCell>
                               <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
@@ -581,9 +591,9 @@ export default function NamespaceDrawer(props: {
                               <TableCell sx={{ fontWeight: 600 }}>Deployments</TableCell>
                               <TableCell>
                                 {stackedHealthBar([
-                                  { count: workloadByKind.deployments.healthy, color: "#2e7d32" },
-                                  { count: workloadByKind.deployments.progressing, color: "#ed6c02" },
-                                  { count: workloadByKind.deployments.degraded, color: "#d32f2f" },
+                                  { label: "Healthy", count: workloadByKind.deployments.healthy, color: "#2e7d32" },
+                                  { label: "Progressing", count: workloadByKind.deployments.progressing, color: "#ed6c02" },
+                                  { label: "Degraded", count: workloadByKind.deployments.degraded, color: "#d32f2f" },
                                 ])}
                               </TableCell>
                               <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
@@ -596,9 +606,9 @@ export default function NamespaceDrawer(props: {
                               <TableCell sx={{ fontWeight: 600 }}>DaemonSets</TableCell>
                               <TableCell>
                                 {stackedHealthBar([
-                                  { count: workloadByKind.daemonSets.healthy, color: "#2e7d32" },
-                                  { count: workloadByKind.daemonSets.progressing, color: "#ed6c02" },
-                                  { count: workloadByKind.daemonSets.degraded, color: "#d32f2f" },
+                                  { label: "Healthy", count: workloadByKind.daemonSets.healthy, color: "#2e7d32" },
+                                  { label: "Progressing", count: workloadByKind.daemonSets.progressing, color: "#ed6c02" },
+                                  { label: "Degraded", count: workloadByKind.daemonSets.degraded, color: "#d32f2f" },
                                 ])}
                               </TableCell>
                               <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
@@ -611,9 +621,9 @@ export default function NamespaceDrawer(props: {
                               <TableCell sx={{ fontWeight: 600 }}>StatefulSets</TableCell>
                               <TableCell>
                                 {stackedHealthBar([
-                                  { count: workloadByKind.statefulSets.healthy, color: "#2e7d32" },
-                                  { count: workloadByKind.statefulSets.progressing, color: "#ed6c02" },
-                                  { count: workloadByKind.statefulSets.degraded, color: "#d32f2f" },
+                                  { label: "Healthy", count: workloadByKind.statefulSets.healthy, color: "#2e7d32" },
+                                  { label: "Progressing", count: workloadByKind.statefulSets.progressing, color: "#ed6c02" },
+                                  { label: "Degraded", count: workloadByKind.statefulSets.degraded, color: "#d32f2f" },
                                 ])}
                               </TableCell>
                               <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
@@ -626,9 +636,9 @@ export default function NamespaceDrawer(props: {
                               <TableCell sx={{ fontWeight: 600 }}>Jobs</TableCell>
                               <TableCell>
                                 {stackedHealthBar([
-                                  { count: workloadByKind.jobs.healthy, color: "#2e7d32" },
-                                  { count: workloadByKind.jobs.progressing, color: "#ed6c02" },
-                                  { count: workloadByKind.jobs.degraded, color: "#d32f2f" },
+                                  { label: "Healthy", count: workloadByKind.jobs.healthy, color: "#2e7d32" },
+                                  { label: "Progressing", count: workloadByKind.jobs.progressing, color: "#ed6c02" },
+                                  { label: "Degraded", count: workloadByKind.jobs.degraded, color: "#d32f2f" },
                                 ])}
                               </TableCell>
                               <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
@@ -641,9 +651,9 @@ export default function NamespaceDrawer(props: {
                               <TableCell sx={{ fontWeight: 600 }}>CronJobs</TableCell>
                               <TableCell>
                                 {stackedHealthBar([
-                                  { count: workloadByKind.cronJobs.healthy, color: "#2e7d32" },
-                                  { count: workloadByKind.cronJobs.progressing, color: "#ed6c02" },
-                                  { count: workloadByKind.cronJobs.degraded, color: "#d32f2f" },
+                                  { label: "Healthy", count: workloadByKind.cronJobs.healthy, color: "#2e7d32" },
+                                  { label: "Progressing", count: workloadByKind.cronJobs.progressing, color: "#ed6c02" },
+                                  { label: "Degraded", count: workloadByKind.cronJobs.degraded, color: "#d32f2f" },
                                 ])}
                               </TableCell>
                               <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
@@ -656,9 +666,9 @@ export default function NamespaceDrawer(props: {
                               <TableCell sx={{ fontWeight: 600 }}>ReplicaSets</TableCell>
                               <TableCell>
                                 {stackedHealthBar([
-                                  { count: workloadByKind.replicaSets.healthy, color: "#2e7d32" },
-                                  { count: workloadByKind.replicaSets.progressing, color: "#ed6c02" },
-                                  { count: workloadByKind.replicaSets.degraded, color: "#d32f2f" },
+                                  { label: "Healthy", count: workloadByKind.replicaSets.healthy, color: "#2e7d32" },
+                                  { label: "Progressing", count: workloadByKind.replicaSets.progressing, color: "#ed6c02" },
+                                  { label: "Degraded", count: workloadByKind.replicaSets.degraded, color: "#d32f2f" },
                                 ])}
                               </TableCell>
                               <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
