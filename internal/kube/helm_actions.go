@@ -3,6 +3,8 @@ package kube
 import (
 	"context"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -323,6 +325,45 @@ func HelmReinstall(ctx context.Context, c *cluster.Clients, req HelmReinstallReq
 	}, nil
 }
 
+// ---------- Helm Rollback ----------
+
+type HelmRollbackRequest struct {
+	Namespace string `json:"namespace"`
+	Release   string `json:"release"`
+	Revision  int    `json:"revision"`
+}
+
+func HelmRollback(_ context.Context, c *cluster.Clients, req HelmRollbackRequest) (*HelmActionResult, error) {
+	cfg, err := helmActionConfig(c.RestConfig, req.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	if req.Revision <= 0 {
+		return nil, fmt.Errorf("rollback requires revision > 0")
+	}
+
+	rollback := action.NewRollback(cfg)
+	rollback.Version = req.Revision
+	rollback.DisableHooks = true
+	rollback.Wait = true
+	rollback.CleanupOnFail = true
+	rollback.Timeout = 5 * time.Minute
+
+	if err := rollback.Run(req.Release); err != nil {
+		return nil, err
+	}
+
+	return &HelmActionResult{
+		Status:  "ok",
+		Message: fmt.Sprintf("rolled back to revision %d", req.Revision),
+		Details: map[string]any{
+			"release":  req.Release,
+			"revision": req.Revision,
+			"hooks":    "disabled",
+		},
+	}, nil
+}
+
 // ---------- ActionRegistry handlers ----------
 
 // HandleHelmUninstall dispatches the "helm.uninstall" action from the unified ActionRegistry.
@@ -390,6 +431,26 @@ func HandleHelmUpgrade(ctx context.Context, c *cluster.Clients, req ActionReques
 	return &ActionResult{Status: result.Status, Message: result.Message, Details: result.Details}, nil
 }
 
+// HandleHelmRollback dispatches the "helm.rollback" action from the unified ActionRegistry.
+func HandleHelmRollback(ctx context.Context, c *cluster.Clients, req ActionRequest) (*ActionResult, error) {
+	if req.Namespace == "" || req.Name == "" {
+		return &ActionResult{Status: "error", Message: "namespace and release name are required"}, nil
+	}
+	revision, revisionResult := helmNumericParam(req.Params, "revision")
+	if revisionResult != nil {
+		return revisionResult, nil
+	}
+	result, err := HelmRollback(ctx, c, HelmRollbackRequest{
+		Namespace: req.Namespace,
+		Release:   req.Name,
+		Revision:  revision,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &ActionResult{Status: result.Status, Message: result.Message, Details: result.Details}, nil
+}
+
 // ---------- helpers ----------
 
 func helmBoolParam(params map[string]any, key string) (bool, *ActionResult) {
@@ -402,6 +463,38 @@ func helmBoolParam(params map[string]any, key string) (bool, *ActionResult) {
 		return false, &ActionResult{Status: "error", Message: fmt.Sprintf("params.%s must be a boolean", key)}
 	}
 	return value, nil
+}
+
+func helmNumericParam(params map[string]any, key string) (int, *ActionResult) {
+	raw, ok := params[key]
+	if !ok {
+		return 0, &ActionResult{Status: "error", Message: fmt.Sprintf("params.%s is required", key)}
+	}
+	switch value := raw.(type) {
+	case float64:
+		if math.IsNaN(value) || math.IsInf(value, 0) || math.Trunc(value) != value {
+			return 0, &ActionResult{Status: "error", Message: fmt.Sprintf("params.%s must be an integer", key)}
+		}
+		return int(value), nil
+	case int:
+		return value, nil
+	case int32:
+		return int(value), nil
+	case int64:
+		return int(value), nil
+	case string:
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return 0, &ActionResult{Status: "error", Message: fmt.Sprintf("params.%s is required", key)}
+		}
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return 0, &ActionResult{Status: "error", Message: fmt.Sprintf("params.%s must be an integer", key)}
+		}
+		return parsed, nil
+	default:
+		return 0, &ActionResult{Status: "error", Message: fmt.Sprintf("params.%s must be numeric", key)}
+	}
 }
 
 func parseValuesYaml(raw string) (map[string]any, error) {

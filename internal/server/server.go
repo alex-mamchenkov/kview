@@ -2739,6 +2739,10 @@ func (s *Server) Router() http.Handler {
 				return
 			}
 
+			if body.Resource == "helmreleases" && body.Namespace != "" {
+				_ = s.dp.InvalidateHelmReleasesSnapshot(ctx, ctxName, body.Namespace)
+			}
+
 			writeJSON(w, http.StatusOK, map[string]any{"context": ctxName, "result": result})
 		})
 	})

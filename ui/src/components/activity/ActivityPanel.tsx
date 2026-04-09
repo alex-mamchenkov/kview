@@ -161,19 +161,37 @@ export default function ActivityPanel({ token, covered = false }: Props) {
         <Tooltip
           title={`Backend: ${backendHealth}. Cluster: ${clusterHealth}${cluster?.message ? ` (${cluster.message})` : ""}`}
         >
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mr: 1 }}>
-            <StatusDot ok={backendHealth === "healthy"} label="Backend" />
-            <StatusDot ok={clusterHealth === "healthy"} label="Cluster" />
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              mr: 1,
+              minWidth: 0,
+              flex: "0 1 720px",
+              justifyContent: "flex-end",
+            }}
+          >
             <Typography
               variant="caption"
               color="text.secondary"
               noWrap
-              sx={{ display: { xs: "none", md: "block" }, maxWidth: 280 }}
+              sx={{
+                display: { xs: "none", md: "block" },
+                minWidth: 0,
+                flex: 1,
+                maxWidth: { md: 380, lg: 520, xl: 680 },
+                textAlign: "right",
+              }}
             >
               {cluster?.context || "no context"}
               {cluster?.cluster ? ` / ${cluster.cluster}` : ""}
               {cluster?.authInfo ? ` / ${cluster.authInfo}` : ""}
             </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexShrink: 0 }}>
+              <StatusDot ok={backendHealth === "healthy"} label="Backend" />
+              <StatusDot ok={clusterHealth === "healthy"} label="Cluster" />
+            </Box>
           </Box>
         </Tooltip>
         <IconButton

@@ -50,6 +50,7 @@ func main() {
 	srv.Actions().Register("helm.uninstall", kube.HandleHelmUninstall)
 	srv.Actions().Register("helm.upgrade", kube.HandleHelmUpgrade)
 	srv.Actions().Register("helm.reinstall", kube.HandleHelmReinstall)
+	srv.Actions().Register("helm.rollback", kube.HandleHelmRollback)
 
 	srv.Actions().Register("pod.delete", kubeactions.HandlePodDelete)
 

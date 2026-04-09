@@ -25,7 +25,7 @@ import ErrorState from "../../shared/ErrorState";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import CodeBlock from "../../shared/CodeBlock";
 import AutolinkText from "../../shared/AutolinkText";
-import { HelmReleaseActions } from "./HelmActions";
+import { HelmReleaseActions, HelmRollbackActionButton } from "./HelmActions";
 import DeploymentDrawer from "../deployments/DeploymentDrawer";
 import StatefulSetDrawer from "../statefulsets/StatefulSetDrawer";
 import DaemonSetDrawer from "../daemonsets/DaemonSetDrawer";
@@ -87,6 +87,11 @@ type HelmReleaseRevision = {
   appVersion: string;
   description?: string;
 };
+
+function canRollbackRevision(rev: HelmReleaseRevision, currentRevision?: number): boolean {
+  if (currentRevision != null && rev.revision === currentRevision) return false;
+  return rev.status === "deployed" || rev.status === "superseded";
+}
 
 export default function HelmReleaseDrawer(props: {
   open: boolean;
@@ -370,6 +375,7 @@ export default function HelmReleaseDrawer(props: {
                           <TableCell>App Version</TableCell>
                           <TableCell>Updated</TableCell>
                           <TableCell>Description</TableCell>
+                          <TableCell align="right">Actions</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -387,6 +393,20 @@ export default function HelmReleaseDrawer(props: {
                             <TableCell>{valueOrDash(rev.appVersion)}</TableCell>
                             <TableCell>{fmtTs(rev.updated)}</TableCell>
                             <TableCell>{valueOrDash(rev.description)}</TableCell>
+                            <TableCell align="right">
+                              {name && canRollbackRevision(rev, summary?.revision) ? (
+                                <HelmRollbackActionButton
+                                  token={props.token}
+                                  namespace={ns}
+                                  releaseName={name}
+                                  revision={rev.revision}
+                                  onSuccess={() => {
+                                    setRefreshNonce((n) => n + 1);
+                                    props.onRefresh?.();
+                                  }}
+                                />
+                              ) : null}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

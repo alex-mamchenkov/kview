@@ -27,6 +27,14 @@ type ReleaseActionsProps = {
   onDeleted: () => void;
 };
 
+type RollbackButtonProps = {
+  token: string;
+  namespace: string;
+  releaseName: string;
+  revision: number;
+  onSuccess: () => void;
+};
+
 export function HelmReleaseActions({
   token,
   namespace,
@@ -135,6 +143,49 @@ export function HelmReleaseActions({
         onSuccess={onDeleted}
       />
     </Box>
+  );
+}
+
+export function HelmRollbackActionButton({
+  token,
+  namespace,
+  releaseName,
+  revision,
+  onSuccess,
+}: RollbackButtonProps) {
+  const activeContext = useActiveContext();
+
+  return (
+    <ActionButton
+      label={`Rollback to ${revision}`}
+      descriptor={{
+        id: "helm.rollback",
+        title: "Rollback Helm Release",
+        description: "Rolls the release back to the selected revision without running hooks.",
+        risk: "medium",
+        confirmSpec: { mode: "simple" },
+        group: "",
+        resource: "helmreleases",
+        paramSpecs: [
+          {
+            kind: "numeric",
+            key: "revision",
+            label: "Target revision",
+            min: 1,
+            required: true,
+          },
+        ],
+      }}
+      targetRef={{
+        context: activeContext,
+        kind: "HelmRelease",
+        name: releaseName,
+        namespace,
+      }}
+      token={token}
+      initialParams={{ revision: String(revision) }}
+      onSuccess={onSuccess}
+    />
   );
 }
 
