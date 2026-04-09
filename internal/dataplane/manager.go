@@ -125,6 +125,8 @@ type DataPlaneManager interface {
 
 	// NamespaceSummaryProjection builds namespace summary from dataplane snapshots (projection-led).
 	NamespaceSummaryProjection(ctx context.Context, clusterName, namespace string) (NamespaceSummaryProjection, error)
+	// NamespaceInsightsProjection builds a namespace observability view from dataplane snapshots.
+	NamespaceInsightsProjection(ctx context.Context, clusterName, namespace string) (NamespaceInsightsProjection, error)
 
 	// Policy returns the current dataplane behavior policy.
 	Policy() DataplanePolicy

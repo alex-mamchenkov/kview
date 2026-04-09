@@ -784,6 +784,34 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, map[string]any{"active": active, "item": det})
 		})
 
+		api.Get("/namespaces/{name}/insights", func(w http.ResponseWriter, r *http.Request) {
+			name := chi.URLParam(r, "name")
+			if name == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "missing namespace name"})
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+			defer cancel()
+
+			active := s.readContextName(r)
+
+			proj, err := s.dp.NamespaceInsightsProjection(ctx, active, name)
+			if err != nil {
+				status := http.StatusInternalServerError
+				if apierrors.IsForbidden(err) {
+					status = http.StatusForbidden
+				}
+				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{
+				"active": active,
+				"item":   proj.Insights,
+			})
+		})
+
 		api.Get("/namespaces/{name}/summary", func(w http.ResponseWriter, r *http.Request) {
 			name := chi.URLParam(r, "name")
 			if name == "" {

@@ -118,6 +118,6 @@ The UI performs periodic background refresh for dataplane-backed list views and 
 These are **intentional** current limits, not bugs:
 
 - **`GET /api/helmcharts`** remains a direct read until cluster-scoped Helm catalog snapshot semantics exist.
-- **Namespace detail** (`GET /api/namespaces/{name}`) remains a direct read.
+- **Namespace raw detail** (`GET /api/namespaces/{name}`) remains a direct read for metadata/conditions/YAML, while drawer-oriented observability is projection-backed via `GET /api/namespaces/{name}/insights`.
 - **Detail, events, YAML, relation** endpoints remain direct reads even when the **list** for that kind is dataplane-backed.
 - A **uniform metadata envelope on every API** (including legacy list routes) is not guaranteed; that would be a product-wide decision.

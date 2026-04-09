@@ -203,6 +203,9 @@ type nsEnrichSession struct {
 	order []string
 	// workNames is the scored subset that receives GET + snapshot enrichment.
 	workNames []string
+	// favouriteInsightNames is the subset of workNames that should receive broader
+	// namespace-insights prewarming to speed up drawer opens.
+	favouriteInsightNames []string
 	// sweepNames is the optional cold trickle subset outside focused/recent/favourite hints.
 	sweepNames []string
 	// merged holds list row + progressive patches (detail then related).
@@ -249,6 +252,7 @@ func (m *manager) BeginNamespaceListProgressiveEnrichment(cluster string, items 
 
 	focusedHints := applyNamespaceEnrichmentPolicyHints(hints, policy)
 	workNames := buildEnrichmentWorkOrder(order, focusedHints, policy.MaxTargets)
+	favouriteInsightNames := filterFavouriteInsightWarmTargets(workNames, focusedHints)
 	sweepNames := m.selectNamespaceSweepNames(cluster, order, workNames, policy)
 	if len(workNames) == 0 && len(sweepNames) == 0 {
 		return 0
@@ -256,7 +260,10 @@ func (m *manager) BeginNamespaceListProgressiveEnrichment(cluster string, items 
 
 	m.nsEnrich.mu.Lock()
 	if old, ok := m.nsEnrich.byCluster[cluster]; ok {
-		if sameStringSlice(old.order, order) && sameStringSlice(old.workNames, workNames) && sameStringSlice(old.sweepNames, sweepNames) {
+		if sameStringSlice(old.order, order) &&
+			sameStringSlice(old.workNames, workNames) &&
+			sameStringSlice(old.favouriteInsightNames, favouriteInsightNames) &&
+			sameStringSlice(old.sweepNames, sweepNames) {
 			old.updateBaseRows(order, merged)
 			rev := old.rev
 			m.nsEnrich.mu.Unlock()
@@ -270,15 +277,16 @@ func (m *manager) BeginNamespaceListProgressiveEnrichment(cluster string, items 
 	rev := m.nsEnrich.nextRev
 	ctx, cancel := context.WithCancel(context.Background())
 	sess := &nsEnrichSession{
-		rev:        rev,
-		ctx:        ctx,
-		cancel:     cancel,
-		order:      order,
-		workNames:  workNames,
-		sweepNames: sweepNames,
-		merged:     merged,
-		total:      len(workNames) + len(sweepNames),
-		activityID: namespaceEnrichActivityID(cluster),
+		rev:                   rev,
+		ctx:                   ctx,
+		cancel:                cancel,
+		order:                 order,
+		workNames:             workNames,
+		favouriteInsightNames: favouriteInsightNames,
+		sweepNames:            sweepNames,
+		merged:                merged,
+		total:                 len(workNames) + len(sweepNames),
+		activityID:            namespaceEnrichActivityID(cluster),
 	}
 	m.nsEnrich.byCluster[cluster] = sess
 	m.nsEnrich.mu.Unlock()
@@ -296,14 +304,15 @@ func (m *manager) BeginNamespaceListProgressiveEnrichment(cluster string, items 
 			StartedAt:    now,
 			ResourceType: "kubernetes:namespaceListRows",
 			Metadata: map[string]string{
-				"cluster":        cluster,
-				"revision":       strconv.FormatUint(rev, 10),
-				"enrichTargets":  strconv.Itoa(sess.total),
-				"focusedTargets": strconv.Itoa(len(workNames)),
-				"sweepTargets":   strconv.Itoa(len(sweepNames)),
-				"warmKinds":      strconv.Itoa(len(policy.WarmResourceKinds)),
-				"stage":          initialNamespaceEnrichStage(workNames, sweepNames),
-				"listNamespaces": strconv.Itoa(len(order)),
+				"cluster":                 cluster,
+				"revision":                strconv.FormatUint(rev, 10),
+				"enrichTargets":           strconv.Itoa(sess.total),
+				"focusedTargets":          strconv.Itoa(len(workNames)),
+				"favouriteInsightTargets": strconv.Itoa(len(favouriteInsightNames)),
+				"sweepTargets":            strconv.Itoa(len(sweepNames)),
+				"warmKinds":               strconv.Itoa(len(policy.WarmResourceKinds)),
+				"stage":                   initialNamespaceEnrichStage(workNames, sweepNames),
+				"listNamespaces":          strconv.Itoa(len(order)),
 			},
 		}
 		_ = reg.Register(context.Background(), act)
@@ -598,6 +607,9 @@ func (m *manager) runNamespaceEnrichmentBatch(ctx context.Context, cluster strin
 			}
 			metrics := buildNamespaceListRowProjection(podsSnap, depsSnap)
 			m.warmNamespaceEnrichmentResourceKinds(workCtx, plane, name, policy.WarmResourceKinds)
+			if sess.shouldWarmFavouriteInsights(name) {
+				m.warmNamespaceInsightsResourceKinds(workCtx, plane, name)
+			}
 
 			sess.mu.Lock()
 			cur := sess.merged[name]
@@ -612,6 +624,28 @@ func (m *manager) runNamespaceEnrichmentBatch(ctx context.Context, cluster strin
 	}
 
 	return g.Wait()
+}
+
+func filterFavouriteInsightWarmTargets(workNames []string, hints NamespaceEnrichHints) []string {
+	if len(workNames) == 0 || len(hints.Favorite) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(workNames))
+	for _, name := range workNames {
+		if _, ok := hints.Favorite[name]; ok {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func (s *nsEnrichSession) shouldWarmFavouriteInsights(name string) bool {
+	for _, candidate := range s.favouriteInsightNames {
+		if candidate == name {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *manager) warmNamespaceEnrichmentResourceKinds(ctx context.Context, plane *clusterPlane, namespace string, kinds []string) {
@@ -658,6 +692,29 @@ func (m *manager) warmNamespaceEnrichmentResourceKinds(ctx context.Context, plan
 			_, _ = plane.LimitRangesSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityLow)
 		}
 	}
+}
+
+func (m *manager) warmNamespaceInsightsResourceKinds(ctx context.Context, plane *clusterPlane, namespace string) {
+	m.warmNamespaceEnrichmentResourceKinds(ctx, plane, namespace, []string{
+		string(ResourceKindPods),
+		string(ResourceKindDeployments),
+		string(ResourceKindDaemonSets),
+		string(ResourceKindStatefulSets),
+		string(ResourceKindReplicaSets),
+		string(ResourceKindJobs),
+		string(ResourceKindCronJobs),
+		string(ResourceKindServices),
+		string(ResourceKindIngresses),
+		string(ResourceKindPVCs),
+		string(ResourceKindConfigMaps),
+		string(ResourceKindSecrets),
+		string(ResourceKindServiceAccounts),
+		string(ResourceKindRoles),
+		string(ResourceKindRoleBindings),
+		string(ResourceKindHelmReleases),
+		string(ResourceKindResourceQuotas),
+		string(ResourceKindLimitRanges),
+	})
 }
 
 func (m *manager) waitAPIQuiet(ctx context.Context, minQuiet time.Duration) error {

@@ -1,45 +1,43 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
-  Typography,
-  Tabs,
-  Tab,
-  CircularProgress,
   Chip,
+  CircularProgress,
+  LinearProgress,
+  Tab,
   Table,
+  TableBody,
+  TableCell,
   TableHead,
   TableRow,
-  TableCell,
-  TableBody,
-  LinearProgress,
+  Tabs,
+  Typography,
 } from "@mui/material";
-import { apiGet, toApiError } from "../../../api";
-import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
+import { apiGet } from "../../../api";
+import type { ApiItemResponse } from "../../../types/api";
 import { useConnectionState } from "../../../connectionState";
-import { fmtAge, fmtTs, valueOrDash } from "../../../utils/format";
-import { namespacePhaseChipColor, helmStatusChipColor, dataplaneCoarseStateChipColor } from "../../../utils/k8sUi";
-import type { ChipColor } from "../../../utils/k8sUi";
+import { fmtAge, valueOrDash } from "../../../utils/format";
+import {
+  dataplaneCoarseStateChipColor,
+  helmStatusChipColor,
+  namespacePhaseChipColor,
+} from "../../../utils/k8sUi";
 import KeyValueTable from "../../shared/KeyValueTable";
-import AccessDeniedState from "../../shared/AccessDeniedState";
-import EmptyState from "../../shared/EmptyState";
-import ErrorState from "../../shared/ErrorState";
-import Section from "../../shared/Section";
-import MetadataSection from "../../shared/MetadataSection";
 import ConditionsTable from "../../shared/ConditionsTable";
 import CodeBlock from "../../shared/CodeBlock";
+import EmptyState from "../../shared/EmptyState";
+import ErrorState from "../../shared/ErrorState";
+import MetadataSection from "../../shared/MetadataSection";
+import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
+import RightDrawer from "../../layout/RightDrawer";
+import Section from "../../shared/Section";
+import NamespaceActions from "./NamespaceActions";
 import PodDrawer from "../pods/PodDrawer";
 import DeploymentDrawer from "../deployments/DeploymentDrawer";
 import JobDrawer from "../jobs/JobDrawer";
 import HelmReleaseDrawer from "../helm/HelmReleaseDrawer";
-import NamespaceActions from "./NamespaceActions";
-import RightDrawer from "../../layout/RightDrawer";
-import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
-import {
-  panelBoxSx,
-  drawerBodySx,
-  loadingCenterSx,
-} from "../../../theme/sxTokens";
+import { drawerBodySx, loadingCenterSx, panelBoxSx } from "../../../theme/sxTokens";
 
 type NamespaceDetails = {
   summary: NamespaceSummary;
@@ -66,6 +64,26 @@ type NamespaceCondition = {
   reason?: string;
   message?: string;
   lastTransitionTime?: number;
+};
+
+type NamespaceInsights = {
+  summary: NamespaceSummaryResources;
+  findings?: NamespaceFinding[];
+  resourceQuotas?: ResourceQuota[];
+  limitRanges?: LimitRange[];
+};
+
+type NamespaceFinding = {
+  kind: string;
+  namespace?: string;
+  name?: string;
+  severity: string;
+  score: number;
+  reason: string;
+  likelyCause?: string;
+  suggestedAction?: string;
+  confidence?: string;
+  section?: string;
 };
 
 type WorkloadKindHealthRollup = {
@@ -121,6 +139,8 @@ type ResourceCounts = {
   roles: number;
   roleBindings: number;
   helmReleases: number;
+  resourceQuotas?: number;
+  limitRanges?: number;
 };
 
 type PodHealth = {
@@ -171,8 +191,49 @@ type ResourceQuota = {
   entries: ResourceQuotaEntry[];
 };
 
-function isNamespaceConditionHealthy(cond: NamespaceCondition): boolean {
-  return cond.status === "False";
+type LimitRangeItem = {
+  type: string;
+  min?: Record<string, string>;
+  max?: Record<string, string>;
+  default?: Record<string, string>;
+  defaultRequest?: Record<string, string>;
+  maxLimitRequestRatio?: Record<string, string>;
+};
+
+type LimitRange = {
+  name: string;
+  namespace: string;
+  ageSec: number;
+  items: LimitRangeItem[];
+};
+
+const tabs = ["Signals", "Inventory", "Capacity", "Metadata", "YAML"] as const;
+const metadataTabIndex = tabs.indexOf("Metadata");
+const yamlTabIndex = tabs.indexOf("YAML");
+
+const sectionMap: Record<string, string> = {
+  pods: "pods",
+  deployments: "deployments",
+  statefulSets: "statefulsets",
+  daemonSets: "daemonsets",
+  jobs: "jobs",
+  cronJobs: "cronjobs",
+  services: "services",
+  ingresses: "ingresses",
+  pvcs: "persistentvolumeclaims",
+  configMaps: "configmaps",
+  secrets: "secrets",
+  helmReleases: "helm",
+  serviceAccounts: "serviceaccounts",
+  roles: "roles",
+  roleBindings: "rolebindings",
+};
+
+function findingSeverityColor(severity?: string): "error" | "warning" | "info" | "default" {
+  if (severity === "high") return "error";
+  if (severity === "medium") return "warning";
+  if (severity === "low") return "info";
+  return "default";
 }
 
 function namespaceConditionChipColor(status?: string): "success" | "warning" | "error" | "default" {
@@ -180,6 +241,10 @@ function namespaceConditionChipColor(status?: string): "success" | "warning" | "
   if (status === "False") return "success";
   if (status === "Unknown") return "warning";
   return "default";
+}
+
+function isNamespaceConditionHealthy(cond: NamespaceCondition): boolean {
+  return cond.status === "False";
 }
 
 function quotaGaugeColor(ratio?: number): "success" | "warning" | "error" {
@@ -196,20 +261,91 @@ function quotaGaugeMuiColor(ratio?: number): string {
   return "#2e7d32";
 }
 
-const sectionMap: Record<string, string> = {
-  pods: "pods",
-  deployments: "deployments",
-  statefulSets: "statefulsets",
-  daemonSets: "daemonsets",
-  jobs: "jobs",
-  cronJobs: "cronjobs",
-  services: "services",
-  ingresses: "ingresses",
-  pvcs: "persistentvolumeclaims",
-  configMaps: "configmaps",
-  secrets: "secrets",
-  helmReleases: "helm",
+function summarizeQuotaPressure(quotas: ResourceQuota[]): { critical: number; warning: number } {
+  let critical = 0;
+  let warning = 0;
+  for (const quota of quotas) {
+    for (const entry of quota.entries) {
+      if (entry.ratio == null) continue;
+      if (entry.ratio >= 0.9) critical++;
+      else if (entry.ratio >= 0.8) warning++;
+    }
+  }
+  return { critical, warning };
+}
+
+function findingTarget(finding: NamespaceFinding): string {
+  if (!finding.name) return finding.namespace || finding.kind;
+  return finding.namespace ? `${finding.namespace}/${finding.name}` : finding.name;
+}
+
+function findingNote(finding: NamespaceFinding): string {
+  const parts = [finding.reason];
+  if (finding.likelyCause) parts.push(`Likely cause: ${finding.likelyCause}`);
+  if (finding.suggestedAction) parts.push(`Next step: ${finding.suggestedAction}`);
+  return parts.join(" ");
+}
+
+function kvRowsFromMap(values?: Record<string, string>): Array<{ label: string; value: string; monospace: boolean }> {
+  return Object.entries(values || {}).map(([key, value]) => ({ label: key, value, monospace: true }));
+}
+
+type HealthBarSegment = {
+  count: number;
+  color: string;
 };
+
+function mapCountChip(
+  label: string,
+  count: number | undefined,
+  sectionKey: string,
+  enabled: boolean,
+  onSelect: (sectionKey: string) => void
+) {
+  if (!count) return null;
+  return <ResourceLinkChip label={`${label}: ${count}`} onClick={enabled ? () => onSelect(sectionKey) : undefined} />;
+}
+
+function stackedHealthBar(segments: HealthBarSegment[]) {
+  const total = segments.reduce((sum, segment) => sum + segment.count, 0);
+  if (total === 0) return null;
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        height: 20,
+        overflow: "hidden",
+        borderRadius: 1,
+        backgroundColor: "rgba(0,0,0,0.08)",
+        border: "1px solid var(--panel-border)",
+      }}
+    >
+      {segments.map((segment, index) =>
+        segment.count > 0 ? (
+          <Box key={`${segment.color}-${index}`} sx={{ width: `${(segment.count / total) * 100}%`, backgroundColor: segment.color }} />
+        ) : null
+      )}
+    </Box>
+  );
+}
+
+function workloadSignalSummary(rollup?: WorkloadKindHealthRollup): string {
+  if (!rollup || rollup.total === 0) return "-";
+  return `${rollup.healthy} ok · ${rollup.progressing} prog · ${rollup.degraded} deg / ${rollup.total}`;
+}
+
+function podHealthSummary(podHealth?: PodHealth): string {
+  if (!podHealth) return "-";
+  const total = podHealth.running + podHealth.pending + podHealth.failed + podHealth.succeeded + podHealth.unknown;
+  if (total === 0) return "-";
+  return `${podHealth.running} run · ${podHealth.pending} pend · ${podHealth.failed} fail · ${podHealth.succeeded} done · ${podHealth.unknown} unk / ${total}`;
+}
+
+function problematicSignalColor(reason: string): "warning" | "error" {
+  const normalized = reason.toLowerCase();
+  if (normalized.includes("fail") || normalized.includes("error") || normalized.includes("deadline")) return "error";
+  return "warning";
+}
 
 export default function NamespaceDrawer(props: {
   open: boolean;
@@ -220,21 +356,20 @@ export default function NamespaceDrawer(props: {
 }) {
   const { retryNonce } = useConnectionState();
   const [tab, setTab] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsErr, setInsightsErr] = useState("");
+  const [insights, setInsights] = useState<NamespaceInsights | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsErr, setDetailsErr] = useState("");
   const [details, setDetails] = useState<NamespaceDetails | null>(null);
-  const [err, setErr] = useState("");
-  const [summaryRes, setSummaryRes] = useState<NamespaceSummaryResources | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
-  const [quotas, setQuotas] = useState<ResourceQuota[]>([]);
-  const [quotasLoading, setQuotasLoading] = useState(false);
-  const [quotasErr, setQuotasErr] = useState("");
-  const [quotasForbidden, setQuotasForbidden] = useState(false);
+  const [detailsRequested, setDetailsRequested] = useState(false);
 
-  // nested drawer state
   const [drawerPod, setDrawerPod] = useState<string | null>(null);
   const [drawerDeployment, setDrawerDeployment] = useState<string | null>(null);
   const [drawerJob, setDrawerJob] = useState<string | null>(null);
   const [drawerHelmRelease, setDrawerHelmRelease] = useState<string | null>(null);
+  const insightsCacheRef = useRef<Record<string, NamespaceInsights>>({});
+  const detailsCacheRef = useRef<Record<string, NamespaceDetails>>({});
 
   const name = props.namespaceName;
 
@@ -242,240 +377,383 @@ export default function NamespaceDrawer(props: {
     if (!props.open || !name) return;
 
     setTab(0);
-    setErr("");
-    setDetails(null);
-    setSummaryRes(null);
-    setLoading(true);
-    setSummaryLoading(true);
+    const cachedInsights = insightsCacheRef.current[name] || null;
+    setInsights(cachedInsights);
+    setInsightsLoading(!cachedInsights);
+    setInsightsErr("");
+    setDetailsLoading(false);
+    setDetailsErr("");
+    const cachedDetails = detailsCacheRef.current[name] || null;
+    setDetails(cachedDetails);
+    setDetailsRequested(!!cachedDetails);
     setDrawerPod(null);
     setDrawerDeployment(null);
     setDrawerJob(null);
     setDrawerHelmRelease(null);
-    setQuotas([]);
-    setQuotasErr("");
-    setQuotasForbidden(false);
-    setQuotasLoading(true);
 
     const encodedName = encodeURIComponent(name);
-
     (async () => {
-      const det = await apiGet<ApiItemResponse<NamespaceDetails>>(`/api/namespaces/${encodedName}`, props.token);
-      const item: NamespaceDetails | null = det?.item ?? null;
-      setDetails(item);
+      const res = await apiGet<ApiItemResponse<NamespaceInsights>>(`/api/namespaces/${encodedName}/insights`, props.token);
+      const item = res?.item ?? null;
+      setInsights(item);
+      if (item) {
+        insightsCacheRef.current[name] = item;
+      }
     })()
-      .catch((e) => setErr(String(e)))
-      .finally(() => setLoading(false));
-
-    (async () => {
-      const res = await apiGet<ApiItemResponse<NamespaceSummaryResources>>(`/api/namespaces/${encodedName}/summary`, props.token);
-      const item: NamespaceSummaryResources | null = res?.item ?? null;
-      setSummaryRes(item);
-    })()
-      .catch(() => {})
-      .finally(() => setSummaryLoading(false));
-
-    (async () => {
-      const res = await apiGet<ApiListResponse<ResourceQuota>>(`/api/namespaces/${encodedName}/resourcequotas`, props.token);
-      setQuotas(res?.items ?? []);
-    })()
-      .catch((e: unknown) => {
-        const err = toApiError(e);
-        if (err.status === 403 || err.status === 401) {
-          setQuotasForbidden(true);
-        } else {
-          setQuotasErr(err.message);
-        }
-      })
-      .finally(() => setQuotasLoading(false));
+      .catch((e) => setInsightsErr(String(e)))
+      .finally(() => setInsightsLoading(false));
   }, [props.open, name, props.token, retryNonce]);
+
+  useEffect(() => {
+    if (!props.open || !name) return;
+    if (tab < metadataTabIndex) return;
+    if (detailsRequested || detailsLoading || details) return;
+
+    setDetailsRequested(true);
+    setDetailsLoading(true);
+    setDetailsErr("");
+
+    const encodedName = encodeURIComponent(name);
+    (async () => {
+      const res = await apiGet<ApiItemResponse<NamespaceDetails>>(`/api/namespaces/${encodedName}`, props.token);
+      const item = res?.item ?? null;
+      setDetails(item);
+      if (item) {
+        detailsCacheRef.current[name] = item;
+      }
+    })()
+      .catch((e) => setDetailsErr(String(e)))
+      .finally(() => setDetailsLoading(false));
+  }, [props.open, name, props.token, tab, detailsRequested, detailsLoading, details]);
 
   const summary = details?.summary;
   const metadata = details?.metadata;
   const conditions = details?.conditions || [];
 
+  const counts = insights?.summary?.counts;
+  const podHealth = insights?.summary?.podHealth;
+  const problematic = insights?.summary?.problematic || [];
+  const helmReleases = insights?.summary?.helmReleases || [];
+  const summaryMeta = insights?.summary?.meta;
+  const workloadByKind = insights?.summary?.workloadByKind;
+  const restartHotspots = insights?.summary?.restartHotspots || [];
+  const findings = insights?.findings || [];
+  const quotas = insights?.resourceQuotas || [];
+  const limitRanges = insights?.limitRanges || [];
+  const quotaPressure = summarizeQuotaPressure(quotas);
   const summaryItems = useMemo(
     () => [
-      { label: "Name", value: valueOrDash(summary?.name), monospace: true },
+      { label: "Name", value: valueOrDash(summary?.name || name), monospace: true },
       {
         label: "Phase",
         value: (
-          <Chip size="small" label={valueOrDash(summary?.phase)} color={namespacePhaseChipColor(summary?.phase)} />
+          <Chip
+            size="small"
+            label={valueOrDash(summary?.phase)}
+            color={namespacePhaseChipColor(summary?.phase)}
+          />
         ),
       },
       { label: "Age", value: fmtAge(summary?.ageSec) },
     ],
-    [summary]
+    [summary, name]
   );
 
-  const counts = summaryRes?.counts;
-  const podHealth = summaryRes?.podHealth;
-  const deployHealth = summaryRes?.deploymentHealth;
-  const problematic = summaryRes?.problematic || [];
-  const helmReleases = summaryRes?.helmReleases || [];
-  const summaryMeta = summaryRes?.meta;
-  const workloadByKind = summaryRes?.workloadByKind;
-  const restartHotspots = summaryRes?.restartHotspots || [];
-
   function navigateTo(sectionKey: string) {
-    if (props.onNavigate && name) {
-      const sec = sectionMap[sectionKey] || sectionKey;
-      props.onNavigate(sec, name);
-    }
+    if (!props.onNavigate || !name) return;
+    props.onNavigate(sectionMap[sectionKey] || sectionKey, name);
   }
 
-  function openProblematic(r: ProblematicResource) {
-    switch (r.kind) {
+  function openProblematic(resource: ProblematicResource) {
+    switch (resource.kind) {
       case "Pod":
-        setDrawerPod(r.name);
+        setDrawerPod(resource.name);
         return;
       case "Deployment":
-        setDrawerDeployment(r.name);
+        setDrawerDeployment(resource.name);
         return;
       case "Job":
-        setDrawerJob(r.name);
+        setDrawerJob(resource.name);
         return;
       case "DaemonSet":
-        if (props.onNavigate && name) props.onNavigate("daemonsets", name);
+        navigateTo("daemonSets");
         return;
       case "StatefulSet":
-        if (props.onNavigate && name) props.onNavigate("statefulsets", name);
+        navigateTo("statefulSets");
         return;
       case "CronJob":
-        if (props.onNavigate && name) props.onNavigate("cronjobs", name);
+        navigateTo("cronJobs");
         return;
       case "ReplicaSet":
-        if (props.onNavigate && name) props.onNavigate("replicasets", name);
+        navigateTo("replicaSets");
         return;
     }
   }
 
-  function workloadRollupLine(label: string, w?: WorkloadKindHealthRollup) {
-    if (!w || w.total === 0) return null;
-    return (
-      <Typography variant="body2" color="text.secondary" sx={{ fontFamily: "monospace", fontSize: 12 }}>
-        {label}: {w.healthy} ok · {w.progressing} prog · {w.degraded} deg ({w.total} total)
-      </Typography>
-    );
+  function openFinding(finding: NamespaceFinding) {
+    switch (finding.kind) {
+      case "Namespace":
+      case "ResourceQuota":
+        setTab(2);
+        return;
+      case "HelmRelease":
+        setDrawerHelmRelease(finding.name || null);
+        return;
+      case "Job":
+        setDrawerJob(finding.name || null);
+        return;
+      case "ConfigMap":
+        navigateTo("configMaps");
+        return;
+      case "Secret":
+        navigateTo("secrets");
+        return;
+      case "PersistentVolumeClaim":
+        navigateTo("pvcs");
+        return;
+      case "ServiceAccount":
+        navigateTo("serviceAccounts");
+        return;
+      case "CronJob":
+        navigateTo("cronJobs");
+        return;
+    }
   }
 
-  function countChip(label: string, count: number, sectionKey: string) {
-    if (count === 0) return null;
-    return (
-      <ResourceLinkChip
-        label={`${label}: ${count}`}
-        onClick={props.onNavigate ? () => navigateTo(sectionKey) : undefined}
-      />
-    );
-  }
-
-  function healthChip(label: string, count: number, color: ChipColor) {
-    if (count === 0) return null;
-    return <Chip size="small" label={`${label}: ${count}`} color={color} />;
-  }
+  const primaryError = insightsErr || (tab >= metadataTabIndex ? detailsErr : "");
 
   return (
     <RightDrawer open={props.open} onClose={props.onClose}>
       <ResourceDrawerShell title={<>Namespace: {name || "-"}</>} onClose={props.onClose}>
-        {loading ? (
+        {insightsLoading ? (
           <Box sx={loadingCenterSx}>
             <CircularProgress />
           </Box>
-        ) : err ? (
-          <ErrorState message={err} />
+        ) : primaryError && !insights ? (
+          <ErrorState message={primaryError} />
         ) : (
           <>
-            <Tabs value={tab} onChange={(_, v) => setTab(v)}>
-              <Tab label="Overview" />
-              <Tab label="Conditions" />
-              <Tab label="ResourceQuotas" />
-              <Tab label="YAML" />
+            <Tabs value={tab} onChange={(_, value) => setTab(value)}>
+              {tabs.map((label) => (
+                <Tab key={label} label={label} />
+              ))}
             </Tabs>
 
             <Box sx={drawerBodySx}>
-              {/* OVERVIEW */}
               {tab === 0 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
                   {name && (
                     <Section title="Actions" divider={false}>
-                      <NamespaceActions
-                        token={props.token}
-                        namespaceName={name}
-                        onDeleted={props.onClose}
+                      <NamespaceActions token={props.token} namespaceName={name} onDeleted={props.onClose} />
+                    </Section>
+                  )}
+
+                  {(workloadByKind || podHealth) && (
+                    <Section title="Health overview">
+                      <Table size="small" sx={{ mt: 1 }}>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ width: "24%", fontWeight: 600 }}>Scope</TableCell>
+                            <TableCell sx={{ width: "46%", fontWeight: 600 }}>Health mix</TableCell>
+                            <TableCell sx={{ width: "30%", fontWeight: 600, textAlign: "right" }}>Summary</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {podHealth && podHealthSummary(podHealth) !== "-" && (
+                            <TableRow>
+                              <TableCell sx={{ fontWeight: 600 }}>Pods</TableCell>
+                              <TableCell>
+                                {stackedHealthBar([
+                                  { count: podHealth.running, color: "#2e7d32" },
+                                  { count: podHealth.pending, color: "#ed6c02" },
+                                  { count: podHealth.failed, color: "#d32f2f" },
+                                  { count: podHealth.succeeded, color: "#607d8b" },
+                                  { count: podHealth.unknown, color: "#8e24aa" },
+                                ])}
+                              </TableCell>
+                              <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
+                                {podHealthSummary(podHealth)}
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          {workloadByKind?.deployments?.total ? (
+                            <TableRow>
+                              <TableCell sx={{ fontWeight: 600 }}>Deployments</TableCell>
+                              <TableCell>
+                                {stackedHealthBar([
+                                  { count: workloadByKind.deployments.healthy, color: "#2e7d32" },
+                                  { count: workloadByKind.deployments.progressing, color: "#ed6c02" },
+                                  { count: workloadByKind.deployments.degraded, color: "#d32f2f" },
+                                ])}
+                              </TableCell>
+                              <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
+                                {workloadSignalSummary(workloadByKind.deployments)}
+                              </TableCell>
+                            </TableRow>
+                          ) : null}
+                          {workloadByKind?.daemonSets?.total ? (
+                            <TableRow>
+                              <TableCell sx={{ fontWeight: 600 }}>DaemonSets</TableCell>
+                              <TableCell>
+                                {stackedHealthBar([
+                                  { count: workloadByKind.daemonSets.healthy, color: "#2e7d32" },
+                                  { count: workloadByKind.daemonSets.progressing, color: "#ed6c02" },
+                                  { count: workloadByKind.daemonSets.degraded, color: "#d32f2f" },
+                                ])}
+                              </TableCell>
+                              <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
+                                {workloadSignalSummary(workloadByKind.daemonSets)}
+                              </TableCell>
+                            </TableRow>
+                          ) : null}
+                          {workloadByKind?.statefulSets?.total ? (
+                            <TableRow>
+                              <TableCell sx={{ fontWeight: 600 }}>StatefulSets</TableCell>
+                              <TableCell>
+                                {stackedHealthBar([
+                                  { count: workloadByKind.statefulSets.healthy, color: "#2e7d32" },
+                                  { count: workloadByKind.statefulSets.progressing, color: "#ed6c02" },
+                                  { count: workloadByKind.statefulSets.degraded, color: "#d32f2f" },
+                                ])}
+                              </TableCell>
+                              <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
+                                {workloadSignalSummary(workloadByKind.statefulSets)}
+                              </TableCell>
+                            </TableRow>
+                          ) : null}
+                          {workloadByKind?.jobs?.total ? (
+                            <TableRow>
+                              <TableCell sx={{ fontWeight: 600 }}>Jobs</TableCell>
+                              <TableCell>
+                                {stackedHealthBar([
+                                  { count: workloadByKind.jobs.healthy, color: "#2e7d32" },
+                                  { count: workloadByKind.jobs.progressing, color: "#ed6c02" },
+                                  { count: workloadByKind.jobs.degraded, color: "#d32f2f" },
+                                ])}
+                              </TableCell>
+                              <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
+                                {workloadSignalSummary(workloadByKind.jobs)}
+                              </TableCell>
+                            </TableRow>
+                          ) : null}
+                          {workloadByKind?.cronJobs?.total ? (
+                            <TableRow>
+                              <TableCell sx={{ fontWeight: 600 }}>CronJobs</TableCell>
+                              <TableCell>
+                                {stackedHealthBar([
+                                  { count: workloadByKind.cronJobs.healthy, color: "#2e7d32" },
+                                  { count: workloadByKind.cronJobs.progressing, color: "#ed6c02" },
+                                  { count: workloadByKind.cronJobs.degraded, color: "#d32f2f" },
+                                ])}
+                              </TableCell>
+                              <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
+                                {workloadSignalSummary(workloadByKind.cronJobs)}
+                              </TableCell>
+                            </TableRow>
+                          ) : null}
+                          {workloadByKind?.replicaSets?.total ? (
+                            <TableRow>
+                              <TableCell sx={{ fontWeight: 600 }}>ReplicaSets</TableCell>
+                              <TableCell>
+                                {stackedHealthBar([
+                                  { count: workloadByKind.replicaSets.healthy, color: "#2e7d32" },
+                                  { count: workloadByKind.replicaSets.progressing, color: "#ed6c02" },
+                                  { count: workloadByKind.replicaSets.degraded, color: "#d32f2f" },
+                                ])}
+                              </TableCell>
+                              <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
+                                {workloadSignalSummary(workloadByKind.replicaSets)}
+                              </TableCell>
+                            </TableRow>
+                          ) : null}
+                        </TableBody>
+                      </Table>
+                    </Section>
+                  )}
+
+                  <Section title="Attention summary">
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
+                      <Chip
+                        size="small"
+                        color={findings.some((item) => item.severity === "high") ? "error" : findings.some((item) => item.severity === "medium") ? "warning" : "success"}
+                        label={`Findings: ${findings.length}`}
                       />
-                    </Section>
-                  )}
+                      {restartHotspots.length > 0 && (
+                        <Chip
+                          size="small"
+                          color={restartHotspots.some((item) => item.severity === "high") ? "error" : "warning"}
+                          label={`Restart hotspots: ${restartHotspots.length}`}
+                        />
+                      )}
+                      {problematic.length > 0 && <Chip size="small" color="warning" label={`Problematic resources: ${problematic.length}`} />}
+                      {(quotaPressure.critical > 0 || quotaPressure.warning > 0) && (
+                        <Chip
+                          size="small"
+                          color={quotaPressure.critical > 0 ? "error" : "warning"}
+                          label={`Quota pressure: ${quotaPressure.critical} critical · ${quotaPressure.warning} warning`}
+                        />
+                      )}
+                    </Box>
+                  </Section>
 
-                  <Box sx={panelBoxSx}>
-                    <KeyValueTable rows={summaryItems} columns={3} />
-                  </Box>
-
-                  <MetadataSection labels={metadata?.labels} annotations={metadata?.annotations} />
-
-                  {summaryMeta && (
-                    <Section title="Summary status (dataplane)">
-                      <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
-                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
-                          <Chip
-                            size="small"
-                            label={`state: ${summaryMeta.state || "unknown"}`}
-                            color={dataplaneCoarseStateChipColor(summaryMeta.state)}
-                          />
-                          <Chip size="small" label={`freshness: ${summaryMeta.freshness || "?"}`} variant="outlined" />
-                          <Chip size="small" label={`coverage: ${summaryMeta.coverage || "?"}`} variant="outlined" />
-                          <Chip size="small" label={`degradation: ${summaryMeta.degradation || "?"}`} variant="outlined" />
-                          <Chip size="small" label={`completeness: ${summaryMeta.completeness || "?"}`} variant="outlined" />
-                        </Box>
-                        <Typography variant="caption" color="text.secondary">
-                          Built from dataplane snapshots. Coverage is partial and completeness inexact for this compact
-                          namespace summary.
-                        </Typography>
-                      </Box>
-                    </Section>
-                  )}
-
-                  {workloadByKind && (
-                    <Section title="Workload signals (by kind)">
-                      <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25, mt: 0.5 }}>
-                        {workloadRollupLine("Deployments", workloadByKind.deployments)}
-                        {workloadRollupLine("DaemonSets", workloadByKind.daemonSets)}
-                        {workloadRollupLine("StatefulSets", workloadByKind.statefulSets)}
-                        {workloadRollupLine("Jobs", workloadByKind.jobs)}
-                        {workloadRollupLine("CronJobs", workloadByKind.cronJobs)}
-                        {workloadRollupLine("ReplicaSets", workloadByKind.replicaSets)}
-                      </Box>
+                  {problematic.length > 0 && (
+                    <Section title="Problematic resources">
+                      <Table size="small" sx={{ mt: 1 }}>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Kind</TableCell>
+                            <TableCell>Target</TableCell>
+                            <TableCell>Signal</TableCell>
+                            <TableCell>Reason</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {problematic.map((resource, index) => (
+                            <TableRow
+                              key={`${resource.kind}-${resource.name}-${index}`}
+                              hover
+                              sx={{ cursor: "pointer" }}
+                              onClick={() => openProblematic(resource)}
+                            >
+                              <TableCell>
+                                <Chip size="small" label={resource.kind} />
+                              </TableCell>
+                              <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>{resource.name}</TableCell>
+                              <TableCell>
+                                <Chip size="small" color={problematicSignalColor(resource.reason)} label="attention" />
+                              </TableCell>
+                              <TableCell>{resource.reason}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </Section>
                   )}
 
                   {restartHotspots.length > 0 && (
-                    <Section title="Restart hotspots (pods)">
+                    <Section title="Restart hotspots">
                       <Table size="small" sx={{ mt: 1 }}>
                         <TableHead>
                           <TableRow>
-                            <TableCell>Pod</TableCell>
-                            <TableCell>Restarts</TableCell>
-                            <TableCell>Phase</TableCell>
-                            <TableCell>Severity</TableCell>
+                            <TableCell>Kind</TableCell>
+                            <TableCell>Target</TableCell>
+                            <TableCell>Signal</TableCell>
+                            <TableCell>Reason</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {restartHotspots.slice(0, 8).map((h) => (
-                            <TableRow
-                              key={`${h.namespace}/${h.name}`}
-                              hover
-                              sx={{ cursor: "pointer" }}
-                              onClick={() => setDrawerPod(h.name)}
-                            >
-                              <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>{h.name}</TableCell>
-                              <TableCell>{h.restarts}</TableCell>
-                              <TableCell>{h.phase}</TableCell>
+                          {restartHotspots.slice(0, 8).map((item) => (
+                            <TableRow>
                               <TableCell>
-                                <Chip
-                                  size="small"
-                                  label={h.severity}
-                                  color={
-                                    h.severity === "high" ? "error" : h.severity === "medium" ? "warning" : "default"
-                                  }
-                                />
+                                <Chip size="small" label="Pod" />
+                              </TableCell>
+                              <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>{item.name}</TableCell>
+                              <TableCell>
+                                <Chip size="small" color={findingSeverityColor(item.severity)} label={`${item.severity} · ${item.restarts} restarts`} />
+                              </TableCell>
+                              <TableCell>
+                                {item.phase}
+                                {item.lastEventReason ? ` · ${item.lastEventReason}` : ""}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -484,183 +762,165 @@ export default function NamespaceDrawer(props: {
                     </Section>
                   )}
 
-                  {/* RESOURCE COUNTS */}
-                  {summaryLoading ? (
-                    <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>
-                      <CircularProgress size={24} />
-                    </Box>
-                  ) : counts ? (
+                  <Section title="Findings">
+                    {findings.length === 0 ? (
+                      <EmptyState message="No namespace findings from cached dataplane scope." />
+                    ) : (
+                      <Table size="small" sx={{ mt: 1 }}>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Kind</TableCell>
+                            <TableCell>Target</TableCell>
+                            <TableCell>Signal</TableCell>
+                            <TableCell>Reason</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {findings.map((finding, index) => (
+                            <TableRow
+                              key={`${finding.kind}-${finding.name || finding.namespace || index}`}
+                              hover
+                              sx={{ cursor: "pointer" }}
+                              onClick={() => openFinding(finding)}
+                              title={findingNote(finding)}
+                            >
+                              <TableCell>
+                                <Chip size="small" label={finding.kind} />
+                              </TableCell>
+                              <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>{findingTarget(finding)}</TableCell>
+                              <TableCell>
+                                <Chip size="small" color={findingSeverityColor(finding.severity)} label={finding.severity} />
+                              </TableCell>
+                              <TableCell>{finding.reason}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </Section>
+
+                  {summaryMeta && (
+                    <Section title="Dataplane status">
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                        <Chip
+                          size="small"
+                          label={`state: ${summaryMeta.state || "unknown"}`}
+                          color={dataplaneCoarseStateChipColor(summaryMeta.state)}
+                        />
+                        <Chip size="small" variant="outlined" label={`freshness: ${summaryMeta.freshness || "?"}`} />
+                        <Chip size="small" variant="outlined" label={`coverage: ${summaryMeta.coverage || "?"}`} />
+                        <Chip size="small" variant="outlined" label={`degradation: ${summaryMeta.degradation || "?"}`} />
+                        <Chip size="small" variant="outlined" label={`completeness: ${summaryMeta.completeness || "?"}`} />
+                      </Box>
+                    </Section>
+                  )}
+                </Box>
+              )}
+
+              {tab === 1 && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  <Box sx={panelBoxSx}>
+                    <KeyValueTable rows={summaryItems} columns={3} />
+                  </Box>
+
+                  {counts && (
                     <>
                       <Section title="Workloads">
                         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
-                          {countChip("Pods", counts.pods, "pods")}
-                          {countChip("Deployments", counts.deployments, "deployments")}
-                          {countChip("StatefulSets", counts.statefulSets, "statefulSets")}
-                          {countChip("DaemonSets", counts.daemonSets, "daemonSets")}
-                          {countChip("Jobs", counts.jobs, "jobs")}
-                          {countChip("CronJobs", counts.cronJobs, "cronJobs")}
+                          {mapCountChip("Pods", counts.pods, "pods", !!props.onNavigate, navigateTo)}
+                          {mapCountChip("Deployments", counts.deployments, "deployments", !!props.onNavigate, navigateTo)}
+                          {mapCountChip("StatefulSets", counts.statefulSets, "statefulSets", !!props.onNavigate, navigateTo)}
+                          {mapCountChip("DaemonSets", counts.daemonSets, "daemonSets", !!props.onNavigate, navigateTo)}
+                          {mapCountChip("Jobs", counts.jobs, "jobs", !!props.onNavigate, navigateTo)}
+                          {mapCountChip("CronJobs", counts.cronJobs, "cronJobs", !!props.onNavigate, navigateTo)}
                         </Box>
                       </Section>
 
                       <Section title="Networking">
                         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
-                          {countChip("Services", counts.services, "services")}
-                          {countChip("Ingresses", counts.ingresses, "ingresses")}
+                          {mapCountChip("Services", counts.services, "services", !!props.onNavigate, navigateTo)}
+                          {mapCountChip("Ingresses", counts.ingresses, "ingresses", !!props.onNavigate, navigateTo)}
                           {counts.services === 0 && counts.ingresses === 0 && (
                             <Typography variant="body2" color="text.secondary">None</Typography>
                           )}
                         </Box>
                       </Section>
 
-                      <Section title="Storage & Configuration">
+                      <Section title="Storage & configuration">
                         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
-                          {countChip("PVCs", counts.pvcs, "pvcs")}
-                          {countChip("ConfigMaps", counts.configMaps, "configMaps")}
-                          {countChip("Secrets", counts.secrets, "secrets")}
+                          {mapCountChip("PVCs", counts.pvcs, "pvcs", !!props.onNavigate, navigateTo)}
+                          {mapCountChip("ConfigMaps", counts.configMaps, "configMaps", !!props.onNavigate, navigateTo)}
+                          {mapCountChip("Secrets", counts.secrets, "secrets", !!props.onNavigate, navigateTo)}
                         </Box>
                       </Section>
 
-                      {(counts.serviceAccounts > 0 || counts.roles > 0 || counts.roleBindings > 0) && (
-                        <Section title="RBAC">
-                          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
-                            {countChip("ServiceAccounts", counts.serviceAccounts, "serviceaccounts")}
-                            {countChip("Roles", counts.roles, "roles")}
-                            {countChip("RoleBindings", counts.roleBindings, "rolebindings")}
-                          </Box>
-                        </Section>
-                      )}
-
-                      {counts.helmReleases > 0 && (
-                        <Section title="Helm">
-                          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
-                            {countChip("Releases", counts.helmReleases, "helmReleases")}
-                          </Box>
-                        </Section>
-                      )}
-
-                      {/* HEALTH */}
-                      {podHealth && (podHealth.running > 0 || podHealth.pending > 0 || podHealth.failed > 0 || podHealth.succeeded > 0 || podHealth.unknown > 0) && (
-                        <Section title="Pod Health">
-                          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
-                            {healthChip("Running", podHealth.running, "success")}
-                            {healthChip("Pending", podHealth.pending, "warning")}
-                            {healthChip("Failed", podHealth.failed, "error")}
-                            {healthChip("Succeeded", podHealth.succeeded, "default")}
-                            {healthChip("Unknown", podHealth.unknown, "warning")}
-                          </Box>
-                        </Section>
-                      )}
-
-                      {deployHealth && (deployHealth.healthy > 0 || deployHealth.degraded > 0 || deployHealth.progressing > 0) && (
-                        <Section title="Deployment Health">
-                          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
-                            {healthChip("Healthy", deployHealth.healthy, "success")}
-                            {healthChip("Degraded", deployHealth.degraded, "error")}
-                            {healthChip("Progressing", deployHealth.progressing, "warning")}
-                          </Box>
-                        </Section>
-                      )}
-
-                      {/* PROBLEMATIC RESOURCES */}
-                      {problematic.length > 0 && (
-                        <Section title="Problematic Resources">
-                          <Table size="small" sx={{ mt: 1 }}>
-                            <TableHead>
-                              <TableRow>
-                                <TableCell>Kind</TableCell>
-                                <TableCell>Name</TableCell>
-                                <TableCell>Reason</TableCell>
-                              </TableRow>
-                            </TableHead>
-                            <TableBody>
-                              {problematic.map((r, i) => (
-                                <TableRow
-                                  key={`${r.kind}-${r.name}-${i}`}
-                                  hover
-                                  sx={{ cursor: "pointer" }}
-                                  onClick={() => openProblematic(r)}
-                                >
-                                  <TableCell>
-                                    <Chip size="small" label={r.kind} color="default" />
-                                  </TableCell>
-                                  <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>{r.name}</TableCell>
-                                  <TableCell>
-                                    <Chip size="small" label={r.reason} color="error" />
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </Section>
-                      )}
-
-                      {/* HELM RELEASES */}
-                      {helmReleases.length > 0 && (
-                        <Section title="Helm Releases">
-                          <Table size="small" sx={{ mt: 1 }}>
-                            <TableHead>
-                              <TableRow>
-                                <TableCell>Name</TableCell>
-                                <TableCell>Status</TableCell>
-                                <TableCell>Revision</TableCell>
-                              </TableRow>
-                            </TableHead>
-                            <TableBody>
-                              {helmReleases.map((r) => (
-                                <TableRow
-                                  key={r.name}
-                                  hover
-                                  sx={{ cursor: "pointer" }}
-                                  onClick={() => setDrawerHelmRelease(r.name)}
-                                >
-                                  <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>{r.name}</TableCell>
-                                  <TableCell>
-                                    <Chip size="small" label={r.status} color={helmStatusChipColor(r.status)} />
-                                  </TableCell>
-                                  <TableCell>{r.revision}</TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </Section>
-                      )}
+                      <Section title="Access & packaging">
+                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
+                          {mapCountChip("ServiceAccounts", counts.serviceAccounts, "serviceAccounts", !!props.onNavigate, navigateTo)}
+                          {mapCountChip("Roles", counts.roles, "roles", !!props.onNavigate, navigateTo)}
+                          {mapCountChip("RoleBindings", counts.roleBindings, "roleBindings", !!props.onNavigate, navigateTo)}
+                          {mapCountChip("Helm releases", counts.helmReleases, "helmReleases", !!props.onNavigate, navigateTo)}
+                        </Box>
+                      </Section>
                     </>
-                  ) : null}
+                  )}
+
+                  {helmReleases.length > 0 && (
+                    <Section title="Helm releases">
+                      <Table size="small" sx={{ mt: 1 }}>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Name</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell>Revision</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {helmReleases.map((release) => (
+                            <TableRow
+                              key={release.name}
+                              hover
+                              sx={{ cursor: "pointer" }}
+                              onClick={() => setDrawerHelmRelease(release.name)}
+                            >
+                              <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>{release.name}</TableCell>
+                              <TableCell>
+                                <Chip size="small" label={release.status} color={helmStatusChipColor(release.status)} />
+                              </TableCell>
+                              <TableCell>{release.revision}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </Section>
+                  )}
                 </Box>
               )}
 
-              {/* CONDITIONS */}
-              {tab === 1 && (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  <ConditionsTable
-                    conditions={conditions}
-                    isHealthy={(cond) => isNamespaceConditionHealthy(cond as NamespaceCondition)}
-                    chipColor={(cond) => namespaceConditionChipColor(cond.status)}
-                    title="Namespace Conditions"
-                  />
-                </Box>
-              )}
-
-              {/* RESOURCE QUOTAS */}
               {tab === 2 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
-                  {quotasLoading ? (
-                    <Box sx={loadingCenterSx}>
-                      <CircularProgress />
+                  <Section title="Capacity signals">
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
+                      <Chip size="small" label={`ResourceQuotas: ${quotas.length}`} color={quotas.length > 0 ? "primary" : "default"} />
+                      <Chip size="small" label={`LimitRanges: ${limitRanges.length}`} color={limitRanges.length > 0 ? "primary" : "default"} />
+                      {(quotaPressure.critical > 0 || quotaPressure.warning > 0) && (
+                        <>
+                          <Chip size="small" color="error" label={`Critical quota entries: ${quotaPressure.critical}`} />
+                          <Chip size="small" color="warning" label={`Warning quota entries: ${quotaPressure.warning}`} />
+                        </>
+                      )}
                     </Box>
-                  ) : quotasForbidden ? (
-                    <AccessDeniedState status={403} resourceLabel="resource quotas" />
-                  ) : quotasErr ? (
-                    <ErrorState message={quotasErr} />
-                  ) : quotas.length === 0 ? (
+                  </Section>
+
+                  {quotas.length === 0 ? (
                     <EmptyState message="No ResourceQuotas in this namespace." />
                   ) : (
-                    quotas.map((rq) => (
-                      <Section key={rq.name} title={`ResourceQuota: ${rq.name}`}>
+                    quotas.map((quota) => (
+                      <Section key={quota.name} title={`ResourceQuota: ${quota.name}`}>
                         <KeyValueTable
                           rows={[
-                            { label: "Name", value: rq.name, monospace: true },
-                            { label: "Age", value: fmtAge(rq.ageSec) },
+                            { label: "Name", value: quota.name, monospace: true },
+                            { label: "Age", value: fmtAge(quota.ageSec) },
                           ]}
                           columns={2}
                         />
@@ -673,14 +933,12 @@ export default function NamespaceDrawer(props: {
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {rq.entries.map((entry) => {
+                            {quota.entries.map((entry) => {
                               const pct = entry.ratio != null ? Math.round(entry.ratio * 100) : null;
                               const color = quotaGaugeMuiColor(entry.ratio);
                               return (
                                 <TableRow key={entry.key}>
-                                  <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>
-                                    {entry.key}
-                                  </TableCell>
+                                  <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>{entry.key}</TableCell>
                                   <TableCell>
                                     <Box sx={{ position: "relative", display: "flex", alignItems: "center" }}>
                                       <LinearProgress
@@ -724,14 +982,97 @@ export default function NamespaceDrawer(props: {
                       </Section>
                     ))
                   )}
+
+                  <Section title="LimitRanges">
+                    {limitRanges.length === 0 ? (
+                      <EmptyState message="No LimitRanges in this namespace." />
+                    ) : (
+                      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                        {limitRanges.map((range) => (
+                          <Box key={range.name} sx={{ border: "1px solid var(--panel-border)", borderRadius: 1, p: 1.5 }}>
+                            <KeyValueTable
+                              rows={[
+                                { label: "Name", value: range.name, monospace: true },
+                                { label: "Age", value: fmtAge(range.ageSec) },
+                              ]}
+                              columns={2}
+                            />
+                            <Table size="small" sx={{ mt: 1.5 }}>
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell>Type</TableCell>
+                                  <TableCell>Min</TableCell>
+                                  <TableCell>Max</TableCell>
+                                  <TableCell>Default</TableCell>
+                                  <TableCell>Default Request</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {range.items.map((item, index) => (
+                                  <TableRow key={`${range.name}-${item.type}-${index}`}>
+                                    <TableCell>{item.type}</TableCell>
+                                    <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>
+                                      {kvRowsFromMap(item.min).map((row) => `${row.label}=${row.value}`).join(", ") || "-"}
+                                    </TableCell>
+                                    <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>
+                                      {kvRowsFromMap(item.max).map((row) => `${row.label}=${row.value}`).join(", ") || "-"}
+                                    </TableCell>
+                                    <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>
+                                      {kvRowsFromMap(item.default).map((row) => `${row.label}=${row.value}`).join(", ") || "-"}
+                                    </TableCell>
+                                    <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>
+                                      {kvRowsFromMap(item.defaultRequest).map((row) => `${row.label}=${row.value}`).join(", ") || "-"}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </Box>
+                        ))}
+                      </Box>
+                    )}
+                  </Section>
                 </Box>
               )}
 
-              {/* YAML */}
-              {tab === 3 && (
-                <CodeBlock code={details?.yaml || ""} language="yaml" />
+              {tab === metadataTabIndex && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  {detailsLoading && !details ? (
+                    <Box sx={loadingCenterSx}>
+                      <CircularProgress />
+                    </Box>
+                  ) : detailsErr ? (
+                    <ErrorState message={detailsErr} />
+                  ) : (
+                    <>
+                      <Box sx={panelBoxSx}>
+                        <KeyValueTable rows={summaryItems} columns={3} />
+                      </Box>
+                      <ConditionsTable
+                        conditions={conditions}
+                        isHealthy={(condition) => isNamespaceConditionHealthy(condition as NamespaceCondition)}
+                        chipColor={(condition) => namespaceConditionChipColor(condition.status)}
+                        title="Namespace conditions"
+                      />
+                      <MetadataSection labels={metadata?.labels} annotations={metadata?.annotations} />
+                    </>
+                  )}
+                </Box>
+              )}
+
+              {tab === yamlTabIndex && (
+                detailsLoading && !details ? (
+                  <Box sx={loadingCenterSx}>
+                    <CircularProgress />
+                  </Box>
+                ) : detailsErr ? (
+                  <ErrorState message={detailsErr} />
+                ) : (
+                  <CodeBlock code={details?.yaml || ""} language="yaml" />
+                )
               )}
             </Box>
+
             <PodDrawer
               open={!!drawerPod}
               onClose={() => setDrawerPod(null)}

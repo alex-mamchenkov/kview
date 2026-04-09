@@ -76,6 +76,7 @@ Background row enrichment is **narrow and user-aligned**:
 | Route | Behavior |
 |-------|----------|
 | `GET /api/namespaces/{name}/summary` | `NamespaceSummaryProjection`: counts, health rollups, RBAC counts (serviceaccounts/roles/rolebindings), Helm release count/list, `restartHotspots`, `workloadByKind`, and `NamespaceSummaryMetaDTO` from dataplane namespace-scoped snapshots only. Returns a degraded/partial usable payload when at least one contributing snapshot is usable. |
+| `GET /api/namespaces/{name}/insights` | `NamespaceInsightsProjection`: namespace summary plus sorted namespace-scoped findings, full `ResourceQuota` entries, and `LimitRange` items from dataplane namespace-scoped snapshots only. Intended for the namespace drawer's observability-first view. |
 
 ---
 
@@ -85,7 +86,7 @@ Background row enrichment is **narrow and user-aligned**:
 
 | Route | Reason |
 |-------|--------|
-| `GET /api/namespaces/{name}` | Namespace **detail** (intentional direct read). |
+| `GET /api/namespaces/{name}` | Namespace **detail** for raw metadata/conditions/YAML (intentional direct read, lazy-loaded by the UI). |
 
 ### 4.2 Deferred catalog reads
 

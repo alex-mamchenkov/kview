@@ -79,6 +79,16 @@ func TestNamespaceListEnrichmentStartsNewRevisionForChangedWorkset(t *testing.T)
 	m.nsEnrich.byCluster["ctx"].cancel()
 }
 
+func TestFilterFavouriteInsightWarmTargetsKeepsWorkOrderSubset(t *testing.T) {
+	got := filterFavouriteInsightWarmTargets(
+		[]string{"prod", "default", "staging"},
+		NamespaceEnrichHints{Favorite: map[string]struct{}{"default": {}, "staging": {}, "missing": {}}},
+	)
+	if len(got) != 2 || got[0] != "default" || got[1] != "staging" {
+		t.Fatalf("unexpected favourite insight targets: %#v", got)
+	}
+}
+
 func TestNamespaceEnrichSessionUpdateBaseRowsKeepsEnrichedFields(t *testing.T) {
 	sess := &nsEnrichSession{
 		order: []string{"default"},

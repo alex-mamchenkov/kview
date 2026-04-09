@@ -46,6 +46,13 @@ type NamespaceDetailsDTO struct {
 	YAML       string                  `json:"yaml"`
 }
 
+type NamespaceInsightsDTO struct {
+	Summary        NamespaceSummaryResourcesDTO `json:"summary"`
+	Findings       []NamespaceInsightFindingDTO `json:"findings,omitempty"`
+	ResourceQuotas []ResourceQuotaDTO           `json:"resourceQuotas,omitempty"`
+	LimitRanges    []LimitRangeDTO              `json:"limitRanges,omitempty"`
+}
+
 type NamespaceSummaryDTO struct {
 	Name      string `json:"name"`
 	Phase     string `json:"phase"`
@@ -166,4 +173,17 @@ type NamespaceSummaryMetaDTO struct {
 	// Stage 5A currently returns values like:
 	// "ok", "empty", "denied", "partial_proxy", or "degraded".
 	State string `json:"state"`
+}
+
+type NamespaceInsightFindingDTO struct {
+	Kind            string `json:"kind"`
+	Namespace       string `json:"namespace,omitempty"`
+	Name            string `json:"name,omitempty"`
+	Severity        string `json:"severity"`
+	Score           int    `json:"score"`
+	Reason          string `json:"reason"`
+	LikelyCause     string `json:"likelyCause,omitempty"`
+	SuggestedAction string `json:"suggestedAction,omitempty"`
+	Confidence      string `json:"confidence,omitempty"`
+	Section         string `json:"section,omitempty"`
 }
