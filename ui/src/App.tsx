@@ -85,7 +85,7 @@ const dataplaneSearchSectionByKind: Record<string, Section> = {
 function AppInner() {
   const token = useMemo(() => getToken(), []);
   const { settings } = useUserSettings();
-  const { activeIssue, lastRecoveryShownAt, retryNonce } = useConnectionState();
+  const { activeIssue, backendVersion, lastRecoveryShownAt, retryNonce } = useConnectionState();
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [criticalOpen, setCriticalOpen] = useState(false);
   const [lastCriticalSeenId, setLastCriticalSeenId] = useState<string | null>(null);
@@ -378,6 +378,7 @@ function AppInner() {
               onToggleFavourite={onToggleFavourite}
               section={section}
               onSelectSection={onSelectSection}
+              buildVersion={backendVersion}
             />
           ) : null}
 

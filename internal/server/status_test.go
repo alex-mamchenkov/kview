@@ -4,9 +4,22 @@ import (
 	"context"
 	"testing"
 
+	"kview/internal/buildinfo"
 	"kview/internal/runtime"
 	"kview/internal/session"
 )
+
+func TestBuildStatusIncludesBackendVersion(t *testing.T) {
+	prev := buildinfo.Version
+	buildinfo.Version = "v9.9.9-test"
+	defer func() { buildinfo.Version = prev }()
+
+	s := &Server{}
+	status := s.buildStatus(context.Background(), "")
+	if status.Backend.Version != "v9.9.9-test" {
+		t.Fatalf("backend version: got %q", status.Backend.Version)
+	}
+}
 
 func TestUpdateConnectivityActivity_RegistersConnectedActivity(t *testing.T) {
 	rt := runtime.NewManager()

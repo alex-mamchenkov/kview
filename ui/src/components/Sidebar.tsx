@@ -35,6 +35,7 @@ type Props = {
 
   section: Section;
   onSelectSection: (s: Section) => void;
+  buildVersion?: string;
 };
 
 const drawerWidth = 320;
@@ -60,104 +61,115 @@ export default function Sidebar(props: Props) {
         [`& .MuiDrawer-paper`]: { width: drawerWidth, boxSizing: "border-box", pt: 10, px: 2 },
       }}
     >
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-        <FormControl fullWidth size="small">
-          <InputLabel id="ctx-label">Context</InputLabel>
-          <Select
-            labelId="ctx-label"
-            label="Context"
-            value={props.activeContext || ""}
-            onChange={(e) => props.onSelectContext(String(e.target.value))}
-          >
-            {props.contexts.map((c) => (
-              <MenuItem key={c.name} value={c.name}>
-                {c.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        {isClusterScoped ? (
-          <TextField
-            size="small"
-            label="Namespace"
-            value="-"
-            disabled
-            helperText="Cluster-scoped resource"
-          />
-        ) : !props.nsLimited ? (
-          <Autocomplete
-            size="small"
-            options={sortedNamespaces}
-            value={props.namespace || null}
-            inputValue={nsInput}
-            onInputChange={(_, v) => setNsInput(v)}
-            onChange={(_, v) => props.onSelectNamespace(v || "")}
-            renderInput={(params) => <TextField {...params} label="Namespace" />}
-            renderOption={(optionProps, option) => {
-              const isFav = favSet.has(option);
-              return (
-                <li {...optionProps} key={option} style={{ display: "flex", alignItems: "center" }}>
-                  <Box sx={{ flexGrow: 1 }}>{option}</Box>
-                  <IconButton
-                    size="small"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      props.onToggleFavourite(option);
-                    }}
-                  >
-                    {isFav ? <StarIcon fontSize="small" /> : <StarBorderIcon fontSize="small" />}
-                  </IconButton>
-                </li>
-              );
-            }}
-            filterOptions={(opts, state) => {
-              const q = state.inputValue.trim().toLowerCase();
-              if (!q) return opts;
-              return opts.filter((n) => n.toLowerCase().includes(q));
-            }}
-          />
-        ) : (
-          <TextField
-            size="small"
-            label="Namespace (manual)"
-            value={props.namespace}
-            onChange={(e) => props.onSelectNamespace(e.target.value)}
-            helperText="No permission to list namespaces (RBAC). Type it manually."
-          />
-        )}
-
-        <Divider sx={{ my: 0.25 }} />
-
-        {sidebarGroups.map((group, index) => (
-          <Box key={group.id}>
-            <Typography
-              variant="overline"
-              color="text.secondary"
-              sx={{ display: "block", lineHeight: 1.5, mb: 0.25 }}
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, height: "100%", minHeight: 0 }}>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+          <FormControl fullWidth size="small">
+            <InputLabel id="ctx-label">Context</InputLabel>
+            <Select
+              labelId="ctx-label"
+              label="Context"
+              value={props.activeContext || ""}
+              onChange={(e) => props.onSelectContext(String(e.target.value))}
             >
-              {group.label}
-            </Typography>
-            <List dense disablePadding>
-              {group.items.map((item) => (
-                <ListItemButton
-                  key={item}
-                  selected={props.section === item}
-                  onClick={() => props.onSelectSection(item)}
-                  sx={{ minHeight: 30, py: 0.25 }}
-                >
-                  <ListItemText
-                    primary={getResourceLabel(item)}
-                    primaryTypographyProps={{ variant: "body2" }}
-                    sx={{ my: 0 }}
-                  />
-                </ListItemButton>
+              {props.contexts.map((c) => (
+                <MenuItem key={c.name} value={c.name}>
+                  {c.name}
+                </MenuItem>
               ))}
-            </List>
-            {index < sidebarGroups.length - 1 ? <Divider sx={{ my: 0.5 }} /> : null}
-          </Box>
-        ))}
+            </Select>
+          </FormControl>
+
+          {isClusterScoped ? (
+            <TextField
+              size="small"
+              label="Namespace"
+              value="-"
+              disabled
+              helperText="Cluster-scoped resource"
+            />
+          ) : !props.nsLimited ? (
+            <Autocomplete
+              size="small"
+              options={sortedNamespaces}
+              value={props.namespace || null}
+              inputValue={nsInput}
+              onInputChange={(_, v) => setNsInput(v)}
+              onChange={(_, v) => props.onSelectNamespace(v || "")}
+              renderInput={(params) => <TextField {...params} label="Namespace" />}
+              renderOption={(optionProps, option) => {
+                const isFav = favSet.has(option);
+                return (
+                  <li {...optionProps} key={option} style={{ display: "flex", alignItems: "center" }}>
+                    <Box sx={{ flexGrow: 1 }}>{option}</Box>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        props.onToggleFavourite(option);
+                      }}
+                    >
+                      {isFav ? <StarIcon fontSize="small" /> : <StarBorderIcon fontSize="small" />}
+                    </IconButton>
+                  </li>
+                );
+              }}
+              filterOptions={(opts, state) => {
+                const q = state.inputValue.trim().toLowerCase();
+                if (!q) return opts;
+                return opts.filter((n) => n.toLowerCase().includes(q));
+              }}
+            />
+          ) : (
+            <TextField
+              size="small"
+              label="Namespace (manual)"
+              value={props.namespace}
+              onChange={(e) => props.onSelectNamespace(e.target.value)}
+              helperText="No permission to list namespaces (RBAC). Type it manually."
+            />
+          )}
+
+          <Divider sx={{ my: 0.25 }} />
+        </Box>
+
+        <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.5 }}>
+          {sidebarGroups.map((group, index) => (
+            <Box key={group.id}>
+              <Typography
+                variant="overline"
+                color="text.secondary"
+                sx={{ display: "block", lineHeight: 1.5, mb: 0.25 }}
+              >
+                {group.label}
+              </Typography>
+              <List dense disablePadding>
+                {group.items.map((item) => (
+                  <ListItemButton
+                    key={item}
+                    selected={props.section === item}
+                    onClick={() => props.onSelectSection(item)}
+                    sx={{ minHeight: 30, py: 0.25 }}
+                  >
+                    <ListItemText
+                      primary={getResourceLabel(item)}
+                      primaryTypographyProps={{ variant: "body2" }}
+                      sx={{ my: 0 }}
+                    />
+                  </ListItemButton>
+                ))}
+              </List>
+              {index < sidebarGroups.length - 1 ? <Divider sx={{ my: 0.5 }} /> : null}
+            </Box>
+          ))}
+        </Box>
+
+        <Box sx={{ pt: 0.5 }}>
+          <Divider sx={{ mb: 1 }} />
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+            kview {props.buildVersion || "dev"}
+          </Typography>
+        </Box>
       </Box>
     </Drawer>
   );

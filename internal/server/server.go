@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/cors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
+	"kview/internal/buildinfo"
 	"kview/internal/cluster"
 	"kview/internal/dataplane"
 	"kview/internal/kube"
@@ -3020,7 +3021,8 @@ func sanitizeErrorMessage(status int) string {
 }
 
 type statusBackendDTO struct {
-	OK bool `json:"ok"`
+	OK      bool   `json:"ok"`
+	Version string `json:"version,omitempty"`
 }
 
 type statusClusterDTO struct {
@@ -3046,41 +3048,45 @@ const connectivityActivityTTL = 3 * time.Minute
 func (s *Server) buildStatus(parent context.Context, contextName string) statusDTO {
 	checkedAt := time.Now().UTC()
 	clusterStatus := statusClusterDTO{Context: contextName}
-	if info, ok := s.mgr.ContextInfo(contextName); ok {
-		clusterStatus.Cluster = info.Cluster
-		clusterStatus.AuthInfo = info.AuthInfo
-		clusterStatus.Namespace = info.Namespace
-	}
+	if s.mgr != nil {
+		if info, ok := s.mgr.ContextInfo(contextName); ok {
+			clusterStatus.Cluster = info.Cluster
+			clusterStatus.AuthInfo = info.AuthInfo
+			clusterStatus.Namespace = info.Namespace
+		}
 
-	ctx, cancel := context.WithTimeout(parent, 3*time.Second)
-	defer cancel()
+		ctx, cancel := context.WithTimeout(parent, 3*time.Second)
+		defer cancel()
 
-	clients, active, err := s.mgr.GetClientsForContext(ctx, contextName)
-	if active != "" {
-		clusterStatus.Context = active
-	}
-	if err == nil {
-		version, versionErr := clients.Discovery.ServerVersion()
-		if versionErr != nil {
-			err = versionErr
-		} else {
-			clusterStatus.OK = true
-			clusterStatus.ServerVersion = version.GitVersion
+		clients, active, err := s.mgr.GetClientsForContext(ctx, contextName)
+		if active != "" {
+			clusterStatus.Context = active
+		}
+		if err == nil {
+			version, versionErr := clients.Discovery.ServerVersion()
+			if versionErr != nil {
+				err = versionErr
+			} else {
+				clusterStatus.OK = true
+				clusterStatus.ServerVersion = version.GitVersion
+			}
+		}
+		if err != nil {
+			clusterStatus.OK = false
+			clusterStatus.Message = err.Error()
 		}
 	}
-	if err != nil {
-		clusterStatus.OK = false
-		clusterStatus.Message = err.Error()
-	}
 
-	s.updateConnectivityActivity(clusterStatus)
-	s.stopInactiveConnectivityActivitiesExcept(clusterStatus.Context)
-	s.logClusterStatusTransition(clusterStatus)
+	if s.rt != nil {
+		s.updateConnectivityActivity(clusterStatus)
+		s.stopInactiveConnectivityActivitiesExcept(clusterStatus.Context)
+		s.logClusterStatusTransition(clusterStatus)
+	}
 
 	return statusDTO{
 		OK:            clusterStatus.OK,
 		ActiveContext: clusterStatus.Context,
-		Backend:       statusBackendDTO{OK: true},
+		Backend:       statusBackendDTO{OK: true, Version: buildinfo.Version},
 		Cluster:       clusterStatus,
 		CheckedAt:     checkedAt,
 	}

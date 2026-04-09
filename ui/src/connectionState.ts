@@ -16,7 +16,7 @@ export type ClusterConnectionStatus = {
 export type AppStatus = {
   ok: boolean;
   activeContext: string;
-  backend: { ok: boolean };
+  backend: { ok: boolean; version?: string };
   cluster: ClusterConnectionStatus;
   checkedAt: string;
 };
@@ -31,6 +31,7 @@ export type ConnectionIssue = {
 export type ConnectionState = {
   health: ConnectionHealth;
   backendHealth: ConnectionHealth;
+  backendVersion?: string;
   clusterHealth: ConnectionHealth;
   activeIssue?: ConnectionIssue;
   cluster?: ClusterConnectionStatus;
@@ -104,6 +105,7 @@ export function notifyApiFailure(kind: ConnectionIssueKind, message: string) {
 export function notifyStatus(status: AppStatus) {
   const now = Date.now();
   state.backendHealth = status.backend?.ok === false ? "unhealthy" : "healthy";
+  state.backendVersion = status.backend?.version;
   state.cluster = status.cluster;
   state.clusterHealth = status.cluster?.ok ? "healthy" : "unhealthy";
   recomputeHealth(now);

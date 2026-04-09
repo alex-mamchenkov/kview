@@ -6,6 +6,20 @@ DIST_DIR=dist
 GOOS?=$(shell go env GOOS 2>/dev/null || echo linux)
 GOARCH?=$(shell go env GOARCH 2>/dev/null || echo amd64)
 DOCKER_IMAGE=kview-build:go1.25.0-node22.20.0
+VERSION?=$(shell sh -c 'tag=""; \
+	if [ "$$GITHUB_REF_TYPE" = "tag" ] && [ -n "$$GITHUB_REF_NAME" ]; then \
+		tag="$$GITHUB_REF_NAME"; \
+	else \
+		tag=$$(git tag --points-at HEAD --sort=-version:refname 2>/dev/null | head -n 1); \
+	fi; \
+	if [ -n "$$tag" ]; then \
+		printf "%s" "$$tag"; \
+	elif git rev-parse --short=12 HEAD >/dev/null 2>&1; then \
+		git rev-parse --short=12 HEAD; \
+	else \
+		printf "dev"; \
+	fi')
+GO_LDFLAGS=-X kview/internal/buildinfo.Version=$(VERSION)
 DOCKER_RUN=docker run --rm \
 	-u $(shell id -u):$(shell id -g) \
 	-e HOME=/tmp \
@@ -34,16 +48,16 @@ run: ui
 	go run ./cmd/kview
 
 build: ui
-	go build -o $(OUTPUT) ./cmd/kview
+	go build -ldflags "$(GO_LDFLAGS)" -o $(OUTPUT) ./cmd/kview
 	@echo "Built $(OUTPUT) (browser/server modes; default: browser)"
 
 build-webview: ui
-	go build -tags webview -o $(OUTPUT) ./cmd/kview
+	go build -tags webview -ldflags "$(GO_LDFLAGS)" -o $(OUTPUT) ./cmd/kview
 	@echo "Built $(OUTPUT) with webview support (default: webview)"
 
 build-release: ui
 	mkdir -p $(dir $(OUTPUT))
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -ldflags "-s -w" -o $(OUTPUT) ./cmd/kview
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -ldflags "$(GO_LDFLAGS) -s -w" -o $(OUTPUT) ./cmd/kview
 	@echo "Built $(OUTPUT) ($(GOOS)/$(GOARCH); browser/server modes; default: browser)"
 
 docker-image:
@@ -51,11 +65,11 @@ docker-image:
 
 build-docker: docker-image
 	mkdir -p .cache/go-build .cache/go-mod .cache/npm
-	$(DOCKER_RUN) make build OUTPUT=$(OUTPUT)
+	$(DOCKER_RUN) make build OUTPUT=$(OUTPUT) VERSION=$(VERSION)
 
 build-docker-release: docker-image
 	mkdir -p .cache/go-build .cache/go-mod .cache/npm $(DIST_DIR)
-	$(DOCKER_RUN) make build-release GOOS=$(GOOS) GOARCH=$(GOARCH) OUTPUT=$(OUTPUT)
+	$(DOCKER_RUN) make build-release GOOS=$(GOOS) GOARCH=$(GOARCH) OUTPUT=$(OUTPUT) VERSION=$(VERSION)
 
 clean:
 	rm -rf $(UI_DIR)/dist
