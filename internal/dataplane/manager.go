@@ -1036,7 +1036,7 @@ func (m *manager) LimitRangesSnapshot(ctx context.Context, clusterName, namespac
 func (m *manager) EnsureObservers(ctx context.Context, clusterName string) {
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
-	plane.EnsureObservers(ctx, m.scheduler, m.clients, m.rt)
+	plane.EnsureObservers(context.WithoutCancel(ctx), m.scheduler, m.clients, m.rt)
 }
 
 func (m *manager) MergeCachedNamespaceRowProjection(ctx context.Context, clusterName string, items []dto.NamespaceListItemDTO) ([]dto.NamespaceListItemDTO, int) {

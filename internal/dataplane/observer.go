@@ -90,7 +90,9 @@ func (p *clusterPlane) namespaceObserverTick(ctx context.Context, sched *workSch
 	}
 	// Run one refresh cycle immediately so observer state becomes truthful as soon
 	// as a dataplane-backed endpoint activates the plane.
-	obsCtx := ContextWithWorkSource(ctx, WorkSourceObserver)
+	tickCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	obsCtx := ContextWithWorkSource(tickCtx, WorkSourceObserver)
 	snap, err := p.NamespacesSnapshot(obsCtx, sched, clients, WorkPriorityLow)
 	if err != nil {
 		if snap.Err != nil {
@@ -133,7 +135,9 @@ func (p *clusterPlane) nodeObserverTick(ctx context.Context, sched *workSchedule
 		p.setObserverState(observerKindNodes, ObserverStateStopped, rt)
 		return
 	}
-	obsCtx := ContextWithWorkSource(ctx, WorkSourceObserver)
+	tickCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	obsCtx := ContextWithWorkSource(tickCtx, WorkSourceObserver)
 	snap, err := p.NodesSnapshot(obsCtx, sched, clients, WorkPriorityLow)
 	if err != nil {
 		if snap.Err != nil {
