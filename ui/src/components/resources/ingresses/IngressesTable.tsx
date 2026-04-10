@@ -5,6 +5,7 @@ import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import IngressDrawer from "./IngressDrawer";
+import { deploymentHealthBucketColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
@@ -17,6 +18,10 @@ type Ingress = {
   tlsCount: number;
   addresses?: string[];
   ageSec: number;
+  routingHealthBucket?: string;
+  addressState?: string;
+  tlsHint?: string;
+  needsAttention?: boolean;
 };
 
 type Row = Ingress & { id: string };
@@ -25,6 +30,17 @@ const resourceLabel = getResourceLabel("ingresses");
 
 const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
+  {
+    field: "routingHealthBucket",
+    headerName: "Signal",
+    width: 140,
+    renderCell: (p) => {
+      const bucket = p.row.routingHealthBucket;
+      if (!bucket) return "-";
+      return <Chip size="small" label={p.row.needsAttention ? "attention" : bucket} color={deploymentHealthBucketColor(bucket)} />;
+    },
+    sortable: false,
+  },
   {
     field: "ingressClassName",
     headerName: "Class",
@@ -46,24 +62,24 @@ const columns: GridColDef<Row>[] = [
     sortable: false,
   },
   {
-    field: "tlsCount",
+    field: "tlsHint",
     headerName: "TLS",
     width: 110,
     renderCell: (p) => {
-      const count = Number(p.value || 0);
-      const label = count > 0 ? `Yes (${count})` : "No";
-      return <Chip size="small" label={label} />;
+      const hint = p.row.tlsHint || "";
+      const label = hint === "enabled" ? `yes (${p.row.tlsCount})` : "none";
+      return <Chip size="small" label={label} color={hint === "enabled" ? "success" : "warning"} />;
     },
   },
   {
-    field: "addresses",
+    field: "addressState",
     headerName: "Address",
-    width: 200,
-    renderCell: (p) => (
-      <Typography variant="body2" noWrap>
-        {valueOrDash(p.row.addresses?.join(", "))}
-      </Typography>
-    ),
+    width: 140,
+    renderCell: (p) => {
+      const state = p.row.addressState || "";
+      const label = state || "-";
+      return <Chip size="small" label={label} color={state === "ready" ? "success" : state === "pending" ? "warning" : "default"} />;
+    },
     sortable: false,
   },
   {
@@ -98,6 +114,9 @@ export default function IngressesTable({
   const filterPredicate = useCallback(
     (row: Row, q: string) =>
       row.name.toLowerCase().includes(q) ||
+      (row.routingHealthBucket || "").toLowerCase().includes(q) ||
+      (row.addressState || "").toLowerCase().includes(q) ||
+      (row.tlsHint || "").toLowerCase().includes(q) ||
       (row.ingressClassName || "").toLowerCase().includes(q) ||
       (row.hosts || []).join(" ").toLowerCase().includes(q) ||
       (row.addresses || []).join(" ").toLowerCase().includes(q),
@@ -116,7 +135,7 @@ export default function IngressesTable({
       }}
       enabled={!!namespace}
       filterPredicate={filterPredicate}
-      filterLabel="Filter (name/class/host/address)"
+      filterLabel="Filter (name/class/signal/host)"
       resourceLabel={resourceLabel}
       resourceKey="ingresses"
       accessResource={listResourceAccess.ingresses}

@@ -1,22 +1,26 @@
 package dto
 
 type IngressListItemDTO struct {
-	Name             string   `json:"name"`
-	Namespace        string   `json:"namespace"`
-	IngressClassName string   `json:"ingressClassName"`
-	Hosts            []string `json:"hosts"`
-	TLSCount         int32    `json:"tlsCount"`
-	Addresses        []string `json:"addresses"`
-	AgeSec           int64    `json:"ageSec"`
+	Name                string   `json:"name"`
+	Namespace           string   `json:"namespace"`
+	IngressClassName    string   `json:"ingressClassName"`
+	Hosts               []string `json:"hosts"`
+	TLSCount            int32    `json:"tlsCount"`
+	Addresses           []string `json:"addresses"`
+	AgeSec              int64    `json:"ageSec"`
+	RoutingHealthBucket string   `json:"routingHealthBucket,omitempty"`
+	AddressState        string   `json:"addressState,omitempty"`
+	TLSHint             string   `json:"tlsHint,omitempty"`
+	NeedsAttention      bool     `json:"needsAttention,omitempty"`
 }
 
 type IngressDetailsDTO struct {
-	Summary        IngressSummaryDTO   `json:"summary"`
-	Rules          []IngressRuleDTO    `json:"rules"`
-	TLS            []IngressTLSDTO     `json:"tls"`
-	DefaultBackend *IngressBackendDTO  `json:"defaultBackend,omitempty"`
-	Warnings       IngressWarningsDTO  `json:"warnings"`
-	YAML           string              `json:"yaml"`
+	Summary        IngressSummaryDTO  `json:"summary"`
+	Rules          []IngressRuleDTO   `json:"rules"`
+	TLS            []IngressTLSDTO    `json:"tls"`
+	DefaultBackend *IngressBackendDTO `json:"defaultBackend,omitempty"`
+	Warnings       IngressWarningsDTO `json:"warnings"`
+	YAML           string             `json:"yaml"`
 }
 
 type IngressSummaryDTO struct {

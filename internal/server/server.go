@@ -1877,7 +1877,9 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
 		})
 
-		api.Get("/namespaces/{ns}/services", dataplaneNamespacedListHandler(s, s.dp.ServicesSnapshot, nil))
+		api.Get("/namespaces/{ns}/services", dataplaneNamespacedListHandler(s, s.dp.ServicesSnapshot, func(items []dto.ServiceListItemDTO) any {
+			return dataplane.EnrichServiceListItemsForAPI(items)
+		}))
 
 		api.Get("/namespaces/{ns}/services/{name}", func(w http.ResponseWriter, r *http.Request) {
 			ns := chi.URLParam(r, "ns")
@@ -2277,7 +2279,9 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, map[string]any{"active": active, "yaml": y})
 		})
 
-		api.Get("/namespaces/{ns}/persistentvolumeclaims", dataplaneNamespacedListHandler(s, s.dp.PVCsSnapshot, nil))
+		api.Get("/namespaces/{ns}/persistentvolumeclaims", dataplaneNamespacedListHandler(s, s.dp.PVCsSnapshot, func(items []dto.PersistentVolumeClaimDTO) any {
+			return dataplane.EnrichPVCListItemsForAPI(items)
+		}))
 
 		api.Get("/namespaces/{ns}/persistentvolumeclaims/{name}", func(w http.ResponseWriter, r *http.Request) {
 			ns := chi.URLParam(r, "ns")
@@ -2462,7 +2466,9 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": items})
 		})
 
-		api.Get("/namespaces/{ns}/ingresses", dataplaneNamespacedListHandler(s, s.dp.IngressesSnapshot, nil))
+		api.Get("/namespaces/{ns}/ingresses", dataplaneNamespacedListHandler(s, s.dp.IngressesSnapshot, func(items []dto.IngressListItemDTO) any {
+			return dataplane.EnrichIngressListItemsForAPI(items)
+		}))
 
 		api.Get("/namespaces/{ns}/ingresses/{name}", func(w http.ResponseWriter, r *http.Request) {
 			ns := chi.URLParam(r, "ns")

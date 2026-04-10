@@ -11,6 +11,9 @@ type PersistentVolumeClaimDTO struct {
 	Capacity         string   `json:"capacity,omitempty"`
 	VolumeMode       string   `json:"volumeMode,omitempty"`
 	AgeSec           int64    `json:"ageSec"`
+	HealthBucket     string   `json:"healthBucket,omitempty"`
+	NeedsAttention   bool     `json:"needsAttention,omitempty"`
+	ResizePending    bool     `json:"resizePending,omitempty"`
 }
 
 type PersistentVolumeClaimDetailsDTO struct {
@@ -50,8 +53,8 @@ type PersistentVolumeClaimRequestsDTO struct {
 }
 
 type PersistentVolumeClaimStatusDTO struct {
-	Phase      string                           `json:"phase,omitempty"`
-	Capacity   string                           `json:"capacity,omitempty"`
+	Phase      string                              `json:"phase,omitempty"`
+	Capacity   string                              `json:"capacity,omitempty"`
 	Conditions []PersistentVolumeClaimConditionDTO `json:"conditions,omitempty"`
 }
 

@@ -35,8 +35,8 @@ type ServiceTrafficDTO struct {
 }
 
 type ServiceEndpointsDTO struct {
-	Ready    int32                 `json:"ready"`
-	NotReady int32                 `json:"notReady"`
+	Ready    int32                   `json:"ready"`
+	NotReady int32                   `json:"notReady"`
 	Pods     []ServiceEndpointPodDTO `json:"pods,omitempty"`
 }
 
@@ -48,14 +48,17 @@ type ServiceEndpointPodDTO struct {
 }
 
 type ServiceListItemDTO struct {
-	Name             string   `json:"name"`
-	Namespace        string   `json:"namespace"`
-	Type             string   `json:"type"`
-	ClusterIPs       []string `json:"clusterIPs"`
-	PortsSummary     string   `json:"portsSummary,omitempty"`
-	EndpointsReady   int32    `json:"endpointsReady"`
-	EndpointsNotReady int32   `json:"endpointsNotReady"`
-	AgeSec           int64    `json:"ageSec"`
+	Name                 string   `json:"name"`
+	Namespace            string   `json:"namespace"`
+	Type                 string   `json:"type"`
+	ClusterIPs           []string `json:"clusterIPs"`
+	PortsSummary         string   `json:"portsSummary,omitempty"`
+	EndpointsReady       int32    `json:"endpointsReady"`
+	EndpointsNotReady    int32    `json:"endpointsNotReady"`
+	AgeSec               int64    `json:"ageSec"`
+	EndpointHealthBucket string   `json:"endpointHealthBucket,omitempty"`
+	ExposureHint         string   `json:"exposureHint,omitempty"`
+	NeedsAttention       bool     `json:"needsAttention,omitempty"`
 }
 
 type ServiceLinkDTO struct {

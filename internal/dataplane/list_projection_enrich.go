@@ -259,3 +259,115 @@ func cronJobListSignals(cj dto.CronJobDTO) (bucket string, needsAttention bool) 
 		return deployBucketHealthy, false
 	}
 }
+
+// EnrichServiceListItemsForAPI returns a shallow copy with endpoint and exposure hints.
+func EnrichServiceListItemsForAPI(items []dto.ServiceListItemDTO) []dto.ServiceListItemDTO {
+	if len(items) == 0 {
+		return items
+	}
+	out := make([]dto.ServiceListItemDTO, len(items))
+	for i := range items {
+		svc := items[i]
+		svc.EndpointHealthBucket, svc.NeedsAttention = serviceListSignals(svc)
+		svc.ExposureHint = serviceExposureHint(svc)
+		out[i] = svc
+	}
+	return out
+}
+
+func serviceListSignals(svc dto.ServiceListItemDTO) (bucket string, needsAttention bool) {
+	switch {
+	case svc.Type == "ExternalName":
+		return deployBucketHealthy, false
+	case svc.EndpointsReady > 0 && svc.EndpointsNotReady == 0:
+		return deployBucketHealthy, false
+	case svc.EndpointsReady > 0 && svc.EndpointsNotReady > 0:
+		return deployBucketProgressing, true
+	case svc.EndpointsReady == 0 && svc.EndpointsNotReady > 0:
+		return deployBucketDegraded, true
+	default:
+		return deployBucketDegraded, true
+	}
+}
+
+func serviceExposureHint(svc dto.ServiceListItemDTO) string {
+	switch svc.Type {
+	case "LoadBalancer":
+		return "public"
+	case "NodePort":
+		return "node"
+	case "ExternalName":
+		return "external"
+	default:
+		return "internal"
+	}
+}
+
+// EnrichIngressListItemsForAPI returns a shallow copy with routing/address/TLS hints.
+func EnrichIngressListItemsForAPI(items []dto.IngressListItemDTO) []dto.IngressListItemDTO {
+	if len(items) == 0 {
+		return items
+	}
+	out := make([]dto.IngressListItemDTO, len(items))
+	for i := range items {
+		ing := items[i]
+		ing.RoutingHealthBucket, ing.NeedsAttention = ingressListSignals(ing)
+		ing.AddressState = ingressAddressState(ing)
+		ing.TLSHint = ingressTLSHint(ing)
+		out[i] = ing
+	}
+	return out
+}
+
+func ingressListSignals(ing dto.IngressListItemDTO) (bucket string, needsAttention bool) {
+	switch {
+	case len(ing.Hosts) == 0:
+		return deployBucketDegraded, true
+	case len(ing.Addresses) == 0:
+		return deployBucketProgressing, true
+	default:
+		return deployBucketHealthy, false
+	}
+}
+
+func ingressAddressState(ing dto.IngressListItemDTO) string {
+	if len(ing.Addresses) == 0 {
+		return "pending"
+	}
+	return "ready"
+}
+
+func ingressTLSHint(ing dto.IngressListItemDTO) string {
+	if ing.TLSCount > 0 {
+		return "enabled"
+	}
+	return "none"
+}
+
+// EnrichPVCListItemsForAPI returns a shallow copy with health and resize hints.
+func EnrichPVCListItemsForAPI(items []dto.PersistentVolumeClaimDTO) []dto.PersistentVolumeClaimDTO {
+	if len(items) == 0 {
+		return items
+	}
+	out := make([]dto.PersistentVolumeClaimDTO, len(items))
+	for i := range items {
+		pvc := items[i]
+		pvc.HealthBucket, pvc.NeedsAttention = pvcListSignals(pvc)
+		pvc.ResizePending = pvc.RequestedStorage != "" && pvc.Capacity != "" && pvc.RequestedStorage != pvc.Capacity
+		out[i] = pvc
+	}
+	return out
+}
+
+func pvcListSignals(pvc dto.PersistentVolumeClaimDTO) (bucket string, needsAttention bool) {
+	switch pvc.Phase {
+	case "Bound":
+		return deployBucketHealthy, false
+	case "Pending":
+		return deployBucketProgressing, true
+	case "Lost":
+		return deployBucketDegraded, true
+	default:
+		return deployBucketUnknown, false
+	}
+}
