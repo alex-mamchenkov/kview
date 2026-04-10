@@ -77,6 +77,14 @@ type DataPlaneManager interface {
 	MergeCachedNamespaceRowProjection(ctx context.Context, clusterName string, items []dto.NamespaceListItemDTO) ([]dto.NamespaceListItemDTO, int)
 	// NodesSnapshot returns a raw snapshot for nodes in the given cluster.
 	NodesSnapshot(ctx context.Context, clusterName string) (NodesSnapshot, error)
+	// PersistentVolumesSnapshot returns a raw snapshot for persistent volumes in the given cluster.
+	PersistentVolumesSnapshot(ctx context.Context, clusterName string) (PersistentVolumesSnapshot, error)
+	// ClusterRolesSnapshot returns a raw snapshot for cluster roles in the given cluster.
+	ClusterRolesSnapshot(ctx context.Context, clusterName string) (ClusterRolesSnapshot, error)
+	// ClusterRoleBindingsSnapshot returns a raw snapshot for cluster role bindings in the given cluster.
+	ClusterRoleBindingsSnapshot(ctx context.Context, clusterName string) (ClusterRoleBindingsSnapshot, error)
+	// CRDsSnapshot returns a raw snapshot for custom resource definitions in the given cluster.
+	CRDsSnapshot(ctx context.Context, clusterName string) (CRDsSnapshot, error)
 	// PodsSnapshot returns a raw snapshot for pods in the given namespace.
 	PodsSnapshot(ctx context.Context, clusterName, namespace string) (PodsSnapshot, error)
 	// DeploymentsSnapshot returns a raw snapshot for deployments in the given namespace.
@@ -373,8 +381,12 @@ type clusterPlane struct {
 	capRegistry *CapabilityRegistry
 
 	// First-wave raw snapshots.
-	nsStore    snapshotStore[NamespaceSnapshot]
-	nodesStore snapshotStore[NodesSnapshot]
+	nsStore                  snapshotStore[NamespaceSnapshot]
+	nodesStore               snapshotStore[NodesSnapshot]
+	persistentVolumesStore   snapshotStore[PersistentVolumesSnapshot]
+	clusterRolesStore        snapshotStore[ClusterRolesSnapshot]
+	clusterRoleBindingsStore snapshotStore[ClusterRoleBindingsSnapshot]
+	crdsStore                snapshotStore[CRDsSnapshot]
 
 	// Namespace-scoped snapshots for first-wave resources.
 	podsStore         namespacedSnapshotStore[PodsSnapshot]
@@ -443,6 +455,10 @@ func newClusterPlane(name string, profile Profile, mode DiscoveryMode, scope Obs
 	}
 	p.nsStore.configureTelemetry(stats, name, ResourceKindNamespaces)
 	p.nodesStore.configureTelemetry(stats, name, ResourceKindNodes)
+	p.persistentVolumesStore.configureTelemetry(stats, name, ResourceKindPersistentVolumes)
+	p.clusterRolesStore.configureTelemetry(stats, name, ResourceKindClusterRoles)
+	p.clusterRoleBindingsStore.configureTelemetry(stats, name, ResourceKindClusterRoleBindings)
+	p.crdsStore.configureTelemetry(stats, name, ResourceKindCRDs)
 	p.podsStore.configureTelemetry(stats, name, ResourceKindPods)
 	p.depsStore.configureTelemetry(stats, name, ResourceKindDeployments)
 	p.svcsStore.configureTelemetry(stats, name, ResourceKindServices)
@@ -529,6 +545,14 @@ func (p *clusterPlane) hydratePersistedClusterSnapshot(kind ResourceKind, payloa
 		return hydratePersistedClusterSnapshotInto(&p.nsStore, payload, maxAge)
 	case ResourceKindNodes:
 		return hydratePersistedClusterSnapshotInto(&p.nodesStore, payload, maxAge)
+	case ResourceKindPersistentVolumes:
+		return hydratePersistedClusterSnapshotInto(&p.persistentVolumesStore, payload, maxAge)
+	case ResourceKindClusterRoles:
+		return hydratePersistedClusterSnapshotInto(&p.clusterRolesStore, payload, maxAge)
+	case ResourceKindClusterRoleBindings:
+		return hydratePersistedClusterSnapshotInto(&p.clusterRoleBindingsStore, payload, maxAge)
+	case ResourceKindCRDs:
+		return hydratePersistedClusterSnapshotInto(&p.crdsStore, payload, maxAge)
 	}
 	return nil
 }
@@ -621,6 +645,10 @@ func (s Snapshot[I]) ObservedAt() time.Time { return s.Meta.ObservedAt }
 
 type NamespaceSnapshot = Snapshot[dto.NamespaceListItemDTO]
 type NodesSnapshot = Snapshot[dto.NodeListItemDTO]
+type PersistentVolumesSnapshot = Snapshot[dto.PersistentVolumeDTO]
+type ClusterRolesSnapshot = Snapshot[dto.ClusterRoleListItemDTO]
+type ClusterRoleBindingsSnapshot = Snapshot[dto.ClusterRoleBindingListItemDTO]
+type CRDsSnapshot = Snapshot[dto.CRDListItemDTO]
 type PodsSnapshot = Snapshot[dto.PodListItemDTO]
 type DeploymentsSnapshot = Snapshot[dto.DeploymentListItemDTO]
 type ServicesSnapshot = Snapshot[dto.ServiceListItemDTO]
@@ -664,6 +692,58 @@ func (p *clusterPlane) NodesSnapshot(ctx context.Context, sched *workScheduler, 
 		fetch:       kube.ListNodes,
 	}
 	return executeClusterSnapshot(p, ctx, sched, prio, clients, &p.nodesStore, desc)
+}
+
+// PersistentVolumesSnapshot returns a raw snapshot for persistent volumes plus metadata and any normalized error.
+func (p *clusterPlane) PersistentVolumesSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, prio WorkPriority) (PersistentVolumesSnapshot, error) {
+	desc := clusterSnapshotDescriptor[dto.PersistentVolumeDTO]{
+		kind:        ResourceKindPersistentVolumes,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindPersistentVolumes),
+		capGroup:    "",
+		capResource: "persistentvolumes",
+		capScope:    CapabilityScopeCluster,
+		fetch:       kube.ListPersistentVolumes,
+	}
+	return executeClusterSnapshot(p, ctx, sched, prio, clients, &p.persistentVolumesStore, desc)
+}
+
+// ClusterRolesSnapshot returns a raw snapshot for cluster roles plus metadata and any normalized error.
+func (p *clusterPlane) ClusterRolesSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, prio WorkPriority) (ClusterRolesSnapshot, error) {
+	desc := clusterSnapshotDescriptor[dto.ClusterRoleListItemDTO]{
+		kind:        ResourceKindClusterRoles,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindClusterRoles),
+		capGroup:    "rbac.authorization.k8s.io",
+		capResource: "clusterroles",
+		capScope:    CapabilityScopeCluster,
+		fetch:       kube.ListClusterRoles,
+	}
+	return executeClusterSnapshot(p, ctx, sched, prio, clients, &p.clusterRolesStore, desc)
+}
+
+// ClusterRoleBindingsSnapshot returns a raw snapshot for cluster role bindings plus metadata and any normalized error.
+func (p *clusterPlane) ClusterRoleBindingsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, prio WorkPriority) (ClusterRoleBindingsSnapshot, error) {
+	desc := clusterSnapshotDescriptor[dto.ClusterRoleBindingListItemDTO]{
+		kind:        ResourceKindClusterRoleBindings,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindClusterRoleBindings),
+		capGroup:    "rbac.authorization.k8s.io",
+		capResource: "clusterrolebindings",
+		capScope:    CapabilityScopeCluster,
+		fetch:       kube.ListClusterRoleBindings,
+	}
+	return executeClusterSnapshot(p, ctx, sched, prio, clients, &p.clusterRoleBindingsStore, desc)
+}
+
+// CRDsSnapshot returns a raw snapshot for custom resource definitions plus metadata and any normalized error.
+func (p *clusterPlane) CRDsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, prio WorkPriority) (CRDsSnapshot, error) {
+	desc := clusterSnapshotDescriptor[dto.CRDListItemDTO]{
+		kind:        ResourceKindCRDs,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindCRDs),
+		capGroup:    "apiextensions.k8s.io",
+		capResource: "customresourcedefinitions",
+		capScope:    CapabilityScopeCluster,
+		fetch:       kube.ListCustomResourceDefinitions,
+	}
+	return executeClusterSnapshot(p, ctx, sched, prio, clients, &p.crdsStore, desc)
 }
 
 // PodsSnapshot returns a raw snapshot for pods in the given namespace plus metadata and any normalized error.
@@ -910,6 +990,30 @@ func (m *manager) NodesSnapshot(ctx context.Context, clusterName string) (NodesS
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
 	return plane.NodesSnapshot(ctx, m.scheduler, m.clients, WorkPriorityCritical)
+}
+
+func (m *manager) PersistentVolumesSnapshot(ctx context.Context, clusterName string) (PersistentVolumesSnapshot, error) {
+	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
+	plane := planeAny.(*clusterPlane)
+	return plane.PersistentVolumesSnapshot(ctx, m.scheduler, m.clients, WorkPriorityCritical)
+}
+
+func (m *manager) ClusterRolesSnapshot(ctx context.Context, clusterName string) (ClusterRolesSnapshot, error) {
+	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
+	plane := planeAny.(*clusterPlane)
+	return plane.ClusterRolesSnapshot(ctx, m.scheduler, m.clients, WorkPriorityCritical)
+}
+
+func (m *manager) ClusterRoleBindingsSnapshot(ctx context.Context, clusterName string) (ClusterRoleBindingsSnapshot, error) {
+	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
+	plane := planeAny.(*clusterPlane)
+	return plane.ClusterRoleBindingsSnapshot(ctx, m.scheduler, m.clients, WorkPriorityCritical)
+}
+
+func (m *manager) CRDsSnapshot(ctx context.Context, clusterName string) (CRDsSnapshot, error) {
+	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
+	plane := planeAny.(*clusterPlane)
+	return plane.CRDsSnapshot(ctx, m.scheduler, m.clients, WorkPriorityCritical)
 }
 
 func (m *manager) PodsSnapshot(ctx context.Context, clusterName, namespace string) (PodsSnapshot, error) {

@@ -22,7 +22,12 @@ type ListSnapshotRevisionEnvelope struct {
 // ListRevisionKindNeedsNamespace is true for namespaced list kinds.
 func ListRevisionKindNeedsNamespace(k ResourceKind) bool {
 	switch k {
-	case ResourceKindNamespaces, ResourceKindNodes:
+	case ResourceKindNamespaces,
+		ResourceKindNodes,
+		ResourceKindPersistentVolumes,
+		ResourceKindClusterRoles,
+		ResourceKindClusterRoleBindings,
+		ResourceKindCRDs:
 		return false
 	default:
 		return true
@@ -36,6 +41,14 @@ func ParseListRevisionResourceKind(s string) (ResourceKind, bool) {
 		return ResourceKindNamespaces, true
 	case string(ResourceKindNodes):
 		return ResourceKindNodes, true
+	case string(ResourceKindPersistentVolumes):
+		return ResourceKindPersistentVolumes, true
+	case string(ResourceKindClusterRoles):
+		return ResourceKindClusterRoles, true
+	case string(ResourceKindClusterRoleBindings):
+		return ResourceKindClusterRoleBindings, true
+	case string(ResourceKindCRDs):
+		return ResourceKindCRDs, true
 	case string(ResourceKindPods):
 		return ResourceKindPods, true
 	case string(ResourceKindDeployments):
@@ -98,6 +111,30 @@ func (p *clusterPlane) listSnapshotRevision(kind ResourceKind, namespace string)
 		fillListRevisionEnvFromSnap(&env, snap, snap.Err)
 	case ResourceKindNodes:
 		snap, ok := peekClusterSnapshot(&p.nodesStore)
+		if !ok {
+			return env
+		}
+		fillListRevisionEnvFromSnap(&env, snap, snap.Err)
+	case ResourceKindPersistentVolumes:
+		snap, ok := peekClusterSnapshot(&p.persistentVolumesStore)
+		if !ok {
+			return env
+		}
+		fillListRevisionEnvFromSnap(&env, snap, snap.Err)
+	case ResourceKindClusterRoles:
+		snap, ok := peekClusterSnapshot(&p.clusterRolesStore)
+		if !ok {
+			return env
+		}
+		fillListRevisionEnvFromSnap(&env, snap, snap.Err)
+	case ResourceKindClusterRoleBindings:
+		snap, ok := peekClusterSnapshot(&p.clusterRoleBindingsStore)
+		if !ok {
+			return env
+		}
+		fillListRevisionEnvFromSnap(&env, snap, snap.Err)
+	case ResourceKindCRDs:
+		snap, ok := peekClusterSnapshot(&p.crdsStore)
 		if !ok {
 			return env
 		}

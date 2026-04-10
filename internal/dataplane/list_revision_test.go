@@ -65,3 +65,42 @@ func TestListSnapshotRevision_AfterSnapshotSet(t *testing.T) {
 		t.Fatalf("env %+v", env)
 	}
 }
+
+func TestListSnapshotRevision_ClusterScopedKindsDoNotRequireNamespace(t *testing.T) {
+	kinds := []ResourceKind{
+		ResourceKindNamespaces,
+		ResourceKindNodes,
+		ResourceKindPersistentVolumes,
+		ResourceKindClusterRoles,
+		ResourceKindClusterRoleBindings,
+		ResourceKindCRDs,
+	}
+	for _, kind := range kinds {
+		if ListRevisionKindNeedsNamespace(kind) {
+			t.Fatalf("%s should be cluster-scoped for revision polling", kind)
+		}
+		parsed, ok := ParseListRevisionResourceKind(string(kind))
+		if !ok || parsed != kind {
+			t.Fatalf("parse %s = %s/%v", kind, parsed, ok)
+		}
+	}
+}
+
+func TestListSnapshotRevision_AfterClusterScopedSnapshotSet(t *testing.T) {
+	dm := NewManager(ManagerConfig{})
+	mm := dm.(*manager)
+	planeAny, _ := mm.PlaneForCluster(context.Background(), "c1")
+	plane := planeAny.(*clusterPlane)
+	now := time.Now().UTC()
+	setClusterSnapshot(&plane.clusterRolesStore, ClusterRolesSnapshot{
+		Meta:  SnapshotMetadata{ObservedAt: now, Freshness: FreshnessClassHot},
+		Items: []dto.ClusterRoleListItemDTO{{Name: "view", RulesCount: 3}},
+	})
+	env, err := mm.ListSnapshotRevision(context.Background(), "c1", ResourceKindClusterRoles, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !env.Known || env.Revision != "1" || env.Freshness != string(FreshnessClassHot) {
+		t.Fatalf("env %+v", env)
+	}
+}

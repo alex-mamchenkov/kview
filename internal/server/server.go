@@ -963,28 +963,9 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, map[string]any{"active": active, "item": det})
 		})
 
-		api.Get("/clusterroles", func(w http.ResponseWriter, r *http.Request) {
-			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
-			defer cancel()
-
-			clients, active, err := s.mgr.GetClients(ctx)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
-				return
-			}
-
-			items, err := kube.ListClusterRoles(ctx, clients)
-			if err != nil {
-				status := http.StatusInternalServerError
-				if apierrors.IsForbidden(err) {
-					status = http.StatusForbidden
-				}
-				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
-				return
-			}
-
-			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": dataplane.EnrichClusterRoleListItemsForAPI(items)})
-		})
+		api.Get("/clusterroles", dataplaneClusterListHandler(s, s.dp.ClusterRolesSnapshot, func(items []dto.ClusterRoleListItemDTO) any {
+			return dataplane.EnrichClusterRoleListItemsForAPI(items)
+		}))
 
 		api.Get("/clusterroles/{name}", func(w http.ResponseWriter, r *http.Request) {
 			name := chi.URLParam(r, "name")
@@ -1073,28 +1054,9 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, map[string]any{"active": active, "yaml": y})
 		})
 
-		api.Get("/clusterrolebindings", func(w http.ResponseWriter, r *http.Request) {
-			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
-			defer cancel()
-
-			clients, active, err := s.mgr.GetClients(ctx)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
-				return
-			}
-
-			items, err := kube.ListClusterRoleBindings(ctx, clients)
-			if err != nil {
-				status := http.StatusInternalServerError
-				if apierrors.IsForbidden(err) {
-					status = http.StatusForbidden
-				}
-				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
-				return
-			}
-
-			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": dataplane.EnrichClusterRoleBindingListItemsForAPI(items)})
-		})
+		api.Get("/clusterrolebindings", dataplaneClusterListHandler(s, s.dp.ClusterRoleBindingsSnapshot, func(items []dto.ClusterRoleBindingListItemDTO) any {
+			return dataplane.EnrichClusterRoleBindingListItemsForAPI(items)
+		}))
 
 		api.Get("/clusterrolebindings/{name}", func(w http.ResponseWriter, r *http.Request) {
 			name := chi.URLParam(r, "name")
@@ -1183,28 +1145,9 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, map[string]any{"active": active, "yaml": y})
 		})
 
-		api.Get("/customresourcedefinitions", func(w http.ResponseWriter, r *http.Request) {
-			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
-			defer cancel()
-
-			clients, active, err := s.mgr.GetClients(ctx)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
-				return
-			}
-
-			items, err := kube.ListCustomResourceDefinitions(ctx, clients)
-			if err != nil {
-				status := http.StatusInternalServerError
-				if apierrors.IsForbidden(err) {
-					status = http.StatusForbidden
-				}
-				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
-				return
-			}
-
-			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": dataplane.EnrichCRDListItemsForAPI(items)})
-		})
+		api.Get("/customresourcedefinitions", dataplaneClusterListHandler(s, s.dp.CRDsSnapshot, func(items []dto.CRDListItemDTO) any {
+			return dataplane.EnrichCRDListItemsForAPI(items)
+		}))
 
 		api.Get("/customresourcedefinitions/{name}", func(w http.ResponseWriter, r *http.Request) {
 			name := chi.URLParam(r, "name")
@@ -1293,28 +1236,9 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, map[string]any{"active": active, "yaml": y})
 		})
 
-		api.Get("/persistentvolumes", func(w http.ResponseWriter, r *http.Request) {
-			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
-			defer cancel()
-
-			clients, active, err := s.mgr.GetClients(ctx)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
-				return
-			}
-
-			items, err := kube.ListPersistentVolumes(ctx, clients)
-			if err != nil {
-				status := http.StatusInternalServerError
-				if apierrors.IsForbidden(err) {
-					status = http.StatusForbidden
-				}
-				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
-				return
-			}
-
-			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": dataplane.EnrichPersistentVolumeListItemsForAPI(items)})
-		})
+		api.Get("/persistentvolumes", dataplaneClusterListHandler(s, s.dp.PersistentVolumesSnapshot, func(items []dto.PersistentVolumeDTO) any {
+			return dataplane.EnrichPersistentVolumeListItemsForAPI(items)
+		}))
 
 		api.Get("/persistentvolumes/{name}", func(w http.ResponseWriter, r *http.Request) {
 			name := chi.URLParam(r, "name")

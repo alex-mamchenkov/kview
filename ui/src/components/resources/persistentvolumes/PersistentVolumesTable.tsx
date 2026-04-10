@@ -1,12 +1,14 @@
 import React, { useCallback } from "react";
 import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGetWithContext } from "../../../api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import { pvPhaseChipColor, workloadHealthBucketColor } from "../../../utils/k8sUi";
 import PersistentVolumeDrawer from "./PersistentVolumeDrawer";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
+import { dataplaneListMetaFromResponse, type ApiDataplaneListResponse } from "../../../types/api";
+import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
 
 type PersistentVolume = {
   name: string;
@@ -91,10 +93,13 @@ const columns: GridColDef<Row>[] = [
 ];
 
 export default function PersistentVolumesTable({ token }: { token: string }) {
-  const fetchRows = useCallback(async () => {
-    const res = await apiGet<{ items: PersistentVolume[] }>("/api/persistentvolumes", token);
+  const fetchRows = useCallback(async (contextName?: string) => {
+    const res = await apiGetWithContext<ApiDataplaneListResponse<PersistentVolume>>("/api/persistentvolumes", token, contextName || "");
     const items = res.items || [];
-    return { rows: items.map((pv) => ({ ...pv, id: pv.name })) };
+    return {
+      rows: items.map((pv) => ({ ...pv, id: pv.name })),
+      dataplaneMeta: dataplaneListMetaFromResponse({ meta: res.meta, observed: res.observed }),
+    };
   }, [token]);
 
   const filterPredicate = useCallback(
@@ -115,6 +120,10 @@ export default function PersistentVolumesTable({ token }: { token: string }) {
       title={resourceLabel}
       columns={columns}
       fetchRows={fetchRows}
+      dataplaneRevisionPoll={{
+        fetchRevision: dataplaneRevisionFetcher(token, "persistentvolumes"),
+        pollSec: defaultRevisionPollSec,
+      }}
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/status/signal/storageClass/claim)"
       resourceLabel={resourceLabel}

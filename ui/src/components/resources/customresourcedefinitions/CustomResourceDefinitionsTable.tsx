@@ -1,12 +1,14 @@
 import React, { useCallback } from "react";
 import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
-import { apiGet } from "../../../api";
+import { apiGetWithContext } from "../../../api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import { workloadHealthBucketColor } from "../../../utils/k8sUi";
 import CustomResourceDefinitionDrawer from "./CustomResourceDefinitionDrawer";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
+import { dataplaneListMetaFromResponse, type ApiDataplaneListResponse } from "../../../types/api";
+import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
 
 type CRDItem = {
   name: string;
@@ -89,10 +91,13 @@ const columns: GridColDef<Row>[] = [
 ];
 
 export default function CustomResourceDefinitionsTable({ token }: { token: string }) {
-  const fetchRows = useCallback(async () => {
-    const res = await apiGet<{ items: CRDItem[] }>("/api/customresourcedefinitions", token);
+  const fetchRows = useCallback(async (contextName?: string) => {
+    const res = await apiGetWithContext<ApiDataplaneListResponse<CRDItem>>("/api/customresourcedefinitions", token, contextName || "");
     const items = res.items || [];
-    return { rows: items.map((c) => ({ ...c, id: c.name })) };
+    return {
+      rows: items.map((c) => ({ ...c, id: c.name })),
+      dataplaneMeta: dataplaneListMetaFromResponse({ meta: res.meta, observed: res.observed }),
+    };
   }, [token]);
 
   const filterPredicate = useCallback(
@@ -112,6 +117,10 @@ export default function CustomResourceDefinitionsTable({ token }: { token: strin
       title={resourceLabel}
       columns={columns}
       fetchRows={fetchRows}
+      dataplaneRevisionPoll={{
+        fetchRevision: dataplaneRevisionFetcher(token, "customresourcedefinitions"),
+        pollSec: defaultRevisionPollSec,
+      }}
       filterPredicate={filterPredicate}
       filterLabel="Filter (name/group/kind/scope/signal)"
       resourceLabel={resourceLabel}
