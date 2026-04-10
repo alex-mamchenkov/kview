@@ -611,7 +611,7 @@ func (s *Server) Router() http.Handler {
 			// Ensure observers are running for the active cluster so snapshots stay reasonably fresh.
 			s.dp.EnsureObservers(ctx, active)
 
-			summary := s.dp.DashboardSummary(ctx, active)
+			summary := s.dp.DashboardSummary(ctx, active, parseClusterDashboardListOptions(r))
 			writeJSON(w, http.StatusOK, map[string]any{
 				"active": active,
 				"item":   summary,
@@ -3242,6 +3242,27 @@ func (s *Server) logClusterStatusTransition(clusterStatus statusClusterDTO) {
 	logStructured(s.rt, runtime.LogLevelError, "connectivity", "failure",
 		fmt.Sprintf("cluster connection failed for context %s: %s", contextName, clusterStatus.Message),
 		"context", contextName, "cluster", clusterStatus.Cluster)
+}
+
+func parseClusterDashboardListOptions(r *http.Request) dataplane.ClusterDashboardListOptions {
+	q := r.URL.Query()
+	return dataplane.ClusterDashboardListOptions{
+		FindingsFilter:        q.Get("findingsFilter"),
+		FindingsQuery:         q.Get("findingsQ"),
+		FindingsOffset:        parseNonNegativeQueryInt(q.Get("findingsOffset")),
+		FindingsLimit:         parseNonNegativeQueryInt(q.Get("findingsLimit")),
+		RestartHotspotsQuery:  q.Get("restartHotspotsQ"),
+		RestartHotspotsOffset: parseNonNegativeQueryInt(q.Get("restartHotspotsOffset")),
+		RestartHotspotsLimit:  parseNonNegativeQueryInt(q.Get("restartHotspotsLimit")),
+	}
+}
+
+func parseNonNegativeQueryInt(raw string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
 }
 
 // logStructured writes a runtime log with a consistent key=value prefix for observability.

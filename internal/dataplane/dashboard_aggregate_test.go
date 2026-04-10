@@ -76,7 +76,7 @@ func TestAggregateClusterDashboard_FromCachedPodsOnly(t *testing.T) {
 	}}})
 	setNamespacedSnapshot(&plane.lrStore, ns, LimitRangesSnapshot{Meta: meta, Items: []dto.LimitRangeDTO{{Name: "limits", Namespace: ns}}})
 
-	res, hot, find, wh, cov := mm.aggregateClusterDashboard(plane, []string{ns}, 1, 0)
+	res, hot, find, wh, cov := mm.aggregateClusterDashboard(plane, []string{ns}, 1, 0, ClusterDashboardListOptions{})
 	if res.Pods != 1 {
 		t.Fatalf("pods: %d", res.Pods)
 	}
@@ -118,7 +118,7 @@ func TestAggregateClusterDashboard_NoCacheUnknownTotals(t *testing.T) {
 	planeAny, _ := mm.PlaneForCluster(t.Context(), "ctx2")
 	plane := planeAny.(*clusterPlane)
 
-	res, _, _, _, cov := mm.aggregateClusterDashboard(plane, []string{"x", "y"}, 2, 0)
+	res, _, _, _, cov := mm.aggregateClusterDashboard(plane, []string{"x", "y"}, 2, 0, ClusterDashboardListOptions{})
 	if res.Pods != 0 || cov.ResourceTotalsCompleteness != "unknown" || cov.NamespacesInResourceTotals != 0 {
 		t.Fatalf("res=%+v cov=%+v", res, cov)
 	}
@@ -142,7 +142,7 @@ func TestAggregateClusterDashboard_HonorsHotspotToggle(t *testing.T) {
 		},
 	})
 
-	res, hot, _, wh, cov := mm.aggregateClusterDashboard(plane, []string{ns}, 1, 0)
+	res, hot, _, wh, cov := mm.aggregateClusterDashboard(plane, []string{ns}, 1, 0, ClusterDashboardListOptions{})
 	if res.Pods != 1 {
 		t.Fatalf("pods: got %d, want 1", res.Pods)
 	}
@@ -202,7 +202,7 @@ func TestDetectDashboardFindingsRanksSignals(t *testing.T) {
 		helmReleases:   HelmReleasesSnapshot{Items: []dto.HelmReleaseDTO{{Name: "rel", Namespace: ns, Status: "pending-upgrade", Updated: now.Add(-time.Hour).Unix()}}},
 		helmOK:         true,
 	})
-	summary := summarizeDashboardFindings(findings, 3)
+	summary := summarizeDashboardFindings(findings, 3, ClusterDashboardListOptions{FindingsLimit: len(findings)})
 	if summary.Total != len(findings) || summary.High < 2 || summary.EmptyConfigMaps != 1 || summary.EmptySecrets != 1 ||
 		summary.ServiceWarnings != 1 || summary.IngressWarnings != 1 || summary.PVCWarnings != 1 ||
 		summary.RoleWarnings != 1 || summary.RoleBindingWarnings != 1 {
@@ -224,13 +224,58 @@ func TestSummarizeDashboardFindingsPrefersHigherValueKindsOverScore(t *testing.T
 		{Kind: "Job", Severity: "high", Score: 95, Namespace: "ns", Name: "job-a"},
 		{Kind: "HelmRelease", Severity: "high", Score: 86, Namespace: "ns", Name: "rel-a"},
 		{Kind: "Secret", Severity: "high", Score: 99, Namespace: "ns", Name: "sec-a"},
-	}, 10)
+	}, 10, ClusterDashboardListOptions{FindingsLimit: 10})
 
 	if len(summary.Top) != 3 {
 		t.Fatalf("top len = %d", len(summary.Top))
 	}
 	if summary.Top[0].Kind != "HelmRelease" || summary.Top[1].Kind != "Job" || summary.Top[2].Kind != "Secret" {
 		t.Fatalf("unexpected attention ordering: %+v", summary.Top)
+	}
+}
+
+func TestSummarizeDashboardFindingsFiltersAndPaginatesItems(t *testing.T) {
+	summary := summarizeDashboardFindings([]ClusterDashboardFinding{
+		{Kind: "Job", Severity: "high", Score: 95, Namespace: "team-a", Name: "api-migrate"},
+		{Kind: "Job", Severity: "high", Score: 90, Namespace: "team-b", Name: "worker-migrate"},
+		{Kind: "Secret", Severity: "low", Score: 30, Namespace: "team-a", Name: "empty-secret"},
+		{Kind: "Service", Severity: "medium", Score: 70, Namespace: "team-a", Name: "api"},
+	}, 10, ClusterDashboardListOptions{
+		FindingsFilter: "high",
+		FindingsQuery:  "migrate",
+		FindingsOffset: 1,
+		FindingsLimit:  1,
+	})
+
+	if summary.Total != 4 || summary.High != 2 || summary.Medium != 1 || summary.Low != 1 {
+		t.Fatalf("global counts should ignore page filters: %+v", summary)
+	}
+	if summary.ItemsTotal != 2 || summary.ItemsOffset != 1 || summary.ItemsLimit != 1 || summary.ItemsHasMore {
+		t.Fatalf("page metadata mismatch: %+v", summary)
+	}
+	if len(summary.Items) != 1 || summary.Items[0].Name != "worker-migrate" {
+		t.Fatalf("unexpected page items: %+v", summary.Items)
+	}
+}
+
+func TestRestartHotspotsFilterAndPaginate(t *testing.T) {
+	items := []dto.PodRestartHotspotDTO{
+		{Namespace: "team-a", Name: "api-0", Node: "node-a", Severity: "high", RestartRatePerDay: 10, Restarts: 20},
+		{Namespace: "team-a", Name: "worker-0", Node: "node-b", Severity: "medium", RestartRatePerDay: 8, Restarts: 8},
+		{Namespace: "team-b", Name: "api-1", Node: "node-a", Severity: "low", RestartRatePerDay: 3, Restarts: 2},
+	}
+	hot := ClusterDashboardHotspotsPanel{}
+	page := paginateRestartHotspots(filterRestartHotspots(items, "node-a"), ClusterDashboardListOptions{
+		RestartHotspotsQuery:  "node-a",
+		RestartHotspotsOffset: 1,
+		RestartHotspotsLimit:  1,
+	}, &hot)
+
+	if hot.RestartHotspotsTotal != 2 || hot.RestartHotspotsOffset != 1 || hot.RestartHotspotsLimit != 1 || hot.RestartHotspotsHasMore {
+		t.Fatalf("hotspot page metadata mismatch: %+v", hot)
+	}
+	if len(page) != 1 || page[0].Name != "api-1" {
+		t.Fatalf("unexpected hotspot page: %+v", page)
 	}
 }
 

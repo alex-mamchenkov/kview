@@ -89,7 +89,7 @@ func (m *manager) NamespaceInsightsProjection(ctx context.Context, clusterName, 
 		limitRanges:    lrSnap,
 		limitRangesOK:  lrErr == nil,
 	})
-	sorted := summarizeDashboardFindings(findings, len(findings))
+	sorted := summarizeDashboardFindings(findings, len(findings), ClusterDashboardListOptions{FindingsLimit: len(findings)})
 	out.Insights.Findings = namespaceInsightFindingsFromDashboard(sorted.Items)
 	return out, nil
 }

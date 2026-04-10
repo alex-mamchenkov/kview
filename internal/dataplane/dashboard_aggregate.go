@@ -26,7 +26,8 @@ func resourceTotalsCompletenessLabel(visible, withCachedDataplaneLists int) stri
 // aggregateClusterDashboard rolls up workload totals and hotspots only from namespaces that already
 // have cached dataplane list snapshots (typically from visiting those namespaces or row enrichment),
 // intersected with the current namespace list snapshot. No alphabetical sampling and no implicit cluster-wide totals.
-func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted []string, nsTotal int, nsUnhealthy int) (ClusterDashboardResourcesPanel, ClusterDashboardHotspotsPanel, ClusterDashboardFindingsPanel, ClusterDashboardWorkloadHints, ClusterDashboardCoverage) {
+func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted []string, nsTotal int, nsUnhealthy int, opts ClusterDashboardListOptions) (ClusterDashboardResourcesPanel, ClusterDashboardHotspotsPanel, ClusterDashboardFindingsPanel, ClusterDashboardWorkloadHints, ClusterDashboardCoverage) {
+	opts = normalizeClusterDashboardListOptions(opts)
 	cov := m.buildDashboardCoverage(plane.name, nsNamesSorted, nsTotal)
 	policy := m.Policy().Dashboard
 
@@ -105,7 +106,7 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 			aggregateMetas = append(aggregateMetas, podsSnap.Meta)
 			if policy.IncludeHotspots {
 				hot.PodsWithElevatedRestarts += CountPodsWithRestartThreshold(podsSnap, int32(policy.RestartElevatedThreshold))
-				hList := ProjectRestartHotspotsFromPods(ns, podsSnap, defaultRestartHotspotLimit)
+				hList := ProjectRestartHotspotsFromPods(ns, podsSnap, len(podsSnap.Items))
 				if len(hList.Items) > 0 {
 					hotspotLists = append(hotspotLists, hList.Items)
 				}
@@ -256,7 +257,7 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 	if !policy.IncludeHotspots {
 		hot.Note = "Hotspot projection is disabled in dataplane settings."
 		findNote := find.Note
-		find = summarizeDashboardFindings(findings, policy.HotspotLimit)
+		find = summarizeDashboardFindings(findings, policy.HotspotLimit, opts)
 		find.Note = findNote
 		wh.AggregateFreshness = res.AggregateFreshness
 		wh.AggregateDegradation = res.AggregateDegradation
@@ -276,12 +277,13 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 		})
 	}
 
-	hot.TopPodRestartHotspots = MergeRestartHotspots(policy.HotspotLimit, hotspotLists...)
-	for _, item := range hot.TopPodRestartHotspots {
+	restartHotspots := mergeRestartHotspotsUnbounded(hotspotLists...)
+	for _, item := range restartHotspots {
 		if item.Severity == restartSeverityHigh {
 			hot.HighSeverityHotspotsInTopN++
 		}
 	}
+	hot.TopPodRestartHotspots = paginateRestartHotspots(filterRestartHotspots(restartHotspots, opts.RestartHotspotsQuery), opts, &hot)
 
 	if len(aggregateMetas) > 0 {
 		wf := string(WorstFreshnessFromSnapshots(aggregateMetas...))
@@ -294,7 +296,7 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 		find.AggregateDegradation = wd
 	}
 	findNote := find.Note
-	find = summarizeDashboardFindings(findings, policy.HotspotLimit)
+	find = summarizeDashboardFindings(findings, policy.HotspotLimit, opts)
 	find.Note = findNote
 	find.AggregateFreshness = hot.AggregateFreshness
 	find.AggregateDegradation = hot.AggregateDegradation
@@ -590,7 +592,8 @@ func isTransitionalHelmStatus(status string) bool {
 	}
 }
 
-func summarizeDashboardFindings(findings []ClusterDashboardFinding, limit int) ClusterDashboardFindingsPanel {
+func summarizeDashboardFindings(findings []ClusterDashboardFinding, limit int, opts ClusterDashboardListOptions) ClusterDashboardFindingsPanel {
+	opts = normalizeClusterDashboardListOptions(opts)
 	if limit <= 0 {
 		limit = 10
 	}
@@ -660,8 +663,139 @@ func summarizeDashboardFindings(findings []ClusterDashboardFinding, limit int) C
 	} else {
 		out.Top = append(out.Top, findings...)
 	}
-	out.Items = append(out.Items, findings...)
+	pageSource := filterDashboardFindings(findings, opts.FindingsFilter, opts.FindingsQuery)
+	out.ItemsTotal = len(pageSource)
+	out.ItemsOffset = opts.FindingsOffset
+	out.ItemsLimit = opts.FindingsLimit
+	out.ItemsFilter = opts.FindingsFilter
+	out.ItemsQuery = opts.FindingsQuery
+	out.Items = append(out.Items, paginateDashboardFindings(pageSource, opts.FindingsOffset, opts.FindingsLimit)...)
+	out.ItemsHasMore = out.ItemsOffset+len(out.Items) < out.ItemsTotal
 	return out
+}
+
+func normalizeClusterDashboardListOptions(opts ClusterDashboardListOptions) ClusterDashboardListOptions {
+	opts.FindingsFilter = strings.TrimSpace(opts.FindingsFilter)
+	opts.FindingsQuery = strings.TrimSpace(opts.FindingsQuery)
+	opts.RestartHotspotsQuery = strings.TrimSpace(opts.RestartHotspotsQuery)
+	opts.FindingsOffset = normalizeDashboardOffset(opts.FindingsOffset)
+	opts.RestartHotspotsOffset = normalizeDashboardOffset(opts.RestartHotspotsOffset)
+	opts.FindingsLimit = normalizeDashboardLimit(opts.FindingsLimit)
+	opts.RestartHotspotsLimit = normalizeDashboardLimit(opts.RestartHotspotsLimit)
+	return opts
+}
+
+func normalizeDashboardOffset(offset int) int {
+	if offset < 0 {
+		return 0
+	}
+	return offset
+}
+
+func normalizeDashboardLimit(limit int) int {
+	switch {
+	case limit <= 0:
+		return 25
+	case limit > 100:
+		return 100
+	default:
+		return limit
+	}
+}
+
+func filterDashboardFindings(findings []ClusterDashboardFinding, filter, query string) []ClusterDashboardFinding {
+	filter = strings.TrimSpace(filter)
+	query = strings.ToLower(strings.TrimSpace(query))
+	out := make([]ClusterDashboardFinding, 0, len(findings))
+	for _, f := range findings {
+		if filter != "" && filter != "top" {
+			if filter == "high" || filter == "medium" || filter == "low" {
+				if f.Severity != filter {
+					continue
+				}
+			} else if f.Kind != filter {
+				continue
+			}
+		}
+		if query != "" && !dashboardFindingMatchesQuery(f, query) {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+func dashboardFindingMatchesQuery(f ClusterDashboardFinding, query string) bool {
+	fields := []string{f.Kind, f.Namespace, f.Name, f.Severity, f.Reason, f.LikelyCause, f.SuggestedAction, f.Confidence, f.Section}
+	for _, field := range fields {
+		if strings.Contains(strings.ToLower(field), query) {
+			return true
+		}
+	}
+	return false
+}
+
+func paginateDashboardFindings(items []ClusterDashboardFinding, offset, limit int) []ClusterDashboardFinding {
+	if offset >= len(items) {
+		return nil
+	}
+	end := offset + limit
+	if end > len(items) {
+		end = len(items)
+	}
+	return items[offset:end]
+}
+
+func mergeRestartHotspotsUnbounded(lists ...[]dto.PodRestartHotspotDTO) []dto.PodRestartHotspotDTO {
+	total := 0
+	for _, list := range lists {
+		total += len(list)
+	}
+	if total == 0 {
+		return nil
+	}
+	return MergeRestartHotspots(total, lists...)
+}
+
+func filterRestartHotspots(items []dto.PodRestartHotspotDTO, query string) []dto.PodRestartHotspotDTO {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return items
+	}
+	out := make([]dto.PodRestartHotspotDTO, 0, len(items))
+	for _, item := range items {
+		if restartHotspotMatchesQuery(item, query) {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func restartHotspotMatchesQuery(item dto.PodRestartHotspotDTO, query string) bool {
+	fields := []string{"pod", item.Namespace, item.Name, item.Phase, item.Node, item.LastEventReason, item.Severity}
+	for _, field := range fields {
+		if strings.Contains(strings.ToLower(field), query) {
+			return true
+		}
+	}
+	return false
+}
+
+func paginateRestartHotspots(items []dto.PodRestartHotspotDTO, opts ClusterDashboardListOptions, hot *ClusterDashboardHotspotsPanel) []dto.PodRestartHotspotDTO {
+	hot.RestartHotspotsTotal = len(items)
+	hot.RestartHotspotsOffset = opts.RestartHotspotsOffset
+	hot.RestartHotspotsLimit = opts.RestartHotspotsLimit
+	hot.RestartHotspotsQuery = opts.RestartHotspotsQuery
+	if opts.RestartHotspotsOffset >= len(items) {
+		return nil
+	}
+	end := opts.RestartHotspotsOffset + opts.RestartHotspotsLimit
+	if end > len(items) {
+		end = len(items)
+	}
+	page := items[opts.RestartHotspotsOffset:end]
+	hot.RestartHotspotsHasMore = opts.RestartHotspotsOffset+len(page) < hot.RestartHotspotsTotal
+	return page
 }
 
 func dashboardFindingSeverityPriority(severity string) int {

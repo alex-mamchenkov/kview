@@ -128,7 +128,7 @@ type DataPlaneManager interface {
 	EnsureObservers(ctx context.Context, clusterName string)
 
 	// DashboardSummary returns a minimal cluster dashboard backed by dataplane snapshots.
-	DashboardSummary(ctx context.Context, clusterName string) ClusterDashboardSummary
+	DashboardSummary(ctx context.Context, clusterName string, opts ClusterDashboardListOptions) ClusterDashboardSummary
 
 	// ListSnapshotRevision returns revision metadata for a list cell without scheduling kube fetches.
 	ListSnapshotRevision(ctx context.Context, clusterName string, kind ResourceKind, namespace string) (ListSnapshotRevisionEnvelope, error)

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useDeferredValue, useEffect, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -9,7 +9,9 @@ import {
   Table,
   TableBody,
   TableCell,
+  TablePagination,
   TableRow,
+  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -384,14 +386,6 @@ function findingFilterLabel(filter: FindingFilter): string {
   }
 }
 
-function filterFindings(all: Finding[], top: Finding[], filter: FindingFilter): Finding[] {
-  if (filter === "top") return top;
-  if (filter === "high" || filter === "medium" || filter === "low") {
-    return all.filter((f) => f.severity === filter);
-  }
-  return all.filter((f) => f.kind === filter);
-}
-
 function FindingFilterChip({
   filter,
   count,
@@ -561,28 +555,52 @@ export default function DashboardView(props: Props) {
   const [data, setData] = useState<ApiDashboardClusterResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [findingFilter, setFindingFilter] = useState<FindingFilter>("top");
+  const [findingsQuery, setFindingsQuery] = useState("");
+  const [findingsPage, setFindingsPage] = useState(0);
+  const [findingsRowsPerPage, setFindingsRowsPerPage] = useState(25);
+  const [restartHotspotsQuery, setRestartHotspotsQuery] = useState("");
+  const [restartHotspotsPage, setRestartHotspotsPage] = useState(0);
+  const [restartHotspotsRowsPerPage, setRestartHotspotsRowsPerPage] = useState(25);
   const [inspectTarget, setInspectTarget] = useState<InspectTarget | null>(null);
   const activeContext = useActiveContext();
   const { settings } = useUserSettings();
   const dashboardRefreshSec = settings.appearance.dashboardRefreshSec;
+  const deferredFindingsQuery = useDeferredValue(findingsQuery);
+  const deferredRestartHotspotsQuery = useDeferredValue(restartHotspotsQuery);
+  const lastLoadScopeRef = useRef("");
 
   useEffect(() => {
     let cancelled = false;
+    const loadScope = `${activeContext || ""}:${props.token}`;
     const load = async (initial: boolean) => {
-      if (initial) {
+      const resetView = initial && lastLoadScopeRef.current !== loadScope;
+      if (resetView) {
         setLoading(true);
         setData(null);
       }
       setErr(null);
       try {
+        const params = new URLSearchParams({
+          findingsFilter: findingFilter,
+          findingsQ: deferredFindingsQuery,
+          findingsOffset: String(findingsPage * findingsRowsPerPage),
+          findingsLimit: String(findingsRowsPerPage),
+          restartHotspotsQ: deferredRestartHotspotsQuery,
+          restartHotspotsOffset: String(restartHotspotsPage * restartHotspotsRowsPerPage),
+          restartHotspotsLimit: String(restartHotspotsRowsPerPage),
+        });
+        const path = `/api/dashboard/cluster?${params.toString()}`;
         const res = activeContext
-          ? await apiGetWithContext<ApiDashboardClusterResponse>("/api/dashboard/cluster", props.token, activeContext)
-          : await apiGet<ApiDashboardClusterResponse>("/api/dashboard/cluster", props.token);
-        if (!cancelled) setData(res);
+          ? await apiGetWithContext<ApiDashboardClusterResponse>(path, props.token, activeContext)
+          : await apiGet<ApiDashboardClusterResponse>(path, props.token);
+        if (!cancelled) {
+          lastLoadScopeRef.current = loadScope;
+          setData(res);
+        }
       } catch {
         if (!cancelled) setErr("Failed to load cluster overview");
       } finally {
-        if (!cancelled && initial) setLoading(false);
+        if (!cancelled && resetView) setLoading(false);
       }
     };
     void load(true);
@@ -596,7 +614,23 @@ export default function DashboardView(props: Props) {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [activeContext, dashboardRefreshSec, props.token]);
+  }, [
+    activeContext,
+    dashboardRefreshSec,
+    deferredFindingsQuery,
+    deferredRestartHotspotsQuery,
+    findingFilter,
+    findingsPage,
+    findingsRowsPerPage,
+    props.token,
+    restartHotspotsPage,
+    restartHotspotsRowsPerPage,
+  ]);
+
+  const selectFindingFilter = (filter: FindingFilter) => {
+    setFindingFilter(filter);
+    setFindingsPage(0);
+  };
 
   return (
     <Box
@@ -645,9 +679,11 @@ export default function DashboardView(props: Props) {
             const cov = coverage;
             const hotspotsEnabled = settings.dataplane.dashboard.includeHotspots;
             const knownScope = `${cov.namespacesInResourceTotals} / ${cov.visibleNamespaces}`;
-            const allFindings = findings?.items || findings?.top || [];
             const topFindings = findings?.top || [];
-            const visibleFindings = filterFindings(allFindings, topFindings, findingFilter);
+            const visibleFindings = findings?.items || [];
+            const visibleFindingsTotal = findings?.itemsTotal ?? visibleFindings.length;
+            const visibleRestartHotspots = hotspots.topPodRestartHotspots || [];
+            const visibleRestartHotspotsTotal = hotspots.restartHotspotsTotal ?? visibleRestartHotspots.length;
 
             return (
               <>
@@ -704,114 +740,114 @@ export default function DashboardView(props: Props) {
                       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
                         <FindingFilterChip
                           filter="top"
-                          count={topFindings.length}
+                          count={findings?.total ?? topFindings.length}
                           selected={findingFilter === "top"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="high"
                           count={findings?.high ?? 0}
                           color={(findings?.high || 0) > 0 ? "error" : "default"}
                           selected={findingFilter === "high"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="medium"
                           count={findings?.medium ?? 0}
                           color={(findings?.medium || 0) > 0 ? "warning" : "default"}
                           selected={findingFilter === "medium"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="low"
                           count={findings?.low ?? 0}
                           color={(findings?.low || 0) > 0 ? "info" : "default"}
                           selected={findingFilter === "low"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="Namespace"
                           count={findings?.emptyNamespaces ?? 0}
                           hideWhenZero
                           selected={findingFilter === "Namespace"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="HelmRelease"
                           count={findings?.stuckHelmReleases ?? 0}
                           hideWhenZero
                           selected={findingFilter === "HelmRelease"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="Job"
                           count={findings?.abnormalJobs ?? 0}
                           hideWhenZero
                           selected={findingFilter === "Job"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="CronJob"
                           count={findings?.abnormalCronJobs ?? 0}
                           hideWhenZero
                           selected={findingFilter === "CronJob"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="ConfigMap"
                           count={findings?.emptyConfigMaps ?? 0}
                           hideWhenZero
                           selected={findingFilter === "ConfigMap"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="Secret"
                           count={findings?.emptySecrets ?? 0}
                           hideWhenZero
                           selected={findingFilter === "Secret"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="PersistentVolumeClaim"
                           count={(findings?.potentiallyUnusedPVCs ?? 0) + (findings?.pvcWarnings ?? 0)}
                           hideWhenZero
                           selected={findingFilter === "PersistentVolumeClaim"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="ServiceAccount"
                           count={findings?.potentiallyUnusedServiceAccounts ?? 0}
                           hideWhenZero
                           selected={findingFilter === "ServiceAccount"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="Service"
                           count={findings?.serviceWarnings ?? 0}
                           hideWhenZero
                           selected={findingFilter === "Service"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="Ingress"
                           count={findings?.ingressWarnings ?? 0}
                           hideWhenZero
                           selected={findingFilter === "Ingress"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="Role"
                           count={findings?.roleWarnings ?? 0}
                           hideWhenZero
                           selected={findingFilter === "Role"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="RoleBinding"
                           count={findings?.roleBindingWarnings ?? 0}
                           hideWhenZero
                           selected={findingFilter === "RoleBinding"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                         <FindingFilterChip
                           filter="ResourceQuota"
@@ -819,15 +855,28 @@ export default function DashboardView(props: Props) {
                           color={(findings?.quotaWarnings || 0) > 0 ? "warning" : "default"}
                           hideWhenZero
                           selected={findingFilter === "ResourceQuota"}
-                          onSelect={setFindingFilter}
+                          onSelect={selectFindingFilter}
                         />
                       </Box>
                     </Box>
                     <Box sx={{ ...dashboardPanelSectionSx, flex: 1 }}>
-                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                        Showing {visibleFindings.length} {findingFilterLabel(findingFilter).toLowerCase()} finding
-                        {visibleFindings.length === 1 ? "" : "s"}.
-                      </Typography>
+                      <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1, mb: 1 }}>
+                        <TextField
+                          size="small"
+                          label="Search findings"
+                          value={findingsQuery}
+                          onChange={(event) => {
+                            setFindingsQuery(event.target.value);
+                            setFindingsPage(0);
+                          }}
+                          placeholder="name, kind, namespace..."
+                          sx={{ minWidth: { xs: "100%", sm: 280 } }}
+                        />
+                        <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+                          Showing {visibleFindings.length} of {visibleFindingsTotal} {findingFilterLabel(findingFilter).toLowerCase()} finding
+                          {visibleFindingsTotal === 1 ? "" : "s"}.
+                        </Typography>
+                      </Box>
                       {visibleFindings.length === 0 ? (
                         <Typography variant="body2" color="text.secondary">
                           No cached-scope findings for this filter.
@@ -865,10 +914,25 @@ export default function DashboardView(props: Props) {
                           </TableBody>
                         </Table>
                       )}
+                      {visibleFindingsTotal > 0 ? (
+                        <TablePagination
+                          component="div"
+                          count={visibleFindingsTotal}
+                          page={findingsPage}
+                          rowsPerPage={findingsRowsPerPage}
+                          rowsPerPageOptions={[10, 25, 50, 100]}
+                          onPageChange={(_, page) => setFindingsPage(page)}
+                          onRowsPerPageChange={(event) => {
+                            setFindingsRowsPerPage(Number(event.target.value));
+                            setFindingsPage(0);
+                          }}
+                          sx={{ borderTop: "1px solid var(--panel-border)", mt: 1 }}
+                        />
+                      ) : null}
                     </Box>
                   </Paper>
 
-                  {hotspotsEnabled && (hotspots.topProblematicNamespaces?.length || hotspots.topPodRestartHotspots?.length) ? (
+                  {hotspotsEnabled && (hotspots.topProblematicNamespaces?.length || hotspots.podsWithElevatedRestarts > 0) ? (
                     <Paper variant="outlined" sx={dashboardPanelSx}>
                       <PanelTitle
                         title="Hotspots"
@@ -893,14 +957,28 @@ export default function DashboardView(props: Props) {
                           </Box>
                         </Box>
                       ) : null}
-                      {hotspots.topPodRestartHotspots && hotspots.topPodRestartHotspots.length > 0 ? (
-                        <Box sx={{ ...dashboardPanelSectionSx, flex: 1 }}>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.75 }}>
-                            Top pod restart hotspots in cached scope
+                      <Box sx={{ ...dashboardPanelSectionSx, flex: 1 }}>
+                        <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1, mb: 1 }}>
+                          <TextField
+                            size="small"
+                            label="Search restart hotspots"
+                            value={restartHotspotsQuery}
+                            onChange={(event) => {
+                              setRestartHotspotsQuery(event.target.value);
+                              setRestartHotspotsPage(0);
+                            }}
+                            placeholder="pod, namespace, node..."
+                            sx={{ minWidth: { xs: "100%", sm: 280 } }}
+                          />
+                          <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+                            Showing {visibleRestartHotspots.length} of {visibleRestartHotspotsTotal} pod restart hotspot
+                            {visibleRestartHotspotsTotal === 1 ? "" : "s"} in cached scope.
                           </Typography>
+                        </Box>
+                        {visibleRestartHotspots.length > 0 ? (
                           <Table size="small">
                             <TableBody>
-                              {hotspots.topPodRestartHotspots.slice(0, 8).map((h) => (
+                              {visibleRestartHotspots.map((h) => (
                                 <TableRow key={`${h.namespace}/${h.name}`}>
                                   <TableCell sx={{ border: 0, py: 0.5, pl: 0, verticalAlign: "top" }}>
                                     {h.namespace}/{h.name}
@@ -932,8 +1010,27 @@ export default function DashboardView(props: Props) {
                               ))}
                             </TableBody>
                           </Table>
-                        </Box>
-                      ) : null}
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            No restart hotspots match this search.
+                          </Typography>
+                        )}
+                        {visibleRestartHotspotsTotal > 0 ? (
+                          <TablePagination
+                            component="div"
+                            count={visibleRestartHotspotsTotal}
+                            page={restartHotspotsPage}
+                            rowsPerPage={restartHotspotsRowsPerPage}
+                            rowsPerPageOptions={[10, 25, 50, 100]}
+                            onPageChange={(_, page) => setRestartHotspotsPage(page)}
+                            onRowsPerPageChange={(event) => {
+                              setRestartHotspotsRowsPerPage(Number(event.target.value));
+                              setRestartHotspotsPage(0);
+                            }}
+                            sx={{ borderTop: "1px solid var(--panel-border)", mt: 1 }}
+                          />
+                        ) : null}
+                      </Box>
                     </Paper>
                   ) : null}
                 </Box>

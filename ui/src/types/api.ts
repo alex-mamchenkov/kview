@@ -255,6 +255,11 @@ export type ApiDashboardClusterResponse = {
       problematicResources: number;
       topProblematicNamespaces?: Array<{ namespace: string; score: number }>;
       topPodRestartHotspots?: PodRestartHotspotDTO[];
+      restartHotspotsTotal: number;
+      restartHotspotsOffset: number;
+      restartHotspotsLimit: number;
+      restartHotspotsQuery?: string;
+      restartHotspotsHasMore?: boolean;
       note?: string;
       aggregateFreshness?: string;
       aggregateDegradation?: string;
@@ -303,6 +308,12 @@ export type ApiDashboardClusterResponse = {
         confidence?: string;
         section?: string;
       }>;
+      itemsTotal: number;
+      itemsOffset: number;
+      itemsLimit: number;
+      itemsFilter?: string;
+      itemsQuery?: string;
+      itemsHasMore?: boolean;
       note?: string;
       aggregateFreshness?: string;
       aggregateDegradation?: string;

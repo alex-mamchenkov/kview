@@ -121,6 +121,11 @@ type ClusterDashboardHotspotsPanel struct {
 	ProblematicResources       int                                    `json:"problematicResources"`
 	TopProblematicNamespaces   []ClusterDashboardProblematicNamespace `json:"topProblematicNamespaces,omitempty"`
 	TopPodRestartHotspots      []dto.PodRestartHotspotDTO             `json:"topPodRestartHotspots,omitempty"`
+	RestartHotspotsTotal       int                                    `json:"restartHotspotsTotal"`
+	RestartHotspotsOffset      int                                    `json:"restartHotspotsOffset"`
+	RestartHotspotsLimit       int                                    `json:"restartHotspotsLimit"`
+	RestartHotspotsQuery       string                                 `json:"restartHotspotsQuery,omitempty"`
+	RestartHotspotsHasMore     bool                                   `json:"restartHotspotsHasMore,omitempty"`
 	Note                       string                                 `json:"note,omitempty"`
 	AggregateFreshness         string                                 `json:"aggregateFreshness,omitempty"`
 	AggregateDegradation       string                                 `json:"aggregateDegradation,omitempty"`
@@ -149,6 +154,12 @@ type ClusterDashboardFindingsPanel struct {
 	RoleBindingWarnings   int                       `json:"roleBindingWarnings"`
 	Top                   []ClusterDashboardFinding `json:"top,omitempty"`
 	Items                 []ClusterDashboardFinding `json:"items,omitempty"`
+	ItemsTotal            int                       `json:"itemsTotal"`
+	ItemsOffset           int                       `json:"itemsOffset"`
+	ItemsLimit            int                       `json:"itemsLimit"`
+	ItemsFilter           string                    `json:"itemsFilter,omitempty"`
+	ItemsQuery            string                    `json:"itemsQuery,omitempty"`
+	ItemsHasMore          bool                      `json:"itemsHasMore,omitempty"`
 	Note                  string                    `json:"note,omitempty"`
 	AggregateFreshness    string                    `json:"aggregateFreshness,omitempty"`
 	AggregateDegradation  string                    `json:"aggregateDegradation,omitempty"`
@@ -165,6 +176,16 @@ type ClusterDashboardFinding struct {
 	SuggestedAction string `json:"suggestedAction,omitempty"`
 	Confidence      string `json:"confidence,omitempty"`
 	Section         string `json:"section,omitempty"`
+}
+
+type ClusterDashboardListOptions struct {
+	FindingsFilter        string
+	FindingsQuery         string
+	FindingsOffset        int
+	FindingsLimit         int
+	RestartHotspotsQuery  string
+	RestartHotspotsOffset int
+	RestartHotspotsLimit  int
 }
 
 // ClusterDashboardWorkloadHints mirrors Hotspots for compact UI chips.
@@ -238,7 +259,7 @@ type ClusterDashboardDataplaneKindStats struct {
 }
 
 // DashboardSummary builds a bounded cluster dashboard from cached snapshots.
-func (m *manager) DashboardSummary(ctx context.Context, clusterName string) ClusterDashboardSummary {
+func (m *manager) DashboardSummary(ctx context.Context, clusterName string, opts ClusterDashboardListOptions) ClusterDashboardSummary {
 	ctx = ContextWithWorkSourceIfUnset(ctx, WorkSourceDashboard)
 	policy := m.Policy()
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
@@ -291,7 +312,7 @@ func (m *manager) DashboardSummary(ctx context.Context, clusterName string) Clus
 		resourceScope = strings.Join(scope.ResourceKinds, ",")
 	}
 
-	resPanel, hotPanel, findingsPanel, wh, cov := m.aggregateClusterDashboard(plane, nsNames, nsTotal, nsUnhealthy)
+	resPanel, hotPanel, findingsPanel, wh, cov := m.aggregateClusterDashboard(plane, nsNames, nsTotal, nsUnhealthy, normalizeClusterDashboardListOptions(opts))
 	dpStats := dashboardDataplaneStatsFromSnapshots(m.stats.snapshot(), m.scheduler.StatsSnapshot(), time.Now().UTC())
 	if policy.NamespaceEnrichment.Enabled && policy.NamespaceEnrichment.Sweep.Enabled && len(nsSnap.Items) > 0 && !m.hasNamespaceEnrichmentInFlight(clusterName) {
 		m.BeginNamespaceListProgressiveEnrichment(clusterName, nsSnap.Items, NamespaceEnrichHints{})
