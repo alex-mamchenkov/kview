@@ -452,11 +452,8 @@ func (m *manager) DerivedHelmChartsSnapshot(ctx context.Context, clusterName str
 	return Snapshot[dto.HelmChartDTO]{Items: items, Meta: snapshotMetaFromDerivedProjection(proj.Meta)}, nil
 }
 
-func cachedPodNamespaces(plane *clusterPlane) []string {
-	if plane == nil {
-		return nil
-	}
-	snaps := peekAllNamespacedSnapshots(&plane.podsStore)
+func cachedSnapshotNamespaces[I any](store *namespacedSnapshotStore[Snapshot[I]]) []string {
+	snaps := peekAllNamespacedSnapshots(store)
 	out := make([]string, 0, len(snaps))
 	for ns, snap := range snaps {
 		if snap.Err == nil {
@@ -467,19 +464,18 @@ func cachedPodNamespaces(plane *clusterPlane) []string {
 	return out
 }
 
+func cachedPodNamespaces(plane *clusterPlane) []string {
+	if plane == nil {
+		return nil
+	}
+	return cachedSnapshotNamespaces(&plane.podsStore)
+}
+
 func cachedHelmReleaseNamespaces(plane *clusterPlane) []string {
 	if plane == nil {
 		return nil
 	}
-	snaps := peekAllNamespacedSnapshots(&plane.helmReleasesStore)
-	out := make([]string, 0, len(snaps))
-	for ns, snap := range snaps {
-		if snap.Err == nil {
-			out = append(out, ns)
-		}
-	}
-	sort.Strings(out)
-	return out
+	return cachedSnapshotNamespaces(&plane.helmReleasesStore)
 }
 
 func snapshotMetaFromDerivedProjection(meta ClusterDashboardDerivedProjectionMeta) SnapshotMetadata {

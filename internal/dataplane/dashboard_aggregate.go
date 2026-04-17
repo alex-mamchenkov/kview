@@ -76,136 +76,79 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 	now := time.Now()
 
 	for _, ns := range knownNS {
-		podsSnap, podsOK := plane.podsStore.getCached(ns)
-		depsSnap, depsOK := plane.depsStore.getCached(ns)
-		dsSnap, dsOK := plane.dsStore.getCached(ns)
-		stsSnap, stsOK := plane.stsStore.getCached(ns)
-		rsSnap, rsOK := plane.rsStore.getCached(ns)
-		jobsSnap, jobsOK := plane.jobsStore.getCached(ns)
-		cjSnap, cjOK := plane.cjStore.getCached(ns)
-		svcsSnap, svcsOK := plane.svcsStore.getCached(ns)
-		ingsSnap, ingsOK := plane.ingStore.getCached(ns)
-		pvcSnap, pvcOK := plane.pvcsStore.getCached(ns)
-		cmSnap, cmOK := plane.cmsStore.getCached(ns)
-		secSnap, secOK := plane.secsStore.getCached(ns)
-		saSnap, saOK := plane.saStore.getCached(ns)
-		rolesSnap, rolesOK := plane.rolesStore.getCached(ns)
-		roleBindingsSnap, roleBindingsOK := plane.roleBindingsStore.getCached(ns)
-		helmReleasesSnap, helmReleasesOK := plane.helmReleasesStore.getCached(ns)
-		rqSnap, rqOK := plane.rqStore.getCached(ns)
-		lrSnap, lrOK := plane.lrStore.getCached(ns)
-
-		if podsOK && podsSnap.Err == nil {
-			res.Pods += len(podsSnap.Items)
-			aggregateMetas = append(aggregateMetas, podsSnap.Meta)
+		s := buildSnapshotSetForNamespace(plane, ns, int32(policy.RestartElevatedThreshold))
+		if s.podsOK {
+			res.Pods += len(s.pods.Items)
+			aggregateMetas = append(aggregateMetas, s.pods.Meta)
 		}
-		if depsOK && depsSnap.Err == nil {
-			res.Deployments += len(depsSnap.Items)
+		if s.depsOK {
+			res.Deployments += len(s.deps.Items)
 		}
-		if dsOK && dsSnap.Err == nil {
-			res.DaemonSets += len(dsSnap.Items)
-			aggregateMetas = append(aggregateMetas, dsSnap.Meta)
+		if s.dsOK {
+			res.DaemonSets += len(s.ds.Items)
+			aggregateMetas = append(aggregateMetas, s.ds.Meta)
 		}
-		if stsOK && stsSnap.Err == nil {
-			res.StatefulSets += len(stsSnap.Items)
-			aggregateMetas = append(aggregateMetas, stsSnap.Meta)
+		if s.stsOK {
+			res.StatefulSets += len(s.sts.Items)
+			aggregateMetas = append(aggregateMetas, s.sts.Meta)
 		}
-		if rsOK && rsSnap.Err == nil {
-			res.ReplicaSets += len(rsSnap.Items)
-			aggregateMetas = append(aggregateMetas, rsSnap.Meta)
+		if s.rsOK {
+			res.ReplicaSets += len(s.rs.Items)
+			aggregateMetas = append(aggregateMetas, s.rs.Meta)
 		}
-		if jobsOK && jobsSnap.Err == nil {
-			res.Jobs += len(jobsSnap.Items)
-			aggregateMetas = append(aggregateMetas, jobsSnap.Meta)
+		if s.jobsOK {
+			res.Jobs += len(s.jobs.Items)
+			aggregateMetas = append(aggregateMetas, s.jobs.Meta)
 		}
-		if cjOK && cjSnap.Err == nil {
-			res.CronJobs += len(cjSnap.Items)
-			aggregateMetas = append(aggregateMetas, cjSnap.Meta)
+		if s.cjsOK {
+			res.CronJobs += len(s.cjs.Items)
+			aggregateMetas = append(aggregateMetas, s.cjs.Meta)
 		}
-		if svcsOK && svcsSnap.Err == nil {
-			res.Services += len(svcsSnap.Items)
-			aggregateMetas = append(aggregateMetas, svcsSnap.Meta)
+		if s.svcsOK {
+			res.Services += len(s.svcs.Items)
+			aggregateMetas = append(aggregateMetas, s.svcs.Meta)
 		}
-		if ingsOK && ingsSnap.Err == nil {
-			res.Ingresses += len(ingsSnap.Items)
-			aggregateMetas = append(aggregateMetas, ingsSnap.Meta)
+		if s.ingsOK {
+			res.Ingresses += len(s.ings.Items)
+			aggregateMetas = append(aggregateMetas, s.ings.Meta)
 		}
-		if pvcOK && pvcSnap.Err == nil {
-			res.PersistentVolumeClaims += len(pvcSnap.Items)
-			aggregateMetas = append(aggregateMetas, pvcSnap.Meta)
+		if s.pvcsOK {
+			res.PersistentVolumeClaims += len(s.pvcs.Items)
+			aggregateMetas = append(aggregateMetas, s.pvcs.Meta)
 		}
-		if cmOK && cmSnap.Err == nil {
-			res.ConfigMaps += len(cmSnap.Items)
-			aggregateMetas = append(aggregateMetas, cmSnap.Meta)
+		if s.cmsOK {
+			res.ConfigMaps += len(s.cms.Items)
+			aggregateMetas = append(aggregateMetas, s.cms.Meta)
 		}
-		if secOK && secSnap.Err == nil {
-			res.Secrets += len(secSnap.Items)
-			aggregateMetas = append(aggregateMetas, secSnap.Meta)
+		if s.secsOK {
+			res.Secrets += len(s.secs.Items)
+			aggregateMetas = append(aggregateMetas, s.secs.Meta)
 		}
-		if saOK && saSnap.Err == nil {
-			res.ServiceAccounts += len(saSnap.Items)
-			aggregateMetas = append(aggregateMetas, saSnap.Meta)
+		if s.sasOK {
+			res.ServiceAccounts += len(s.sas.Items)
+			aggregateMetas = append(aggregateMetas, s.sas.Meta)
 		}
-		if rolesOK && rolesSnap.Err == nil {
-			res.Roles += len(rolesSnap.Items)
-			aggregateMetas = append(aggregateMetas, rolesSnap.Meta)
+		if s.rolesOK {
+			res.Roles += len(s.roles.Items)
+			aggregateMetas = append(aggregateMetas, s.roles.Meta)
 		}
-		if roleBindingsOK && roleBindingsSnap.Err == nil {
-			res.RoleBindings += len(roleBindingsSnap.Items)
-			aggregateMetas = append(aggregateMetas, roleBindingsSnap.Meta)
+		if s.roleBindingsOK {
+			res.RoleBindings += len(s.roleBindings.Items)
+			aggregateMetas = append(aggregateMetas, s.roleBindings.Meta)
 		}
-		if helmReleasesOK && helmReleasesSnap.Err == nil {
-			res.HelmReleases += len(helmReleasesSnap.Items)
-			aggregateMetas = append(aggregateMetas, helmReleasesSnap.Meta)
+		if s.helmOK {
+			res.HelmReleases += len(s.helmReleases.Items)
+			aggregateMetas = append(aggregateMetas, s.helmReleases.Meta)
 		}
-		if rqOK && rqSnap.Err == nil {
-			res.ResourceQuotas += len(rqSnap.Items)
-			aggregateMetas = append(aggregateMetas, rqSnap.Meta)
+		if s.quotasOK {
+			res.ResourceQuotas += len(s.resourceQuotas.Items)
+			aggregateMetas = append(aggregateMetas, s.resourceQuotas.Meta)
 		}
-		if lrOK && lrSnap.Err == nil {
-			res.LimitRanges += len(lrSnap.Items)
-			aggregateMetas = append(aggregateMetas, lrSnap.Meta)
+		if s.limitRangesOK {
+			res.LimitRanges += len(s.limitRanges.Items)
+			aggregateMetas = append(aggregateMetas, s.limitRanges.Meta)
 		}
-		signals.Add(detectDashboardSignals(now, ns, dashboardSnapshotSet{
-			restartThreshold: int32(policy.RestartElevatedThreshold),
-			pods:             podsSnap,
-			podsOK:         podsOK && podsSnap.Err == nil,
-			deps:           depsSnap,
-			depsOK:         depsOK && depsSnap.Err == nil,
-			ds:             dsSnap,
-			dsOK:           dsOK && dsSnap.Err == nil,
-			sts:            stsSnap,
-			stsOK:          stsOK && stsSnap.Err == nil,
-			rs:             rsSnap,
-			rsOK:           rsOK && rsSnap.Err == nil,
-			jobs:           jobsSnap,
-			jobsOK:         jobsOK && jobsSnap.Err == nil,
-			cjs:            cjSnap,
-			cjsOK:          cjOK && cjSnap.Err == nil,
-			svcs:           svcsSnap,
-			svcsOK:         svcsOK && svcsSnap.Err == nil,
-			ings:           ingsSnap,
-			ingsOK:         ingsOK && ingsSnap.Err == nil,
-			pvcs:           pvcSnap,
-			pvcsOK:         pvcOK && pvcSnap.Err == nil,
-			cms:            cmSnap,
-			cmsOK:          cmOK && cmSnap.Err == nil,
-			secs:           secSnap,
-			secsOK:         secOK && secSnap.Err == nil,
-			sas:            saSnap,
-			sasOK:          saOK && saSnap.Err == nil,
-			roles:          rolesSnap,
-			rolesOK:        rolesOK && rolesSnap.Err == nil,
-			roleBindings:   roleBindingsSnap,
-			roleBindingsOK: roleBindingsOK && roleBindingsSnap.Err == nil,
-			helmReleases:   helmReleasesSnap,
-			helmOK:         helmReleasesOK && helmReleasesSnap.Err == nil,
-			resourceQuotas: rqSnap,
-			quotasOK:       rqOK && rqSnap.Err == nil,
-			limitRanges:    lrSnap,
-			limitRangesOK:  lrOK && lrSnap.Err == nil,
-		})...)
-
+		signals.Add(detectDashboardSignals(now, ns, s)...)
 	}
 
 	if len(aggregateMetas) > 0 {
@@ -223,6 +166,70 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 	signalPanel.AggregateDegradation = res.AggregateDegradation
 
 	return res, signalPanel, derived, cov
+}
+
+// buildSnapshotSetForNamespace fetches all cached dataplane list snapshots for
+// a single namespace and returns a fully populated dashboardSnapshotSet ready
+// for signal detection and resource counting. Adding a new resource kind only
+// requires touching this function and the struct definition below.
+func buildSnapshotSetForNamespace(plane *clusterPlane, ns string, restartThreshold int32) dashboardSnapshotSet {
+	podsSnap, podsOK := plane.podsStore.getCached(ns)
+	depsSnap, depsOK := plane.depsStore.getCached(ns)
+	dsSnap, dsOK := plane.dsStore.getCached(ns)
+	stsSnap, stsOK := plane.stsStore.getCached(ns)
+	rsSnap, rsOK := plane.rsStore.getCached(ns)
+	jobsSnap, jobsOK := plane.jobsStore.getCached(ns)
+	cjSnap, cjOK := plane.cjStore.getCached(ns)
+	svcsSnap, svcsOK := plane.svcsStore.getCached(ns)
+	ingsSnap, ingsOK := plane.ingStore.getCached(ns)
+	pvcSnap, pvcOK := plane.pvcsStore.getCached(ns)
+	cmSnap, cmOK := plane.cmsStore.getCached(ns)
+	secSnap, secOK := plane.secsStore.getCached(ns)
+	saSnap, saOK := plane.saStore.getCached(ns)
+	rolesSnap, rolesOK := plane.rolesStore.getCached(ns)
+	roleBindingsSnap, roleBindingsOK := plane.roleBindingsStore.getCached(ns)
+	helmReleasesSnap, helmReleasesOK := plane.helmReleasesStore.getCached(ns)
+	rqSnap, rqOK := plane.rqStore.getCached(ns)
+	lrSnap, lrOK := plane.lrStore.getCached(ns)
+	return dashboardSnapshotSet{
+		restartThreshold: restartThreshold,
+		pods:             podsSnap,
+		podsOK:           podsOK && podsSnap.Err == nil,
+		deps:             depsSnap,
+		depsOK:           depsOK && depsSnap.Err == nil,
+		ds:               dsSnap,
+		dsOK:             dsOK && dsSnap.Err == nil,
+		sts:              stsSnap,
+		stsOK:            stsOK && stsSnap.Err == nil,
+		rs:               rsSnap,
+		rsOK:             rsOK && rsSnap.Err == nil,
+		jobs:             jobsSnap,
+		jobsOK:           jobsOK && jobsSnap.Err == nil,
+		cjs:              cjSnap,
+		cjsOK:            cjOK && cjSnap.Err == nil,
+		svcs:             svcsSnap,
+		svcsOK:           svcsOK && svcsSnap.Err == nil,
+		ings:             ingsSnap,
+		ingsOK:           ingsOK && ingsSnap.Err == nil,
+		pvcs:             pvcSnap,
+		pvcsOK:           pvcOK && pvcSnap.Err == nil,
+		cms:              cmSnap,
+		cmsOK:            cmOK && cmSnap.Err == nil,
+		secs:             secSnap,
+		secsOK:           secOK && secSnap.Err == nil,
+		sas:              saSnap,
+		sasOK:            saOK && saSnap.Err == nil,
+		roles:            rolesSnap,
+		rolesOK:          rolesOK && rolesSnap.Err == nil,
+		roleBindings:     roleBindingsSnap,
+		roleBindingsOK:   roleBindingsOK && roleBindingsSnap.Err == nil,
+		helmReleases:     helmReleasesSnap,
+		helmOK:           helmReleasesOK && helmReleasesSnap.Err == nil,
+		resourceQuotas:   rqSnap,
+		quotasOK:         rqOK && rqSnap.Err == nil,
+		limitRanges:      lrSnap,
+		limitRangesOK:    lrOK && lrSnap.Err == nil,
+	}
 }
 
 type dashboardSnapshotSet struct {
