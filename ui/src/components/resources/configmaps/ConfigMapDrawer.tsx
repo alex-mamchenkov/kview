@@ -38,6 +38,7 @@ type ConfigMapDetails = {
   summary: ConfigMapSummary;
   keys: ConfigMapKey[];
   keyNames: string[];
+  data?: Record<string, string>;
   metadata: ConfigMapMetadata;
   yaml: string;
 };
@@ -112,115 +113,17 @@ function appendWithLimit(current: ParsedDataValue, chunk: string, limit: number)
   }
 }
 
-function extractConfigMapDataValues(
-  yaml: string,
+function mapConfigMapDataValues(
+  data: Record<string, string> | undefined,
   limit: number
-): { values: Record<string, ParsedDataValue>; error: string } {
-  try {
-    const values: Record<string, ParsedDataValue> = {};
-    const lines = yaml.split(/\r?\n/);
-    let inData = false;
-    let dataIndent = 0;
-    let currentKey: string | null = null;
-    let currentIndent = 0;
-    let collectingMultiline = false;
-    let multilineIndent: number | null = null;
-    let firstMultilineLine = true;
-
-    const finalizeCurrent = () => {
-      if (currentKey) {
-        values[currentKey] = values[currentKey] ?? { value: "", truncated: false };
-      }
-      currentKey = null;
-      collectingMultiline = false;
-      multilineIndent = null;
-      firstMultilineLine = true;
-    };
-
-    for (let i = 0; i < lines.length; i++) {
-      const rawLine = lines[i];
-      const indentMatch = rawLine.match(/^ */);
-      const indent = indentMatch ? indentMatch[0].length : 0;
-      const trimmed = rawLine.trim();
-
-      if (!inData) {
-        if (trimmed === "data:" || trimmed.startsWith("data:")) {
-          const dataMatch = rawLine.match(/^(\s*)data:\s*$/);
-          if (dataMatch) {
-            inData = true;
-            dataIndent = dataMatch[1]?.length ?? 0;
-          }
-        }
-        continue;
-      }
-
-      if (trimmed === "" && collectingMultiline) {
-        const entry = values[currentKey || ""];
-        if (entry) {
-          if (!firstMultilineLine) appendWithLimit(entry, "\n", limit);
-          firstMultilineLine = false;
-        }
-        continue;
-      }
-
-      if (trimmed !== "" && indent <= dataIndent) {
-        finalizeCurrent();
-        inData = false;
-        continue;
-      }
-
-      if (collectingMultiline) {
-        if (indent <= currentIndent) {
-          finalizeCurrent();
-          i -= 1;
-          continue;
-        }
-        if (multilineIndent === null) {
-          multilineIndent = indent;
-        }
-        const entry = values[currentKey || ""];
-        if (entry) {
-          const content = rawLine.slice(Math.min(multilineIndent, rawLine.length));
-          if (!firstMultilineLine) appendWithLimit(entry, "\n", limit);
-          appendWithLimit(entry, content, limit);
-          firstMultilineLine = false;
-        }
-        continue;
-      }
-
-      if (!trimmed || trimmed.startsWith("#")) continue;
-
-      const match = rawLine.match(/^(\s*)([^:]+):\s*(.*)$/);
-      if (!match) continue;
-      const keyIndent = match[1]?.length ?? 0;
-      if (keyIndent <= dataIndent) {
-        finalizeCurrent();
-        inData = false;
-        continue;
-      }
-
-      const key = match[2]?.trim() ?? "";
-      const rest = match[3] ?? "";
-      currentKey = key;
-      currentIndent = keyIndent;
-      values[currentKey] = values[currentKey] ?? { value: "", truncated: false };
-
-      if (rest === "|" || rest === "|-" || rest === "|+" || rest === ">" || rest === ">-" || rest === ">+") {
-        collectingMultiline = true;
-        multilineIndent = null;
-        firstMultilineLine = true;
-        continue;
-      }
-
-      appendWithLimit(values[currentKey], rest, limit);
-      finalizeCurrent();
-    }
-
-    finalizeCurrent();
-    return { values, error: "" };
-  } catch (err) {
-    return { values: {}, error: `Unable to parse data values: ${String(err)}` };
-  }
+): Record<string, ParsedDataValue> {
+  const values: Record<string, ParsedDataValue> = {};
+  Object.entries(data || {}).forEach(([key, value]) => {
+    const entry = { value: "", truncated: false };
+    appendWithLimit(entry, value, limit);
+    values[key] = entry;
+  });
+  return values;
 }
 
 export default function ConfigMapDrawer(props: {
@@ -288,10 +191,7 @@ export default function ConfigMapDrawer(props: {
 
   const hasKeys = (details?.keys || []).length > 0;
   const showSize = summary?.totalBytes !== undefined;
-  const dataValues = useMemo(() => {
-    if (tab !== 1 || !details?.yaml) return { values: {}, error: "" };
-    return extractConfigMapDataValues(details.yaml, MAX_VALUE_PREVIEW_CHARS);
-  }, [tab, details?.yaml]);
+  const dataValues = useMemo(() => mapConfigMapDataValues(details?.data, MAX_VALUE_PREVIEW_CHARS), [details?.data]);
 
   return (
     <RightDrawer open={props.open} onClose={props.onClose}>
@@ -365,7 +265,7 @@ export default function ConfigMapDrawer(props: {
                     (details?.keys || []).map((k, idx) => {
                       const keyId = `${k.type || "data"}:${k.name || idx}`;
                       const isBinary = k.type === "binaryData";
-                      const dataValue = dataValues.values[k.name];
+                      const dataValue = dataValues[k.name];
                       const showValue = !isBinary && dataValue;
                       const truncated = showValue ? dataValue.truncated : false;
 
@@ -404,8 +304,6 @@ export default function ConfigMapDrawer(props: {
                               >
                                 Binary data (base64) — see YAML tab.
                               </Box>
-                            ) : dataValues.error ? (
-                              <ErrorState message={`${dataValues.error}\nSee full content in YAML tab.`} />
                             ) : dataValue ? (
                               <>
                                 {truncated && (

@@ -14,6 +14,7 @@ type ConfigMapDetailsDTO struct {
 	Summary  ConfigMapSummaryDTO  `json:"summary"`
 	Keys     []ConfigMapKeyDTO    `json:"keys"`
 	KeyNames []string             `json:"keyNames"`
+	Data     map[string]string    `json:"data,omitempty"`
 	Metadata ConfigMapMetadataDTO `json:"metadata"`
 	YAML     string               `json:"yaml"`
 }

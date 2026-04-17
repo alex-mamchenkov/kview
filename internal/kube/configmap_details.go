@@ -102,7 +102,19 @@ func GetConfigMapDetails(ctx context.Context, c *cluster.Clients, namespace, nam
 		Summary:  summary,
 		Keys:     keys,
 		KeyNames: keyNames,
+		Data:     configMapDataValues(cm.Data),
 		Metadata: metadata,
 		YAML:     string(y),
 	}, nil
+}
+
+func configMapDataValues(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
