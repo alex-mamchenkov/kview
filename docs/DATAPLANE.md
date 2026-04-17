@@ -77,6 +77,27 @@ Rule of thumb: derived projections can support correlation and triage, but the U
 
 ---
 
+## Signal detector registry
+
+Dashboard signals are produced by a **detector registry** — a package-level slice of `dashboardSignalDetector` values in `dashboard_signal_detectors.go`. Each entry has a `Type` string (the stable `signalType` key written into every emitted signal) and a `Detect` function with the signature:
+
+```go
+func(now time.Time, namespace string, snapshots dashboardSnapshotSet) []ClusterDashboardSignal
+```
+
+`aggregateClusterDashboard` calls every registered detector for every namespace in scope and feeds all results into a single per-request `dashboardSignalStore`. The store indexes signals both by insertion order (for the flat `top`/`items` lists) and by resource identity key (`kind`, `name`, `scope`, `scopeLocation`) so namespace insights projections can look up the exact signals for a given ResourceQuota, PVC, or HelmRelease without re-running detection.
+
+**Adding a new detector:**
+1. Write a `detect<Name>Signals` function matching the signature above.
+2. Append a `dashboardSignalDetector{Type: "snake_case_type", Detect: detect<Name>Signals}` entry to `dashboardSignalDetectors` in `dashboard_signal_detectors.go`.
+3. Add a `dashboardSignalDefinition` entry keyed by the same `Type` string to `dashboardSignalDefinitions` in `dashboard_signals.go`. The definition supplies the UI filter label, `SummaryCounter` (which aggregate counter the signal increments, e.g. `"podRestartSignals"`), template `ActualData`/`CalculatedData` text, `LikelyCause`, `SuggestedAction`, and `Priority` (lower = shown earlier in filters; default 10 for unknown types).
+
+**Signal score:** the integer `score` field passed to `dashboardSignalItem` controls sort order within the triage list (higher = shown first, scale 0–100). The score is **not** exposed in the API response; it is used only for internal sorting before the capped `top` list is built.
+
+**Thresholds:** signal detection thresholds (restart counts, job durations, quota ratios, etc.) are defined as named constants in `signal_thresholds.go`. The pod-restart threshold additionally reads from `dashboardSnapshotSet.restartThreshold`, which is set from `policy.Dashboard.RestartElevatedThreshold` at aggregation time, allowing per-cluster tuning without changing the detector code.
+
+---
+
 ## Namespaces list and row enrichment
 
 `GET /api/namespaces` returns the **namespaces snapshot** immediately with **`rowProjection.revision`** (and loading hints). Background work (scored subset, idle-gated) enriches rows; the UI polls **`GET /api/namespaces/enrichment?revision=…`** for merged rows. The browser-local NS Enrichment settings sync a process-local dataplane policy to the backend; settings change the dataplane policy, not the read ownership model.

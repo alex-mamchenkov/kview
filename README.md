@@ -1,36 +1,127 @@
 # kview
 
-kview is a **local, single-binary Kubernetes UI** for fast, view-first cluster exploration.
-
-It embeds a **React + MUI frontend** inside a **Go backend**, uses the operator's kubeconfig, and keeps normal operation local: no external service is required.
-
-The project focuses on:
-
-- operational clarity
-- RBAC-aware actions and reads
-- deep cross-resource navigation
-- drawer-based inspection
-- truthful read metadata
-- predictable operator workflows
+kview is a **local, single-binary Kubernetes UI** for fast, view-first cluster exploration. It runs entirely on your machine — no cloud service, no agent installation, no cluster-side components required.
 
 ---
 
-## Current State
+## Why kview
 
-kview now has read-side dataplane in place for the main list surfaces. The UI uses scheduler-mediated snapshots and projections for high-frequency reads, while intentional direct reads remain visible and documented for details, events, YAML, relation lookups, resource quotas, cluster-scoped catalog/RBAC/storage families, and Helm chart catalog reads.
+- **Single binary, zero install.** Drop the binary on your machine and point it at your kubeconfig. Embed auth plugins on `PATH` if your contexts use them; nothing else is needed.
+- **Honest, truthful read metadata.** Every list response carries `freshness`, `coverage`, `degradation`, `completeness`, and coarse `state` so you know exactly what you are looking at, not just a stale table with no indication of when it was last read.
+- **Deep cross-resource navigation.** Drawer-based inspection with nested drawers, cross-resource links, and related-resource panels let you follow a signal from a dashboard alert through to a pod log or config map without leaving the UI.
+- **RBAC-aware throughout.** Capability checks gate every action button and gracefully degrade list and detail views when permissions are limited. Derived projections such as node workload rollups from cached pod snapshots remain useful even when direct node reads are denied.
+- **Predictable operator workflows.** The cluster dashboard, namespace summaries, and signals panels are designed for triage. Signals carry stable identity, advisory text, and filter keys so you can drill from a cluster-wide view into a specific namespace and then into the exact resource.
+- **Smart background reads.** A scheduler-mediated dataplane handles list snapshot TTLs, deduplication, priority queuing, and partial/degraded responses. The UI refreshes in the background; you do not need to manually poll.
+- **Custom commands and actions.** Define container command presets (run on matching pod containers) and workload action presets (set/unset env, set image, raw JSON patch) from the Settings view without touching the binary.
 
-Important current behaviors:
+---
 
-- Dataplane-backed list responses include `freshness`, `coverage`, `degradation`, `completeness`, and coarse `state` metadata.
-- List views and the cluster dashboard refresh in the background without requiring a page reload.
-- Namespace summaries are projection-backed from dataplane snapshots and return usable partial/degraded payloads instead of hard-failing when only part of the namespace is visible.
-- The cluster dashboard and relevant resource surfaces include explicitly labeled signals, including heuristic cached-scope signal rows with stable signal identity/advisory fields and derived signals such as node workload rollups from cached pod snapshots and Helm chart rows grouped by chart name with version rollups from cached Helm release snapshots, for restricted-permission environments.
-- Namespace list row enrichment is scoped to current, recent, and favourite namespaces by default; it is idle-gated and preserves previously enriched rows across refreshes. An opt-in background sweep can slowly enrich additional namespaces while the app is idle.
-- User settings are browser-local and include dashboard refresh, smart-filter rules, custom container commands, custom workload actions, namespace enrichment/dataplane policy, and JSON import/export.
-- Dataplane-backed read APIs accept optional `X-Kview-Context` so the UI can pin reads to the context that was active when the request was issued.
-- Mutations remain on the shared action framework and are not part of the dataplane.
+## Getting Started
 
-See [docs/DATAPLANE.md](docs/DATAPLANE.md) and [docs/API_READ_OWNERSHIP.md](docs/API_READ_OWNERSHIP.md) for the precise read ownership contract.
+### Binary releases
+
+Pre-built binaries for Linux, macOS, and Windows are published on the [GitHub Releases](../../releases) page for every `v*` tag.
+
+Download the binary for your platform, make it executable, and run:
+
+```bash
+kview
+```
+
+This starts the local server and opens the UI in your default browser.
+
+To point kview at a specific kubeconfig file or directory:
+
+```bash
+kview --config ~/.kube/my-config
+```
+
+`--config` overrides `KUBECONFIG`. If neither is set, kview uses the default `~/.kube/config`.
+
+kview uses `client-go` authentication from the selected kubeconfig. If a context uses an `exec` auth plugin, the referenced command (e.g. `kubectl`, `kubelogin`, a cloud-provider CLI) must be installed and available on `PATH` where kview runs.
+
+On Windows, running kview from WSL is the simpler path because kubeconfig paths, shell behavior, and auth helper commands tend to match the Linux-native Kubernetes tooling setup more closely.
+
+### Desktop webview mode
+
+```bash
+kview --webview
+```
+
+Runs the same embedded HTTP server and UI inside a native desktop webview window instead of opening a browser tab.
+
+### Build from source
+
+```bash
+make build
+```
+
+To build with the pinned Docker toolchain:
+
+```bash
+make build-docker
+```
+
+Release-style artifacts:
+
+```bash
+make build-docker-release GOOS=linux GOARCH=amd64 OUTPUT=dist/kview-linux-amd64
+```
+
+Docker builds bind-mount the repository and keep Go/npm build caches under `.cache/`, so local rebuilds reuse dependency artifacts without requiring a host Go or Node.js installation.
+
+---
+
+## Features
+
+### Resource exploration
+
+- Dense resource tables with filtering and sorting across all standard Kubernetes resource kinds
+- Drawer-based detail inspection with YAML, events, related resources, and status-focused summaries
+- Nested drawers and cross-resource navigation
+- Capability-aware action buttons: delete, restart, scale, RBAC operations, Helm operations, and custom workload patches
+
+### Cluster dashboard and signals
+
+- Cluster-wide summary with namespace and node snapshot blocks, resource totals, and attention signals
+- Signals cover elevated pod restarts, stale Helm releases, abnormal jobs, quota pressure, empty ConfigMaps/Secrets, and low-confidence potentially unused PVCs and service accounts
+- Each signal carries stable identity, severity, advisory text (`likelyCause`, `suggestedAction`), and backend-provided quick-filter keys
+- Derived node workload rollups and Helm chart catalog rows from cached snapshots when direct reads are limited
+
+### Namespace summaries and insights
+
+- Projection-backed namespace summaries with workload health rollups, RBAC counts, Helm release list, and coverage metadata
+- Namespace insights surface the exact signals for each ResourceQuota, PVC, Service, or Helm release by resource identity
+- Partial/degraded payloads returned instead of hard-failing when only part of the namespace is visible
+
+### Read-side dataplane
+
+- Per-context snapshot stores with scheduler-mediated TTLs, deduplication, priority queuing, and bounded concurrency
+- Namespace and node observers, idle-gated enrichment, and background sweep option for large clusters
+- Optional local snapshot persistence in a bbolt file for stale fallback and quick-access search (`GET /api/dataplane/search`)
+- All list responses include `freshness`, `coverage`, `degradation`, `completeness`, and `state` metadata
+
+### Mutations
+
+```text
+POST /api/actions
+```
+
+Supported families: delete, restart, scale, selected workload and RBAC operations, Helm install/upgrade/uninstall. Handlers are registered in the backend `ActionRegistry`; the UI checks RBAC capabilities before surfacing each button.
+
+### Activity panel
+
+- Terminal sessions, port-forward sessions, runtime/system status
+- Namespace row enrichment progress and long-running dataplane snapshot activity
+
+### User settings
+
+Browser-local settings profile (stored in `localStorage`, importable/exportable as JSON) controls:
+
+- Dashboard refresh and initial Activity Panel state
+- Smart-filter chip generation and scoped filter rules
+- Custom container command presets and custom workload action presets
+- Dataplane policy: snapshot TTLs, enrichment caps, observer intervals, scheduler budget, dashboard signal thresholds
 
 ---
 
@@ -38,208 +129,18 @@ See [docs/DATAPLANE.md](docs/DATAPLANE.md) and [docs/API_READ_OWNERSHIP.md](docs
 
 ### Backend
 
-The backend is written in Go and includes:
+Written in Go:
 
 - `client-go` Kubernetes integration
-- REST API via `chi`
-- embedded UI via `go:embed`
-- generic mutation endpoint: `POST /api/actions`
-- central `ActionRegistry` with resource mutation handlers grouped under `internal/kube/actions`
+- REST API via `chi`, embedded UI via `go:embed`
+- Generic mutation endpoint: `POST /api/actions` with central `ActionRegistry`
 - RBAC capability checks: `POST /api/capabilities` and `POST /api/auth/can-i`
-- read-side dataplane: snapshots, scheduler, observers, projections
-- runtime activity system
-- terminal and port-forward sessions
-- short-lived custom container command execution
+- Read-side dataplane: snapshots, scheduler, observers, projections
+- Runtime activity system, terminal sessions, port-forward sessions, short-lived container exec
 
 ### Frontend
 
-The frontend is built with:
-
-- React
-- Vite
-- TypeScript
-- MUI
-
-The UI uses shared resource list and drawer patterns, capability-aware actions, typed API responses, and reusable design tokens for consistent operator-focused screens.
-
----
-
-## Supported Resource Areas
-
-### Workloads
-
-- Pods
-- Deployments
-- ReplicaSets
-- StatefulSets
-- DaemonSets
-- Jobs
-- CronJobs
-
-### Networking
-
-- Services
-- Ingresses
-
-### Storage
-
-- PersistentVolumeClaims
-- PersistentVolumes
-
-### Configuration
-
-- ConfigMaps
-- Secrets
-
-### Access Control
-
-- ServiceAccounts
-- Roles
-- RoleBindings
-- ClusterRoles
-- ClusterRoleBindings
-
-### Cluster
-
-- Nodes
-- Namespaces
-- ResourceQuotas
-- CustomResourceDefinitions
-
-### Helm
-
-- Helm charts
-- Helm releases
-- Values
-- Manifests
-- History
-- Notes
-- Managed resources
-
----
-
-## Core Features
-
-### Resource Exploration
-
-- dense resource tables with filtering and sorting
-- drawer-based detail inspection
-- cross-resource links and nested drawers
-- resource-specific actions where supported
-- YAML, events, related resources, and status-focused summaries where available
-
-### Read-Side Dataplane
-
-- cached list snapshots per Kubernetes context
-- scheduler-mediated list reads with bounded concurrency
-- namespace and node observers
-- dataplane metadata in migrated list envelopes
-- projection-only namespace summaries
-- dashboard totals from cached dataplane-owned namespace snapshots
-- derived sparse dashboard signals for nodes and Helm charts
-- partial/degraded responses when useful data is still available
-
-### Mutation Framework
-
-Mutations use:
-
-```text
-POST /api/actions
-```
-
-Supported action families include delete, restart, scale, selected workload and RBAC operations, and Helm operations. Handlers are registered in the backend `ActionRegistry`; the UI checks capabilities before surfacing actions.
-
-### Activity Panel
-
-The Activity Panel shows runtime and operational activity, including:
-
-- terminal sessions
-- port-forward sessions
-- runtime/system status
-- namespace row enrichment activity
-- dataplane snapshot work that exceeds the configured long-run threshold
-
-### User Settings
-
-The Settings view is opened from the header and stores a browser-local settings profile in `localStorage`. The current profile controls dashboard refresh, initial Activity Panel state, scoped smart-filter chip generation, custom container command presets, custom workload action presets, and the process-local dataplane policy synced to the running backend. Import/export covers only this settings profile; active context, active namespace, favourites, recent namespace history, and theme remain separate.
-
-Custom container commands are shown on matching Pod containers and run through short-lived non-interactive pod exec requests. The default command is `Environment`, which runs `/bin/env` and renders stdout as key-value output. Custom workload actions are shown on patch-capable Deployments, StatefulSets, DaemonSets, and ReplicaSets, and support set/unset env, set image, and raw JSON/merge patches. Namespace enrichment tuning controls focused enrichment, optional idle background sweep, observer intervals, snapshot TTLs, scheduler budget, and dashboard signal thresholds.
-
----
-
-## Launch Modes
-
-### Browser Mode
-
-```bash
-kview
-```
-
-Starts the local server and opens the UI in a browser.
-
-To use a kubeconfig file or a directory containing kubeconfig files:
-
-```bash
-kview --config "C:\Users\alice\.kube\config"
-```
-
-`--config` overrides `KUBECONFIG`. If neither is set, kview uses the default
-`~/.kube/config`.
-
-kview uses Kubernetes `client-go` authentication from the selected kubeconfig.
-If a context uses an `exec` auth plugin, the referenced command must be
-installed and available on `PATH` where kview runs. For example, kubeconfigs may
-call `kubectl`, `kubelogin`, cloud-provider CLIs, or another command declared in
-the kubeconfig.
-
-On Windows, running kview from WSL is currently the simpler path because
-kubeconfig paths, shell behavior, and auth helper commands tend to match the
-Linux-native Kubernetes tooling setup more closely.
-
-### Webview Mode
-
-```bash
-kview --webview
-```
-
-Runs the same embedded HTTP server and UI inside a native desktop webview window.
-
----
-
-## Build
-
-```bash
-make build
-```
-
-To build with the pinned Docker toolchain and write the binary back into the
-repo:
-
-```bash
-make build-docker
-```
-
-Release-style artifacts can be produced with:
-
-```bash
-make build-docker-release GOOS=linux GOARCH=amd64 OUTPUT=dist/kview-linux-amd64
-```
-
-Docker builds bind-mount the repository and keep Go/npm build caches under
-`.cache/`, so local rebuilds reuse dependency artifacts without relying on the
-host Go or Node.js installation.
-
-For the embedded webview build:
-
-```bash
-make build-webview
-```
-
-The build regenerates embedded UI assets under `internal/server/ui_dist`.
-
-GitHub release builds run only when a `v*` tag is pushed. The workflow builds
-Linux, macOS, and Windows browser/server binaries in Docker and publishes them
-to the matching GitHub release.
+Built with React, Vite, TypeScript, and MUI. Uses shared resource list and drawer patterns, capability-aware actions, typed API responses, and reusable design tokens.
 
 ---
 
