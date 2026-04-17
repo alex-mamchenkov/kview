@@ -22,6 +22,8 @@ kview is a **local, single-binary Kubernetes UI** for fast, view-first cluster e
 
 Pre-built binaries for Linux, macOS, and Windows are published on the [GitHub Releases](../../releases) page for every `v*` tag.
 
+Release binaries are built for browser/server modes. Desktop webview mode requires a local build with webview support; see [Desktop webview mode](#desktop-webview-mode).
+
 Download the binary for your platform, make it executable, and run:
 
 ```bash
@@ -42,18 +44,56 @@ kview uses `client-go` authentication from the selected kubeconfig. If a context
 
 On Windows, running kview from WSL is the simpler path because kubeconfig paths, shell behavior, and auth helper commands tend to match the Linux-native Kubernetes tooling setup more closely.
 
-### Desktop webview mode
+### Install with Go
+
+If you have Go installed, you can install kview directly from the module:
 
 ```bash
-kview --webview
+go install github.com/alex-mamchenkov/kview/cmd/kview@latest
 ```
 
-Runs the same embedded HTTP server and UI inside a native desktop webview window instead of opening a browser tab.
+This places the `kview` binary in your Go install bin directory, usually `$(go env GOPATH)/bin` or `$(go env GOBIN)` if set. Make sure that directory is on your `PATH`, then run:
+
+```bash
+kview
+```
+
+The default Go install path builds browser/server modes. Desktop webview mode requires the `webview` build tag; see [Desktop webview mode](#desktop-webview-mode).
+
+### Desktop webview mode
+
+Desktop webview mode is only available in binaries built with the `webview` build tag. Release binaries are built without it.
+
+To build kview locally with webview support:
+
+```bash
+make build-webview
+```
+
+Then run:
+
+```bash
+./kview
+```
+
+Webview-enabled builds use webview as the default launch mode. You can also request it explicitly:
+
+```bash
+./kview --mode webview
+```
+
+This runs the same embedded HTTP server and UI inside a native desktop webview window instead of opening a browser tab.
 
 ### Build from source
 
 ```bash
 make build
+```
+
+This produces a regular browser/server-mode binary. To include desktop webview support, use:
+
+```bash
+make build-webview
 ```
 
 To build with the pinned Docker toolchain:
