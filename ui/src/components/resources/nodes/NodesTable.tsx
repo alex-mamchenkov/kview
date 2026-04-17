@@ -4,7 +4,7 @@ import { GridColDef } from "@mui/x-data-grid";
 import { apiGetWithContext } from "../../../api";
 import NodeDrawer from "./NodeDrawer";
 import { fmtAge, valueOrDash } from "../../../utils/format";
-import { nodeStatusChipColor, workloadHealthBucketColor } from "../../../utils/k8sUi";
+import { nodeStatusChipColor, deploymentHealthBucketColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import {
@@ -65,7 +65,7 @@ const columns: GridColDef<Row>[] = [
     renderCell: (p) => {
       const bucket = p.row.healthBucket;
       if (!bucket) return "-";
-      return <Chip size="small" label={p.row.needsAttention ? "attention" : bucket} color={workloadHealthBucketColor(bucket)} />;
+      return <Chip size="small" label={p.row.needsAttention ? "attention" : bucket} color={deploymentHealthBucketColor(bucket)} />;
     },
     sortable: false,
   },
@@ -112,7 +112,7 @@ const columns: GridColDef<Row>[] = [
       const bucket = p.row.podDensityBucket;
       if (!bucket || bucket === "unknown") return "-";
       const pct = p.row.podDensityRatio != null ? `${Math.round(p.row.podDensityRatio * 100)}%` : bucket;
-      return <Chip size="small" label={`${pct} ${bucket}`} color={workloadHealthBucketColor(bucket)} />;
+      return <Chip size="small" label={`${pct} ${bucket}`} color={deploymentHealthBucketColor(bucket)} />;
     },
     sortable: false,
   },

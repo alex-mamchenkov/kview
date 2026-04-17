@@ -21,7 +21,7 @@ import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import { apiGet, apiGetWithContext } from "../../../api";
 import type { ApiDashboardClusterResponse, DashboardSignalFilter, DashboardSignalItem, DashboardSignalsPanel } from "../../../types/api";
-import { namespaceRowSummaryStateColor } from "../../../utils/k8sUi";
+import { dataplaneCoarseStateChipColor } from "../../../utils/k8sUi";
 import { useActiveContext } from "../../../activeContext";
 import { useUserSettings } from "../../../settingsContext";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
@@ -45,7 +45,6 @@ type Props = {
   onNavigate?: (section: string, namespace: string) => void;
 };
 
-type SignalItem = DashboardSignalItem;
 type SignalFilter = string;
 
 type InspectTarget = {
@@ -93,7 +92,7 @@ type InspectTarget = {
 type DerivedFilter = "all" | "nodes" | "helm" | "signals";
 
 function stateChipColor(state: string): "success" | "warning" | "error" | "default" {
-  return namespaceRowSummaryStateColor(state) as "success" | "warning" | "error" | "default";
+  return dataplaneCoarseStateChipColor(state) as "success" | "warning" | "error" | "default";
 }
 
 function severityColor(severity: string): "error" | "warning" | "info" | "default" {
@@ -343,22 +342,22 @@ function DataplaneVisualRow({
   );
 }
 
-function signalLocation(f: SignalItem): string {
+function signalLocation(f: DashboardSignalItem): string {
   if (f.scopeLocation) return `${f.scope || "scope"}: ${f.scopeLocation}`;
   if (f.namespace) return `namespace: ${f.namespace}`;
   if (f.scope) return f.scope;
   return "-";
 }
 
-function signalResourceName(f: SignalItem): string {
+function signalResourceName(f: DashboardSignalItem): string {
   return f.resourceName || f.name || f.namespace || f.kind;
 }
 
-function signalCalculatedText(f: SignalItem): string {
+function signalCalculatedText(f: DashboardSignalItem): string {
   return f.calculatedData || f.reason;
 }
 
-function signalActualText(f: SignalItem): string {
+function signalActualText(f: DashboardSignalItem): string {
   return f.actualData || f.reason;
 }
 
@@ -537,7 +536,7 @@ function DerivedFilterChip({
   );
 }
 
-function inspectTargetFromSignal(f: SignalItem): InspectTarget | null {
+function inspectTargetFromSignal(f: DashboardSignalItem): InspectTarget | null {
   const namespace = f.namespace || "";
   const name = f.name || (f.kind === "Namespace" ? namespace : "");
   if (!namespace || !name) return null;

@@ -5,7 +5,7 @@ import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import JobDrawer from "./JobDrawer";
 import { fmtAge } from "../../../utils/format";
-import { jobStatusChipColor, workloadHealthBucketColor } from "../../../utils/k8sUi";
+import { jobStatusChipColor, deploymentHealthBucketColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
@@ -40,7 +40,7 @@ const columns: GridColDef<Row>[] = [
         <Chip
           size="small"
           label={p.row.needsAttention ? "attention" : status || bucket || "-"}
-          color={bucket ? workloadHealthBucketColor(bucket) : jobStatusChipColor(status)}
+          color={bucket ? deploymentHealthBucketColor(bucket) : jobStatusChipColor(status)}
         />
       );
     },

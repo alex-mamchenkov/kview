@@ -9,7 +9,7 @@ import {
 } from "../../../types/api";
 import NamespaceDrawer from "./NamespaceDrawer";
 import { fmtAge } from "../../../utils/format";
-import { namespacePhaseChipColor, namespaceRowSummaryStateColor } from "../../../utils/k8sUi";
+import { dataplaneCoarseStateChipColor, namespacePhaseChipColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
@@ -82,7 +82,7 @@ const columns: GridColDef<Row>[] = [
         <Chip
           size="small"
           label={row.summaryState}
-          color={namespaceRowSummaryStateColor(row.summaryState)}
+          color={dataplaneCoarseStateChipColor(row.summaryState)}
           variant="outlined"
         />
       );

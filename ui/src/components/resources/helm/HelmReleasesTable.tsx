@@ -3,7 +3,7 @@ import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
 import { apiGetWithContext } from "../../../api";
 import { fmtTs, valueOrDash } from "../../../utils/format";
-import { workloadHealthBucketColor } from "../../../utils/k8sUi";
+import { deploymentHealthBucketColor } from "../../../utils/k8sUi";
 import HelmReleaseDrawer from "./HelmReleaseDrawer";
 import { HelmInstallButton } from "./HelmActions";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
@@ -66,7 +66,7 @@ const columns: GridColDef<Row>[] = [
       const bucket = p.row.stabilityBucket;
       if (!bucket) return "-";
       const label = p.row.transitional ? "transitional" : p.row.needsAttention ? "attention" : bucket;
-      return <Chip size="small" label={label} color={workloadHealthBucketColor(bucket)} />;
+      return <Chip size="small" label={label} color={deploymentHealthBucketColor(bucket)} />;
     },
     sortable: false,
   },
