@@ -117,6 +117,12 @@ function shouldNotifyFailure(shape: ApiErrorShape): boolean {
   return shape.status >= 500;
 }
 
+function isAbortError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { name?: unknown };
+  return record.name === "AbortError";
+}
+
 export function toApiError(error: unknown): ApiError {
   if (error && typeof error === "object") {
     const record = error as { status?: unknown; message?: unknown };
@@ -131,15 +137,21 @@ export function toApiError(error: unknown): ApiError {
   return { message: "Unknown error", details: error };
 }
 
-export async function apiGet<T>(path: string, token: string, opts?: { headers?: Record<string, string> }): Promise<T> {
+export async function apiGet<T>(
+  path: string,
+  token: string,
+  opts?: { headers?: Record<string, string>; signal?: AbortSignal },
+): Promise<T> {
   let res: Response;
   // Prefer Authorization header; do not put token in query string (see WebSocket paths for query fallback).
   const mergedHeaders = { Authorization: `Bearer ${token}`, ...(opts?.headers || {}) };
   try {
     res = await fetch(path, {
       headers: mergedHeaders,
+      signal: opts?.signal,
     });
   } catch (err) {
+    if (isAbortError(err)) throw err;
     notifyApiFailure("backend", String((err as Error | undefined)?.message || err || "Network error"));
     throw err;
   }
@@ -194,9 +206,14 @@ export async function apiPost<T>(path: string, token: string, body: unknown, opt
   }
 }
 
-export async function apiGetWithContext<T>(path: string, token: string, contextName: string): Promise<T> {
-  if (!contextName) return apiGet<T>(path, token);
-  return apiGet<T>(path, token, { headers: { "X-Kview-Context": contextName } });
+export async function apiGetWithContext<T>(
+  path: string,
+  token: string,
+  contextName: string,
+  opts?: { signal?: AbortSignal },
+): Promise<T> {
+  if (!contextName) return apiGet<T>(path, token, { signal: opts?.signal });
+  return apiGet<T>(path, token, { headers: { "X-Kview-Context": contextName }, signal: opts?.signal });
 }
 
 export async function apiPostWithContext<T>(path: string, token: string, contextName: string, body: unknown): Promise<T> {

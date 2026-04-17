@@ -18,6 +18,7 @@ import type { ApiDataplaneSearchItem, ApiDataplaneSearchResponse } from "../../t
 import { getResourceLabel, type ListResourceKey } from "../../utils/k8sResources";
 
 const SEARCH_PAGE_SIZE = 10;
+const SEARCH_DEBOUNCE_MS = 400;
 
 type Props = {
   token: string;
@@ -36,6 +37,11 @@ function resultSecondary(item: ApiDataplaneSearchItem): string {
   return `${labelForKind(item.kind)} · ${scope || "cached dataplane"}`;
 }
 
+function isAbortError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  return (error as { name?: unknown }).name === "AbortError";
+}
+
 export default function DataplaneQuickSearch({ token, activeContext, disabled, onOpenResult }: Props) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<ApiDataplaneSearchItem[]>([]);
@@ -45,22 +51,21 @@ export default function DataplaneQuickSearch({ token, activeContext, disabled, o
   const [error, setError] = useState("");
   const [hasMore, setHasMore] = useState(false);
   const anchorRef = useRef<HTMLDivElement | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const loadMoreAbortRef = useRef<AbortController | null>(null);
+  const searchSeqRef = useRef(0);
   const trimmed = query.trim();
   const canSearch = trimmed.length >= 2 && !!activeContext && !disabled;
 
-  const fetchResults = React.useCallback((offset: number, append: boolean) => {
-    const path = `/api/dataplane/search?q=${encodeURIComponent(trimmed)}&limit=${SEARCH_PAGE_SIZE}&offset=${offset}`;
-    return apiGetWithContext<ApiDataplaneSearchResponse>(path, token, activeContext)
-      .then((res) => {
-        setItems((prev) => append ? [...prev, ...(res.items || [])] : (res.items || []));
-        setHasMore(!!res.hasMore);
-        setError("");
-        setOpen(true);
-      });
-  }, [activeContext, token, trimmed]);
+  const fetchResults = React.useCallback((searchQuery: string, offset: number, signal: AbortSignal) => {
+    const path = `/api/dataplane/search?q=${encodeURIComponent(searchQuery)}&limit=${SEARCH_PAGE_SIZE}&offset=${offset}`;
+    return apiGetWithContext<ApiDataplaneSearchResponse>(path, token, activeContext, { signal });
+  }, [activeContext, token]);
 
   useEffect(() => {
-    let cancelled = false;
+    searchAbortRef.current?.abort();
+    loadMoreAbortRef.current?.abort();
+
     if (!canSearch) {
       setItems([]);
       setLoading(false);
@@ -69,37 +74,77 @@ export default function DataplaneQuickSearch({ token, activeContext, disabled, o
       setHasMore(false);
       return;
     }
+
+    const searchQuery = trimmed;
+    const searchSeq = searchSeqRef.current + 1;
+    searchSeqRef.current = searchSeq;
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+
+    setItems([]);
+    setHasMore(false);
+    setError("");
     setLoading(true);
+    setLoadingMore(false);
+    setOpen(true);
+
     const timer = window.setTimeout(() => {
-      fetchResults(0, false)
-        .then(() => {
-          if (cancelled) return;
+      fetchResults(searchQuery, 0, controller.signal)
+        .then((res) => {
+          if (controller.signal.aborted || searchSeq !== searchSeqRef.current) return;
+          setItems(res.items || []);
+          setHasMore(!!res.hasMore);
+          setError("");
+          setOpen(true);
         })
         .catch((err) => {
-          if (cancelled) return;
+          if (controller.signal.aborted || searchSeq !== searchSeqRef.current || isAbortError(err)) return;
           setItems([]);
           setError(String((err as Error | undefined)?.message || err || "Search failed"));
           setOpen(true);
         })
         .finally(() => {
-          if (!cancelled) setLoading(false);
+          if (!controller.signal.aborted && searchSeq === searchSeqRef.current) setLoading(false);
         });
-    }, 180);
+    }, SEARCH_DEBOUNCE_MS);
+
     return () => {
-      cancelled = true;
       window.clearTimeout(timer);
+      controller.abort();
     };
-  }, [canSearch, fetchResults]);
+  }, [canSearch, fetchResults, trimmed]);
+
+  useEffect(() => {
+    return () => {
+      searchAbortRef.current?.abort();
+      loadMoreAbortRef.current?.abort();
+    };
+  }, []);
 
   const loadMore = React.useCallback(() => {
-    if (!canSearch || loadingMore) return;
+    if (!canSearch || loading || loadingMore) return;
+    const searchQuery = trimmed;
+    const searchSeq = searchSeqRef.current;
+    const controller = new AbortController();
+    loadMoreAbortRef.current?.abort();
+    loadMoreAbortRef.current = controller;
+
     setLoadingMore(true);
-    fetchResults(items.length, true)
+    fetchResults(searchQuery, items.length, controller.signal)
+      .then((res) => {
+        if (controller.signal.aborted || searchSeq !== searchSeqRef.current) return;
+        setItems((prev) => [...prev, ...(res.items || [])]);
+        setHasMore(!!res.hasMore);
+        setError("");
+      })
       .catch((err) => {
+        if (controller.signal.aborted || searchSeq !== searchSeqRef.current || isAbortError(err)) return;
         setError(String((err as Error | undefined)?.message || err || "Search failed"));
       })
-      .finally(() => setLoadingMore(false));
-  }, [canSearch, fetchResults, items.length, loadingMore]);
+      .finally(() => {
+        if (!controller.signal.aborted && searchSeq === searchSeqRef.current) setLoadingMore(false);
+      });
+  }, [canSearch, fetchResults, items.length, loading, loadingMore, trimmed]);
 
   const content = useMemo(() => {
     if (!trimmed) return null;
