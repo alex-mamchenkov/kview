@@ -20,7 +20,7 @@ import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import { apiGet, apiGetWithContext } from "../../../api";
-import type { ApiDashboardClusterResponse, DashboardSignalFilter, DashboardSignalItem, DashboardSignalsPanel } from "../../../types/api";
+import type { ApiDashboardClusterResponse, DashboardSignalFilter, DashboardSignalItem, DashboardSignalsPanel, HelmChart } from "../../../types/api";
 import { dataplaneCoarseStateChipColor } from "../../../utils/k8sUi";
 import { useActiveContext } from "../../../activeContext";
 import { useUserSettings } from "../../../settingsContext";
@@ -66,27 +66,7 @@ type InspectTarget = {
     | "HelmChart";
   namespace: string;
   name: string;
-  chart?: {
-    chartName: string;
-    chartVersion: string;
-    appVersion: string;
-    releases: number;
-    namespaces: string[];
-    statuses?: string[];
-    needsAttention?: number;
-    versions?: Array<{
-      chartVersion?: string;
-      appVersion?: string;
-      releases: number;
-      namespaces?: string[];
-      statuses?: string[];
-      needsAttention?: number;
-    }>;
-    derived?: boolean;
-    derivedSource?: string;
-    derivedCoverage?: string;
-    derivedNote?: string;
-  };
+  chart?: HelmChart;
 };
 
 type DerivedFilter = "all" | "nodes" | "helm" | "signals";

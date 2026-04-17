@@ -20,30 +20,7 @@ import EmptyState from "../../shared/EmptyState";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import { drawerBodySx, drawerTabContentSx, panelBoxSx } from "../../../theme/sxTokens";
-
-type HelmChartVersion = {
-  chartVersion?: string;
-  appVersion?: string;
-  releases: number;
-  namespaces?: string[];
-  statuses?: string[];
-  needsAttention?: number;
-};
-
-type HelmChart = {
-  chartName: string;
-  chartVersion: string;
-  appVersion: string;
-  releases: number;
-  namespaces?: string[];
-  statuses?: string[];
-  needsAttention?: number;
-  versions?: HelmChartVersion[];
-  derived?: boolean;
-  derivedSource?: string;
-  derivedCoverage?: string;
-  derivedNote?: string;
-};
+import type { HelmChart, HelmChartVersion } from "../../../types/api";
 
 export default function HelmChartDrawer(props: {
   open: boolean;

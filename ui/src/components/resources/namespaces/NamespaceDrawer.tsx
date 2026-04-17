@@ -15,7 +15,31 @@ import {
   Typography,
 } from "@mui/material";
 import { apiGet } from "../../../api";
-import type { ApiItemResponse, ApiListResponse, EventDTO } from "../../../types/api";
+import type {
+  ApiItemResponse,
+  ApiListResponse,
+  DashboardSignalItem,
+  EventDTO,
+  LimitRangeItem,
+  NamespaceCondition,
+  NamespaceDeploymentHealth,
+  NamespaceDetails,
+  NamespaceHelmRelease,
+  NamespaceInsights,
+  NamespaceLimitRange,
+  NamespaceMetadata,
+  NamespacePodHealth,
+  NamespaceProblematicResource,
+  NamespaceResourceCounts,
+  NamespaceResourceQuota,
+  NamespaceResourceSignals,
+  NamespaceSummary,
+  NamespaceSummaryMeta,
+  NamespaceSummaryResources,
+  NamespaceWorkloadHealthRollup,
+  ResourceQuotaEntry,
+  WorkloadKindHealthRollup,
+} from "../../../types/api";
 import { useConnectionState } from "../../../connectionState";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import {
@@ -40,179 +64,6 @@ import DeploymentDrawer from "../deployments/DeploymentDrawer";
 import JobDrawer from "../jobs/JobDrawer";
 import HelmReleaseDrawer from "../helm/HelmReleaseDrawer";
 import { drawerBodySx, loadingCenterSx, panelBoxSx } from "../../../theme/sxTokens";
-
-type NamespaceDetails = {
-  summary: NamespaceSummary;
-  metadata: NamespaceMetadata;
-  conditions: NamespaceCondition[];
-  yaml: string;
-};
-
-type NamespaceSummary = {
-  name: string;
-  phase: string;
-  createdAt: number;
-  ageSec: number;
-};
-
-type NamespaceMetadata = {
-  labels?: Record<string, string>;
-  annotations?: Record<string, string>;
-};
-
-type NamespaceCondition = {
-  type: string;
-  status: string;
-  reason?: string;
-  message?: string;
-  lastTransitionTime?: number;
-};
-
-type NamespaceInsights = {
-  summary: NamespaceSummaryResources;
-  signals?: NamespaceSignal[];
-  resourceSignals?: NamespaceResourceSignals[];
-  resourceQuotas?: ResourceQuota[];
-  limitRanges?: LimitRange[];
-};
-
-type NamespaceSignal = {
-  kind: string;
-  namespace?: string;
-  name?: string;
-  severity: string;
-  score: number;
-  reason: string;
-  likelyCause?: string;
-  suggestedAction?: string;
-  confidence?: string;
-  section?: string;
-  signalType?: string;
-  resourceKind?: string;
-  resourceName?: string;
-  scope?: string;
-  scopeLocation?: string;
-  actualData?: string;
-  calculatedData?: string;
-};
-
-type NamespaceResourceSignals = {
-  resourceKind: string;
-  resourceName: string;
-  scope?: string;
-  scopeLocation?: string;
-  signals?: NamespaceSignal[];
-};
-
-type WorkloadKindHealthRollup = {
-  total: number;
-  healthy: number;
-  progressing: number;
-  degraded: number;
-};
-
-type NamespaceWorkloadHealthRollup = {
-  deployments: WorkloadKindHealthRollup;
-  daemonSets: WorkloadKindHealthRollup;
-  statefulSets: WorkloadKindHealthRollup;
-  jobs: WorkloadKindHealthRollup;
-  cronJobs: WorkloadKindHealthRollup;
-  replicaSets: WorkloadKindHealthRollup;
-};
-
-type NamespaceSummaryResources = {
-  counts: ResourceCounts;
-  podHealth: PodHealth;
-  deploymentHealth: DeploymentHealth;
-  problematic: ProblematicResource[];
-  helmReleases?: NamespaceHelmRelease[];
-  workloadByKind?: NamespaceWorkloadHealthRollup;
-  meta?: NamespaceSummaryMeta;
-};
-
-type ResourceCounts = {
-  pods: number;
-  deployments: number;
-  statefulSets: number;
-  daemonSets: number;
-  jobs: number;
-  cronJobs: number;
-  services: number;
-  ingresses: number;
-  pvcs: number;
-  configMaps: number;
-  secrets: number;
-  serviceAccounts: number;
-  roles: number;
-  roleBindings: number;
-  helmReleases: number;
-  resourceQuotas?: number;
-  limitRanges?: number;
-};
-
-type PodHealth = {
-  running: number;
-  pending: number;
-  failed: number;
-  succeeded: number;
-  unknown: number;
-};
-
-type DeploymentHealth = {
-  healthy: number;
-  degraded: number;
-  progressing: number;
-};
-
-type ProblematicResource = {
-  kind: string;
-  name: string;
-  reason: string;
-};
-
-type NamespaceHelmRelease = {
-  name: string;
-  status: string;
-  revision: number;
-};
-
-type NamespaceSummaryMeta = {
-  freshness: string;
-  coverage: string;
-  degradation: string;
-  completeness: string;
-  state: string;
-};
-
-type ResourceQuotaEntry = {
-  key: string;
-  used: string;
-  hard: string;
-  ratio?: number;
-};
-
-type ResourceQuota = {
-  name: string;
-  namespace: string;
-  ageSec: number;
-  entries: ResourceQuotaEntry[];
-};
-
-type LimitRangeItem = {
-  type: string;
-  min?: Record<string, string>;
-  max?: Record<string, string>;
-  default?: Record<string, string>;
-  defaultRequest?: Record<string, string>;
-  maxLimitRequestRatio?: Record<string, string>;
-};
-
-type LimitRange = {
-  name: string;
-  namespace: string;
-  ageSec: number;
-  items: LimitRangeItem[];
-};
 
 const tabs = ["Signals", "Inventory", "Capacity", "Events", "Metadata", "YAML"] as const;
 const eventsTabIndex = tabs.indexOf("Events");
@@ -269,7 +120,7 @@ function quotaGaugeMuiColor(ratio?: number): string {
   return "#2e7d32";
 }
 
-function summarizeQuotaPressure(quotas: ResourceQuota[]): { critical: number; warning: number } {
+function summarizeQuotaPressure(quotas: NamespaceResourceQuota[]): { critical: number; warning: number } {
   let critical = 0;
   let warning = 0;
   for (const quota of quotas) {
@@ -282,12 +133,12 @@ function summarizeQuotaPressure(quotas: ResourceQuota[]): { critical: number; wa
   return { critical, warning };
 }
 
-function signalTarget(signal: NamespaceSignal): string {
+function signalTarget(signal: DashboardSignalItem): string {
   if (!signal.name) return signal.namespace || signal.kind;
   return signal.namespace ? `${signal.namespace}/${signal.name}` : signal.name;
 }
 
-function signalNote(signal: NamespaceSignal): string {
+function signalNote(signal: DashboardSignalItem): string {
   const actual = signal.actualData || signal.reason;
   const parts = [actual];
   if (signal.calculatedData && signal.calculatedData !== actual) parts.push(`Calculated: ${signal.calculatedData}`);
@@ -300,16 +151,16 @@ function resourceSignalKey(kind: string, name: string, scope = "namespace", scop
   return `${scope}/${scopeLocation}/${kind}/${name}`;
 }
 
-function buildResourceSignalMap(groups?: NamespaceResourceSignals[]): Map<string, NamespaceSignal[]> {
-  const out = new Map<string, NamespaceSignal[]>();
+function buildResourceSignalMap(groups?: NamespaceResourceSignals[]): Map<string, DashboardSignalItem[]> {
+  const out = new Map<string, DashboardSignalItem[]>();
   for (const group of groups || []) {
     out.set(resourceSignalKey(group.resourceKind, group.resourceName, group.scope || "namespace", group.scopeLocation || ""), group.signals || []);
   }
   return out;
 }
 
-function buildResourceKindSignalMap(groups?: NamespaceResourceSignals[]): Map<string, NamespaceSignal[]> {
-  const out = new Map<string, NamespaceSignal[]>();
+function buildResourceKindSignalMap(groups?: NamespaceResourceSignals[]): Map<string, DashboardSignalItem[]> {
+  const out = new Map<string, DashboardSignalItem[]>();
   for (const group of groups || []) {
     const existing = out.get(group.resourceKind) || [];
     out.set(group.resourceKind, [...existing, ...(group.signals || [])]);
@@ -318,26 +169,26 @@ function buildResourceKindSignalMap(groups?: NamespaceResourceSignals[]): Map<st
 }
 
 function resourceSignalsFor(
-  groups: Map<string, NamespaceSignal[]>,
+  groups: Map<string, DashboardSignalItem[]>,
   kind: string,
   name: string,
   namespace: string
-): NamespaceSignal[] {
+): DashboardSignalItem[] {
   return groups.get(resourceSignalKey(kind, name, "namespace", namespace)) || [];
 }
 
-function worstSignalSeverity(signals: NamespaceSignal[]): string {
+function worstSignalSeverity(signals: DashboardSignalItem[]): string {
   if (signals.some((signal) => signal.severity === "high")) return "high";
   if (signals.some((signal) => signal.severity === "medium")) return "medium";
   if (signals.some((signal) => signal.severity === "low")) return "low";
   return "";
 }
 
-function signalsForQuotaEntry(signals: NamespaceSignal[], entryKey: string): NamespaceSignal[] {
+function signalsForQuotaEntry(signals: DashboardSignalItem[], entryKey: string): DashboardSignalItem[] {
   return signals.filter((signal) => signal.signalType === "resource_quota_pressure" && (signal.actualData || "").startsWith(`${entryKey}:`));
 }
 
-function ResourceSignalsChip({ signals, label }: { signals: NamespaceSignal[]; label?: string }) {
+function ResourceSignalsChip({ signals, label }: { signals: DashboardSignalItem[]; label?: string }) {
   if (signals.length === 0) return null;
   const severity = worstSignalSeverity(signals);
   const chipLabel = label || `${signals.length} signal${signals.length === 1 ? "" : "s"}`;
@@ -364,7 +215,7 @@ function mapCountChip(
   sectionKey: string,
   enabled: boolean,
   onSelect: (sectionKey: string) => void,
-  signals: NamespaceSignal[] = []
+  signals: DashboardSignalItem[] = []
 ) {
   if (!count) return null;
   return (
@@ -411,7 +262,7 @@ function workloadSignalSummary(rollup?: WorkloadKindHealthRollup): string {
   return `${rollup.healthy} ok · ${rollup.progressing} prog · ${rollup.degraded} deg / ${rollup.total}`;
 }
 
-function podHealthSummary(podHealth?: PodHealth): string {
+function podHealthSummary(podHealth?: NamespacePodHealth): string {
   if (!podHealth) return "-";
   const total = podHealth.running + podHealth.pending + podHealth.failed + podHealth.succeeded + podHealth.unknown;
   if (total === 0) return "-";
@@ -572,7 +423,7 @@ export default function NamespaceDrawer(props: {
     props.onNavigate(sectionMap[sectionKey] || sectionKey, name);
   }
 
-  function openProblematic(resource: ProblematicResource) {
+  function openProblematic(resource: NamespaceProblematicResource) {
     switch (resource.kind) {
       case "Pod":
         setDrawerPod(resource.name);
@@ -598,7 +449,7 @@ export default function NamespaceDrawer(props: {
     }
   }
 
-  function openSignal(signal: NamespaceSignal) {
+  function openSignal(signal: DashboardSignalItem) {
     switch (signal.kind) {
       case "Namespace":
       case "ResourceQuota":

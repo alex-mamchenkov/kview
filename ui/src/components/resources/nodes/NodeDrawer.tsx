@@ -33,84 +33,23 @@ import NodeActions from "./NodeActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
-import type { ApiItemResponse } from "../../../types/api";
+import type {
+  ApiItemResponse,
+  NodeCapacity,
+  NodeCondition,
+  NodeDetails,
+  NodeMetadata,
+  NodePod,
+  NodePodsSummary,
+  NodeSummary,
+  NodeTaint,
+} from "../../../types/api";
 import {
   panelBoxSx,
   drawerBodySx,
   drawerTabContentSx,
   loadingCenterSx,
 } from "../../../theme/sxTokens";
-
-type NodeDetails = {
-  summary: NodeSummary;
-  metadata: NodeMetadata;
-  conditions: NodeCondition[];
-  capacity: NodeCapacity;
-  taints: NodeTaint[];
-  pods: NodePod[];
-  linkedPods: NodePodsSummary;
-  yaml: string;
-  derived?: {
-    source: string;
-    coverage?: string;
-    completeness?: string;
-    note?: string;
-  };
-};
-
-type NodeSummary = {
-  name: string;
-  status: string;
-  roles?: string[];
-  kubeletVersion?: string;
-  osImage?: string;
-  kernelVersion?: string;
-  architecture?: string;
-  providerID?: string;
-  createdAt: number;
-  ageSec: number;
-};
-
-type NodeMetadata = {
-  labels?: Record<string, string>;
-  annotations?: Record<string, string>;
-};
-
-type NodeCondition = {
-  type: string;
-  status: string;
-  reason?: string;
-  message?: string;
-  lastTransitionTime?: number;
-};
-
-type NodeCapacity = {
-  cpuCapacity?: string;
-  cpuAllocatable?: string;
-  memoryCapacity?: string;
-  memoryAllocatable?: string;
-  podsCapacity?: string;
-  podsAllocatable?: string;
-};
-
-type NodeTaint = {
-  key?: string;
-  value?: string;
-  effect?: string;
-};
-
-type NodePodsSummary = {
-  total: number;
-};
-
-type NodePod = {
-  name: string;
-  namespace: string;
-  phase: string;
-  ready: string;
-  restarts: number;
-  ageSec: number;
-};
 
 function isNodeConditionHealthy(cond: NodeCondition): boolean {
   if (cond.type === "Ready") return cond.status === "True";

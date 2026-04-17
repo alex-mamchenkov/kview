@@ -421,3 +421,263 @@ export type EventDTO = {
   involvedKind?: string;
   involvedName?: string;
 };
+
+// ---------------------------------------------------------------------------
+// Helm chart drawer types — /api/dashboard/cluster derived panel + HelmChartDrawer
+// ---------------------------------------------------------------------------
+
+export type HelmChartVersion = {
+  chartVersion?: string;
+  appVersion?: string;
+  releases: number;
+  namespaces?: string[];
+  statuses?: string[];
+  needsAttention?: number;
+};
+
+export type HelmChart = {
+  chartName: string;
+  chartVersion: string;
+  appVersion: string;
+  releases: number;
+  namespaces?: string[];
+  statuses?: string[];
+  needsAttention?: number;
+  versions?: HelmChartVersion[];
+  derived?: boolean;
+  derivedSource?: string;
+  derivedCoverage?: string;
+  derivedNote?: string;
+};
+
+// ---------------------------------------------------------------------------
+// Namespace drawer types — GET /api/namespaces/:name and /api/namespaces/:name/insights
+// ---------------------------------------------------------------------------
+
+export type NamespaceSummary = {
+  name: string;
+  phase: string;
+  createdAt: number;
+  ageSec: number;
+};
+
+export type NamespaceMetadata = {
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
+};
+
+export type NamespaceCondition = {
+  type: string;
+  status: string;
+  reason?: string;
+  message?: string;
+  lastTransitionTime?: number;
+};
+
+export type NamespaceDetails = {
+  summary: NamespaceSummary;
+  metadata: NamespaceMetadata;
+  conditions: NamespaceCondition[];
+  yaml: string;
+};
+
+export type ResourceQuotaEntry = {
+  key: string;
+  used: string;
+  hard: string;
+  ratio?: number;
+};
+
+export type NamespaceResourceQuota = {
+  name: string;
+  namespace: string;
+  ageSec: number;
+  entries: ResourceQuotaEntry[];
+};
+
+export type LimitRangeItem = {
+  type: string;
+  min?: Record<string, string>;
+  max?: Record<string, string>;
+  default?: Record<string, string>;
+  defaultRequest?: Record<string, string>;
+  maxLimitRequestRatio?: Record<string, string>;
+};
+
+export type NamespaceLimitRange = {
+  name: string;
+  namespace: string;
+  ageSec: number;
+  items: LimitRangeItem[];
+};
+
+export type NamespaceResourceSignals = {
+  resourceKind: string;
+  resourceName: string;
+  scope?: string;
+  scopeLocation?: string;
+  signals?: DashboardSignalItem[];
+};
+
+export type WorkloadKindHealthRollup = {
+  total: number;
+  healthy: number;
+  progressing: number;
+  degraded: number;
+};
+
+export type NamespaceWorkloadHealthRollup = {
+  deployments: WorkloadKindHealthRollup;
+  daemonSets: WorkloadKindHealthRollup;
+  statefulSets: WorkloadKindHealthRollup;
+  jobs: WorkloadKindHealthRollup;
+  cronJobs: WorkloadKindHealthRollup;
+  replicaSets: WorkloadKindHealthRollup;
+};
+
+export type NamespaceResourceCounts = {
+  pods: number;
+  deployments: number;
+  statefulSets: number;
+  daemonSets: number;
+  jobs: number;
+  cronJobs: number;
+  services: number;
+  ingresses: number;
+  pvcs: number;
+  configMaps: number;
+  secrets: number;
+  serviceAccounts: number;
+  roles: number;
+  roleBindings: number;
+  helmReleases: number;
+  resourceQuotas?: number;
+  limitRanges?: number;
+};
+
+export type NamespacePodHealth = {
+  running: number;
+  pending: number;
+  failed: number;
+  succeeded: number;
+  unknown: number;
+};
+
+export type NamespaceDeploymentHealth = {
+  healthy: number;
+  degraded: number;
+  progressing: number;
+};
+
+export type NamespaceProblematicResource = {
+  kind: string;
+  name: string;
+  reason: string;
+};
+
+export type NamespaceHelmRelease = {
+  name: string;
+  status: string;
+  revision: number;
+};
+
+export type NamespaceSummaryMeta = {
+  freshness: string;
+  coverage: string;
+  degradation: string;
+  completeness: string;
+  state: string;
+};
+
+export type NamespaceSummaryResources = {
+  counts: NamespaceResourceCounts;
+  podHealth: NamespacePodHealth;
+  deploymentHealth: NamespaceDeploymentHealth;
+  problematic: NamespaceProblematicResource[];
+  helmReleases?: NamespaceHelmRelease[];
+  workloadByKind?: NamespaceWorkloadHealthRollup;
+  meta?: NamespaceSummaryMeta;
+};
+
+export type NamespaceInsights = {
+  summary: NamespaceSummaryResources;
+  signals?: DashboardSignalItem[];
+  resourceSignals?: NamespaceResourceSignals[];
+  resourceQuotas?: NamespaceResourceQuota[];
+  limitRanges?: NamespaceLimitRange[];
+};
+
+// ---------------------------------------------------------------------------
+// Node drawer types — GET /api/nodes/:name
+// ---------------------------------------------------------------------------
+
+export type NodeSummary = {
+  name: string;
+  status: string;
+  roles?: string[];
+  kubeletVersion?: string;
+  osImage?: string;
+  kernelVersion?: string;
+  architecture?: string;
+  providerID?: string;
+  createdAt: number;
+  ageSec: number;
+};
+
+export type NodeMetadata = {
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
+};
+
+export type NodeCondition = {
+  type: string;
+  status: string;
+  reason?: string;
+  message?: string;
+  lastTransitionTime?: number;
+};
+
+export type NodeCapacity = {
+  cpuCapacity?: string;
+  cpuAllocatable?: string;
+  memoryCapacity?: string;
+  memoryAllocatable?: string;
+  podsCapacity?: string;
+  podsAllocatable?: string;
+};
+
+export type NodeTaint = {
+  key?: string;
+  value?: string;
+  effect?: string;
+};
+
+export type NodePodsSummary = {
+  total: number;
+};
+
+export type NodePod = {
+  name: string;
+  namespace: string;
+  phase: string;
+  ready: string;
+  restarts: number;
+  ageSec: number;
+};
+
+export type NodeDetails = {
+  summary: NodeSummary;
+  metadata: NodeMetadata;
+  conditions: NodeCondition[];
+  capacity: NodeCapacity;
+  taints: NodeTaint[];
+  pods: NodePod[];
+  linkedPods: NodePodsSummary;
+  yaml: string;
+  derived?: {
+    source: string;
+    coverage?: string;
+    completeness?: string;
+    note?: string;
+  };
+};
