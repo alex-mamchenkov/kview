@@ -28,6 +28,7 @@ import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import PodDrawer from "../pods/PodDrawer";
 import JobDrawer from "../jobs/JobDrawer";
 import CronJobDrawer from "../cronjobs/CronJobDrawer";
+import HorizontalPodAutoscalerDrawer from "../horizontalpodautoscalers/HorizontalPodAutoscalerDrawer";
 import ConfigMapDrawer from "../configmaps/ConfigMapDrawer";
 import SecretDrawer from "../secrets/SecretDrawer";
 import ServiceAccountDrawer from "../serviceaccounts/ServiceAccountDrawer";
@@ -153,6 +154,13 @@ function DashboardInspectDrawers({
         token={token}
         namespace={namespace}
         cronJobName={target?.kind === "CronJob" ? name : null}
+      />
+      <HorizontalPodAutoscalerDrawer
+        open={open && target?.kind === "HorizontalPodAutoscaler"}
+        onClose={onClose}
+        token={token}
+        namespace={namespace}
+        hpaName={target?.kind === "HorizontalPodAutoscaler" ? name : null}
       />
       <ConfigMapDrawer
         open={open && target?.kind === "ConfigMap"}
@@ -417,6 +425,7 @@ export default function DashboardView(props: Props) {
                       ["ReplicaSets", resources.replicaSets],
                       ["Jobs", resources.jobs],
                       ["CronJobs", resources.cronJobs],
+                      ["HPAs", resources.horizontalPodAutoscalers],
                       ["Services", resources.services],
                       ["Ingresses", resources.ingresses],
                       ["PVCs", resources.persistentVolumeClaims],

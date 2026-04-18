@@ -16,6 +16,7 @@ export type ListResourceKey =
   | "ingresses"
   | "jobs"
   | "cronjobs"
+  | "horizontalpodautoscalers"
   | "configmaps"
   | "secrets"
   | "serviceaccounts"
@@ -55,6 +56,7 @@ export const resourceMeta: Record<ListResourceKey, ResourceMeta> = {
   ingresses: { label: "Ingresses", clusterScoped: false },
   jobs: { label: "Jobs", clusterScoped: false },
   cronjobs: { label: "Cron Jobs", clusterScoped: false },
+  horizontalpodautoscalers: { label: "HPA", clusterScoped: false },
   configmaps: { label: "Config Maps", clusterScoped: false },
   secrets: { label: "Secrets", clusterScoped: false },
   serviceaccounts: { label: "Service Accounts", clusterScoped: false },
@@ -77,7 +79,7 @@ export const sidebarGroups: SidebarGroup[] = [
   {
     id: "workloads",
     label: "Workloads",
-    items: ["pods", "deployments", "statefulsets", "daemonsets", "jobs", "cronjobs"],
+    items: ["pods", "deployments", "statefulsets", "daemonsets", "jobs", "cronjobs", "horizontalpodautoscalers"],
   },
   {
     id: "networking",
@@ -137,6 +139,7 @@ export const listResourceAccess: Record<ListResourceKey, AccessReviewResource> =
   ingresses: { group: "networking.k8s.io", resource: "ingresses" },
   jobs: { group: "batch", resource: "jobs" },
   cronjobs: { group: "batch", resource: "cronjobs" },
+  horizontalpodautoscalers: { group: "autoscaling", resource: "horizontalpodautoscalers" },
   configmaps: { group: "", resource: "configmaps" },
   secrets: { group: "", resource: "secrets" },
   serviceaccounts: { group: "", resource: "serviceaccounts" },

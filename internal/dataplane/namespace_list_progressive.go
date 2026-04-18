@@ -12,8 +12,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	namespaces "github.com/alex-mamchenkov/kview/internal/kube/resource/namespaces"
 	"github.com/alex-mamchenkov/kview/internal/kube/dto"
+	namespaces "github.com/alex-mamchenkov/kview/internal/kube/resource/namespaces"
 	"github.com/alex-mamchenkov/kview/internal/runtime"
 )
 
@@ -668,6 +668,8 @@ func (m *manager) warmNamespaceEnrichmentResourceKinds(ctx context.Context, plan
 			_, _ = plane.JobsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityLow)
 		case ResourceKindCronJobs:
 			_, _ = plane.CronJobsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityLow)
+		case ResourceKindHPAs:
+			_, _ = plane.HPAsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityLow)
 		case ResourceKindServices:
 			_, _ = plane.ServicesSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityLow)
 		case ResourceKindIngresses:
@@ -703,6 +705,7 @@ func (m *manager) warmNamespaceInsightsResourceKinds(ctx context.Context, plane 
 		string(ResourceKindReplicaSets),
 		string(ResourceKindJobs),
 		string(ResourceKindCronJobs),
+		string(ResourceKindHPAs),
 		string(ResourceKindServices),
 		string(ResourceKindIngresses),
 		string(ResourceKindPVCs),

@@ -43,6 +43,7 @@ func (m *manager) NamespaceInsightsProjection(ctx context.Context, clusterName, 
 	rsSnap, rsErr := plane.ReplicaSetsSnapshot(ctx, m.scheduler, m.clients, namespace, prio)
 	jobsSnap, jobsErr := plane.JobsSnapshot(ctx, m.scheduler, m.clients, namespace, prio)
 	cjSnap, cjErr := plane.CronJobsSnapshot(ctx, m.scheduler, m.clients, namespace, prio)
+	hpaSnap, hpaErr := plane.HPAsSnapshot(ctx, m.scheduler, m.clients, namespace, prio)
 	saSnap, saErr := plane.ServiceAccountsSnapshot(ctx, m.scheduler, m.clients, namespace, prio)
 	rolesSnap, rolesErr := plane.RolesSnapshot(ctx, m.scheduler, m.clients, namespace, prio)
 	roleBindingsSnap, roleBindingsErr := plane.RoleBindingsSnapshot(ctx, m.scheduler, m.clients, namespace, prio)
@@ -73,6 +74,8 @@ func (m *manager) NamespaceInsightsProjection(ctx context.Context, clusterName, 
 		jobsOK:         jobsErr == nil,
 		cjs:            cjSnap,
 		cjsOK:          cjErr == nil,
+		hpas:           hpaSnap,
+		hpasOK:         hpaErr == nil,
 		svcs:           svcsSnap,
 		svcsOK:         svcsErr == nil,
 		ings:           ingSnap,

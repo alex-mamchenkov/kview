@@ -17,6 +17,7 @@ import ServicesTable from "./components/resources/services/ServicesTable";
 import IngressesTable from "./components/resources/ingresses/IngressesTable";
 import JobsTable from "./components/resources/jobs/JobsTable";
 import CronJobsTable from "./components/resources/cronjobs/CronJobsTable";
+import HorizontalPodAutoscalersTable from "./components/resources/horizontalpodautoscalers/HorizontalPodAutoscalersTable";
 import ConfigMapsTable from "./components/resources/configmaps/ConfigMapsTable";
 import SecretsTable from "./components/resources/secrets/SecretsTable";
 import ServiceAccountsTable from "./components/resources/serviceaccounts/ServiceAccountsTable";
@@ -426,6 +427,9 @@ function AppInner() {
               ) : null}
               {!settingsOpen && section === "jobs" && namespace ? <JobsTable token={token} namespace={namespace} /> : null}
               {!settingsOpen && section === "cronjobs" && namespace ? <CronJobsTable token={token} namespace={namespace} /> : null}
+              {!settingsOpen && section === "horizontalpodautoscalers" && namespace ? (
+                <HorizontalPodAutoscalersTable token={token} namespace={namespace} />
+              ) : null}
               {!settingsOpen && section === "services" && namespace ? <ServicesTable token={token} namespace={namespace} /> : null}
               {!settingsOpen && section === "ingresses" && namespace ? <IngressesTable token={token} namespace={namespace} /> : null}
               {!settingsOpen && section === "configmaps" && namespace ? <ConfigMapsTable token={token} namespace={namespace} /> : null}

@@ -9,14 +9,16 @@ import (
 	"time"
 
 	"github.com/alex-mamchenkov/kview/internal/cluster"
-	clusterroles "github.com/alex-mamchenkov/kview/internal/kube/resource/clusterroles"
+	"github.com/alex-mamchenkov/kview/internal/kube/dto"
 	crbindings "github.com/alex-mamchenkov/kview/internal/kube/resource/clusterrolebindings"
+	clusterroles "github.com/alex-mamchenkov/kview/internal/kube/resource/clusterroles"
 	configmaps "github.com/alex-mamchenkov/kview/internal/kube/resource/configmaps"
 	cronjobs "github.com/alex-mamchenkov/kview/internal/kube/resource/cronjobs"
 	crds "github.com/alex-mamchenkov/kview/internal/kube/resource/customresourcedefinitions"
 	daemonsets "github.com/alex-mamchenkov/kview/internal/kube/resource/daemonsets"
 	deployments "github.com/alex-mamchenkov/kview/internal/kube/resource/deployments"
 	kubehelm "github.com/alex-mamchenkov/kview/internal/kube/resource/helm"
+	hpas "github.com/alex-mamchenkov/kview/internal/kube/resource/horizontalpodautoscalers"
 	ingresses "github.com/alex-mamchenkov/kview/internal/kube/resource/ingresses"
 	jobs "github.com/alex-mamchenkov/kview/internal/kube/resource/jobs"
 	limitranges "github.com/alex-mamchenkov/kview/internal/kube/resource/limitranges"
@@ -27,13 +29,12 @@ import (
 	pods "github.com/alex-mamchenkov/kview/internal/kube/resource/pods"
 	replicasets "github.com/alex-mamchenkov/kview/internal/kube/resource/replicasets"
 	rquotas "github.com/alex-mamchenkov/kview/internal/kube/resource/resourcequotas"
-	roles "github.com/alex-mamchenkov/kview/internal/kube/resource/roles"
 	rolebindings "github.com/alex-mamchenkov/kview/internal/kube/resource/rolebindings"
+	roles "github.com/alex-mamchenkov/kview/internal/kube/resource/roles"
 	secrets "github.com/alex-mamchenkov/kview/internal/kube/resource/secrets"
 	serviceaccounts "github.com/alex-mamchenkov/kview/internal/kube/resource/serviceaccounts"
 	svcs "github.com/alex-mamchenkov/kview/internal/kube/resource/services"
 	statefulsets "github.com/alex-mamchenkov/kview/internal/kube/resource/statefulsets"
-	"github.com/alex-mamchenkov/kview/internal/kube/dto"
 	"github.com/alex-mamchenkov/kview/internal/runtime"
 )
 
@@ -148,6 +149,8 @@ type DataPlaneManager interface {
 	JobsSnapshot(ctx context.Context, clusterName, namespace string) (JobsSnapshot, error)
 	// CronJobsSnapshot returns a raw snapshot for cronjobs in the given namespace.
 	CronJobsSnapshot(ctx context.Context, clusterName, namespace string) (CronJobsSnapshot, error)
+	// HPAsSnapshot returns a raw snapshot for horizontal pod autoscalers in the given namespace.
+	HPAsSnapshot(ctx context.Context, clusterName, namespace string) (HPAsSnapshot, error)
 	// ResourceQuotasSnapshot returns a raw snapshot for resource quotas in the given namespace.
 	ResourceQuotasSnapshot(ctx context.Context, clusterName, namespace string) (ResourceQuotasSnapshot, error)
 	// LimitRangesSnapshot returns a raw snapshot for limit ranges in the given namespace.
@@ -434,6 +437,7 @@ type clusterPlane struct {
 	rsStore           namespacedSnapshotStore[ReplicaSetsSnapshot]
 	jobsStore         namespacedSnapshotStore[JobsSnapshot]
 	cjStore           namespacedSnapshotStore[CronJobsSnapshot]
+	hpaStore          namespacedSnapshotStore[HPAsSnapshot]
 	rqStore           namespacedSnapshotStore[ResourceQuotasSnapshot]
 	lrStore           namespacedSnapshotStore[LimitRangesSnapshot]
 
@@ -476,6 +480,7 @@ func newClusterPlane(name string, profile Profile, mode DiscoveryMode, scope Obs
 		rsStore:           newNamespacedSnapshotStore[ReplicaSetsSnapshot](),
 		jobsStore:         newNamespacedSnapshotStore[JobsSnapshot](),
 		cjStore:           newNamespacedSnapshotStore[CronJobsSnapshot](),
+		hpaStore:          newNamespacedSnapshotStore[HPAsSnapshot](),
 		rqStore:           newNamespacedSnapshotStore[ResourceQuotasSnapshot](),
 		lrStore:           newNamespacedSnapshotStore[LimitRangesSnapshot](),
 		policy:            policy,
@@ -504,6 +509,7 @@ func newClusterPlane(name string, profile Profile, mode DiscoveryMode, scope Obs
 	p.rsStore.configureTelemetry(stats, name, ResourceKindReplicaSets)
 	p.jobsStore.configureTelemetry(stats, name, ResourceKindJobs)
 	p.cjStore.configureTelemetry(stats, name, ResourceKindCronJobs)
+	p.hpaStore.configureTelemetry(stats, name, ResourceKindHPAs)
 	p.rqStore.configureTelemetry(stats, name, ResourceKindResourceQuotas)
 	p.lrStore.configureTelemetry(stats, name, ResourceKindLimitRanges)
 	return p
@@ -620,6 +626,8 @@ func (p *clusterPlane) hydratePersistedNamespacedSnapshot(kind ResourceKind, nam
 		return hydratePersistedNamespacedSnapshotInto(&p.jobsStore, namespace, payload, maxAge)
 	case ResourceKindCronJobs:
 		return hydratePersistedNamespacedSnapshotInto(&p.cjStore, namespace, payload, maxAge)
+	case ResourceKindHPAs:
+		return hydratePersistedNamespacedSnapshotInto(&p.hpaStore, namespace, payload, maxAge)
 	case ResourceKindResourceQuotas:
 		return hydratePersistedNamespacedSnapshotInto(&p.rqStore, namespace, payload, maxAge)
 	case ResourceKindLimitRanges:
@@ -694,6 +702,7 @@ type StatefulSetsSnapshot = Snapshot[dto.StatefulSetDTO]
 type ReplicaSetsSnapshot = Snapshot[dto.ReplicaSetDTO]
 type JobsSnapshot = Snapshot[dto.JobDTO]
 type CronJobsSnapshot = Snapshot[dto.CronJobDTO]
+type HPAsSnapshot = Snapshot[dto.HorizontalPodAutoscalerDTO]
 type ResourceQuotasSnapshot = Snapshot[dto.ResourceQuotaDTO]
 type LimitRangesSnapshot = Snapshot[dto.LimitRangeDTO]
 
@@ -983,6 +992,19 @@ func (p *clusterPlane) CronJobsSnapshot(ctx context.Context, sched *workSchedule
 	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.cjStore, desc)
 }
 
+// HPAsSnapshot returns a raw snapshot for horizontal pod autoscalers in the given namespace plus metadata and any normalized error.
+func (p *clusterPlane) HPAsSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (HPAsSnapshot, error) {
+	desc := namespacedSnapshotDescriptor[dto.HorizontalPodAutoscalerDTO]{
+		kind:        ResourceKindHPAs,
+		ttl:         p.currentPolicy().SnapshotTTL(ResourceKindHPAs),
+		capGroup:    "autoscaling",
+		capResource: "horizontalpodautoscalers",
+		capScope:    CapabilityScopeNamespace,
+		fetch:       hpas.ListHorizontalPodAutoscalers,
+	}
+	return executeNamespacedSnapshot(p, ctx, sched, prio, clients, namespace, &p.hpaStore, desc)
+}
+
 // ResourceQuotasSnapshot returns a raw snapshot for resource quotas in the given namespace plus metadata and any normalized error.
 func (p *clusterPlane) ResourceQuotasSnapshot(ctx context.Context, sched *workScheduler, clients ClientsProvider, namespace string, prio WorkPriority) (ResourceQuotasSnapshot, error) {
 	desc := namespacedSnapshotDescriptor[dto.ResourceQuotaDTO]{
@@ -1152,6 +1174,12 @@ func (m *manager) CronJobsSnapshot(ctx context.Context, clusterName, namespace s
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
 	return plane.CronJobsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
+}
+
+func (m *manager) HPAsSnapshot(ctx context.Context, clusterName, namespace string) (HPAsSnapshot, error) {
+	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
+	plane := planeAny.(*clusterPlane)
+	return plane.HPAsSnapshot(ctx, m.scheduler, m.clients, namespace, WorkPriorityCritical)
 }
 
 func (m *manager) ResourceQuotasSnapshot(ctx context.Context, clusterName, namespace string) (ResourceQuotasSnapshot, error) {

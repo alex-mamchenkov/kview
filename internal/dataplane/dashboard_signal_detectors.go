@@ -2,7 +2,10 @@ package dataplane
 
 import (
 	"fmt"
+	"strings"
 	"time"
+
+	"github.com/alex-mamchenkov/kview/internal/kube/dto"
 )
 
 type dashboardSignalDetector struct {
@@ -17,6 +20,7 @@ var dashboardSignalDetectors = []dashboardSignalDetector{
 	{Type: "long_running_job", Detect: detectLongRunningJobSignals},
 	{Type: "abnormal_cronjob", Detect: detectAbnormalCronJobSignals},
 	{Type: "cronjob_no_recent_success", Detect: detectCronJobNoRecentSuccessSignals},
+	{Type: "hpa_needs_attention", Detect: detectHPANeedsAttentionSignals},
 	{Type: "stale_transitional_helm_release", Detect: detectStaleTransitionalHelmReleaseSignals},
 	{Type: "service_no_ready_endpoints", Detect: detectServiceNoReadyEndpointsSignals},
 	{Type: "ingress_pending_address", Detect: detectIngressPendingAddressSignals},
@@ -107,6 +111,37 @@ func detectCronJobNoRecentSuccessSignals(_ time.Time, ns string, s dashboardSnap
 		}
 	}
 	return out
+}
+
+func detectHPANeedsAttentionSignals(_ time.Time, ns string, s dashboardSnapshotSet) []ClusterDashboardSignal {
+	if !s.hpasOK {
+		return nil
+	}
+	var out []ClusterDashboardSignal
+	for _, hpa := range s.hpas.Items {
+		if !hpa.NeedsAttention {
+			continue
+		}
+		reason := "HorizontalPodAutoscaler needs attention."
+		if len(hpa.AttentionReasons) > 0 {
+			reason = strings.Join(hpa.AttentionReasons, "; ")
+		}
+		severity, score := hpaSignalSeverityAndScore(hpa)
+		f := dashboardSignalItem("hpa_needs_attention", "HorizontalPodAutoscaler", ns, hpa.Name, severity, score, reason, "high", "horizontalpodautoscalers")
+		f.ActualData = reason
+		if hpa.MaxReplicas > 0 {
+			f.CalculatedData = fmt.Sprintf("current %d, desired %d, min %d, max %d", hpa.CurrentReplicas, hpa.DesiredReplicas, hpa.MinReplicas, hpa.MaxReplicas)
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+func hpaSignalSeverityAndScore(hpa dto.HorizontalPodAutoscalerDTO) (string, int) {
+	if len(hpa.AttentionReasons) == 1 && hpa.AttentionReasons[0] == "replicas are pinned at maxReplicas" {
+		return "low", 34
+	}
+	return "medium", 65
 }
 
 func detectStaleTransitionalHelmReleaseSignals(now time.Time, ns string, s dashboardSnapshotSet) []ClusterDashboardSignal {

@@ -107,6 +107,7 @@ func DefaultDataplanePolicy() DataplanePolicy {
 				string(ResourceKindReplicaSets):         30,
 				string(ResourceKindJobs):                30,
 				string(ResourceKindCronJobs):            30,
+				string(ResourceKindHPAs):                45,
 				string(ResourceKindServices):            60,
 				string(ResourceKindIngresses):           60,
 				string(ResourceKindPVCs):                60,

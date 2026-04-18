@@ -80,28 +80,29 @@ type ClusterDashboardCoverage struct {
 
 // ClusterDashboardResourcesPanel sums workloads only for namespaces with cached dataplane list snapshots.
 type ClusterDashboardResourcesPanel struct {
-	Pods                   int    `json:"pods"`
-	Deployments            int    `json:"deployments"`
-	DaemonSets             int    `json:"daemonSets"`
-	StatefulSets           int    `json:"statefulSets"`
-	ReplicaSets            int    `json:"replicaSets"`
-	Jobs                   int    `json:"jobs"`
-	CronJobs               int    `json:"cronJobs"`
-	Services               int    `json:"services"`
-	Ingresses              int    `json:"ingresses"`
-	PersistentVolumeClaims int    `json:"persistentVolumeClaims"`
-	ConfigMaps             int    `json:"configMaps"`
-	Secrets                int    `json:"secrets"`
-	ServiceAccounts        int    `json:"serviceAccounts"`
-	Roles                  int    `json:"roles"`
-	RoleBindings           int    `json:"roleBindings"`
-	HelmReleases           int    `json:"helmReleases"`
-	ResourceQuotas         int    `json:"resourceQuotas"`
-	LimitRanges            int    `json:"limitRanges"`
-	TotalNamespaces        int    `json:"totalNamespaces"`
-	Note                   string `json:"note,omitempty"`
-	AggregateFreshness     string `json:"aggregateFreshness,omitempty"`
-	AggregateDegradation   string `json:"aggregateDegradation,omitempty"`
+	Pods                     int    `json:"pods"`
+	Deployments              int    `json:"deployments"`
+	DaemonSets               int    `json:"daemonSets"`
+	StatefulSets             int    `json:"statefulSets"`
+	ReplicaSets              int    `json:"replicaSets"`
+	Jobs                     int    `json:"jobs"`
+	CronJobs                 int    `json:"cronJobs"`
+	HorizontalPodAutoscalers int    `json:"horizontalPodAutoscalers"`
+	Services                 int    `json:"services"`
+	Ingresses                int    `json:"ingresses"`
+	PersistentVolumeClaims   int    `json:"persistentVolumeClaims"`
+	ConfigMaps               int    `json:"configMaps"`
+	Secrets                  int    `json:"secrets"`
+	ServiceAccounts          int    `json:"serviceAccounts"`
+	Roles                    int    `json:"roles"`
+	RoleBindings             int    `json:"roleBindings"`
+	HelmReleases             int    `json:"helmReleases"`
+	ResourceQuotas           int    `json:"resourceQuotas"`
+	LimitRanges              int    `json:"limitRanges"`
+	TotalNamespaces          int    `json:"totalNamespaces"`
+	Note                     string `json:"note,omitempty"`
+	AggregateFreshness       string `json:"aggregateFreshness,omitempty"`
+	AggregateDegradation     string `json:"aggregateDegradation,omitempty"`
 }
 
 // ClusterDashboardSignalsPanel groups heuristic dataplane signals from cached namespace snapshots.
@@ -125,6 +126,7 @@ type ClusterDashboardSignalsPanel struct {
 	PVCWarnings           int                            `json:"pvcWarnings"`
 	RoleWarnings          int                            `json:"roleWarnings"`
 	RoleBindingWarnings   int                            `json:"roleBindingWarnings"`
+	HPAWarnings           int                            `json:"hpaWarnings"`
 	Filters               []ClusterDashboardSignalFilter `json:"filters,omitempty"`
 	Top                   []ClusterDashboardSignal       `json:"top,omitempty"`
 	Items                 []ClusterDashboardSignal       `json:"items,omitempty"`

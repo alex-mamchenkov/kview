@@ -67,6 +67,7 @@ func (m *manager) NamespaceSummaryProjection(ctx context.Context, clusterName, n
 	rsSnap, rsErr := plane.ReplicaSetsSnapshot(ctx, m.scheduler, m.clients, namespace, prio)
 	jobsSnap, jobsErr := plane.JobsSnapshot(ctx, m.scheduler, m.clients, namespace, prio)
 	cjSnap, cjErr := plane.CronJobsSnapshot(ctx, m.scheduler, m.clients, namespace, prio)
+	hpaSnap, hpaErr := plane.HPAsSnapshot(ctx, m.scheduler, m.clients, namespace, prio)
 	saSnap, saErr := plane.ServiceAccountsSnapshot(ctx, m.scheduler, m.clients, namespace, prio)
 	rolesSnap, rolesErr := plane.RolesSnapshot(ctx, m.scheduler, m.clients, namespace, prio)
 	roleBindingsSnap, roleBindingsErr := plane.RoleBindingsSnapshot(ctx, m.scheduler, m.clients, namespace, prio)
@@ -119,6 +120,9 @@ func (m *manager) NamespaceSummaryProjection(ctx context.Context, clusterName, n
 	}
 	if cjErr == nil {
 		res.Counts.CronJobs = len(cjSnap.Items)
+	}
+	if hpaErr == nil {
+		res.Counts.HPAs = len(hpaSnap.Items)
 	}
 	if helmErr == nil {
 		res.Counts.HelmReleases = len(helmSnap.Items)
@@ -175,6 +179,7 @@ func (m *manager) NamespaceSummaryProjection(ctx context.Context, clusterName, n
 		rsSnap.Meta,
 		jobsSnap.Meta,
 		cjSnap.Meta,
+		hpaSnap.Meta,
 		saSnap.Meta,
 		rolesSnap.Meta,
 		roleBindingsSnap.Meta,
@@ -186,18 +191,19 @@ func (m *manager) NamespaceSummaryProjection(ctx context.Context, clusterName, n
 
 	firstNorm := FirstNonNilNormalizedError(
 		podsSnap.Err, depsSnap.Err, svcsSnap.Err, ingSnap.Err, pvcsSnap.Err, cmsSnap.Err, secsSnap.Err,
-		dsSnap.Err, stsSnap.Err, rsSnap.Err, jobsSnap.Err, cjSnap.Err,
+		dsSnap.Err, stsSnap.Err, rsSnap.Err, jobsSnap.Err, cjSnap.Err, hpaSnap.Err,
 		saSnap.Err, rolesSnap.Err, roleBindingsSnap.Err, helmSnap.Err, rqSnap.Err, lrSnap.Err,
 	)
 
 	meaningful := res.Counts.Pods + res.Counts.Deployments + res.Counts.Services +
 		res.Counts.Ingresses + res.Counts.PVCs + res.Counts.ConfigMaps + res.Counts.Secrets +
 		res.Counts.DaemonSets + res.Counts.StatefulSets + res.Counts.Jobs + res.Counts.CronJobs +
+		res.Counts.HPAs +
 		res.Counts.ServiceAccounts + res.Counts.Roles + res.Counts.RoleBindings + res.Counts.HelmReleases +
 		res.Counts.ResourceQuotas + res.Counts.LimitRanges
 	usable := namespaceSummaryHasUsableSnapshot(
 		podsErr, depsErr, svcsErr, ingErr, pvcsErr, cmsErr, secsErr,
-		dsErr, stsErr, rsErr, jobsErr, cjErr,
+		dsErr, stsErr, rsErr, jobsErr, cjErr, hpaErr,
 		saErr, rolesErr, roleBindingsErr, helmErr, rqErr, lrErr,
 	)
 	state := ProjectionCoarseState(firstNorm, meaningful)
@@ -214,7 +220,7 @@ func (m *manager) NamespaceSummaryProjection(ctx context.Context, clusterName, n
 	out.Err = firstNorm
 	err := FirstError(
 		podsErr, depsErr, svcsErr, ingErr, pvcsErr, cmsErr, secsErr,
-		dsErr, stsErr, rsErr, jobsErr, cjErr,
+		dsErr, stsErr, rsErr, jobsErr, cjErr, hpaErr,
 		saErr, rolesErr, roleBindingsErr, helmErr, rqErr, lrErr,
 	)
 	return out, namespaceSummaryProjectionError(err, usable)

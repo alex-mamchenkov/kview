@@ -92,6 +92,7 @@ func (p *clusterPlane) inMemorySearchRows() []dataplaneSearchRow {
 	appendNamespacedSnapshotSearchRows(&rows, p.name, ResourceKindReplicaSets, &p.rsStore)
 	appendNamespacedSnapshotSearchRows(&rows, p.name, ResourceKindJobs, &p.jobsStore)
 	appendNamespacedSnapshotSearchRows(&rows, p.name, ResourceKindCronJobs, &p.cjStore)
+	appendNamespacedSnapshotSearchRows(&rows, p.name, ResourceKindHPAs, &p.hpaStore)
 	appendNamespacedSnapshotSearchRows(&rows, p.name, ResourceKindResourceQuotas, &p.rqStore)
 	appendNamespacedSnapshotSearchRows(&rows, p.name, ResourceKindLimitRanges, &p.lrStore)
 	return rows

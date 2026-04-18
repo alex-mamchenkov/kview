@@ -7,6 +7,7 @@ export type InspectTarget = {
     | "Pod"
     | "Job"
     | "CronJob"
+    | "HorizontalPodAutoscaler"
     | "ConfigMap"
     | "Secret"
     | "ServiceAccount"

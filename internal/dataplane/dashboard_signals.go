@@ -197,6 +197,15 @@ var dashboardSignalDefinitions = map[string]dashboardSignalDefinition{
 		SuggestedAction: "Review recent job history, concurrency policy, schedule, and pod failures. Reduce overlap or fix the underlying job failure before the backlog grows.",
 		Priority:        3,
 	},
+	"hpa_needs_attention": {
+		Type:            "hpa_needs_attention",
+		Label:           "HPA warnings",
+		SummaryCounter:  "hpa_warnings",
+		CalculatedData:  "HPA status condition or replica bounds need attention",
+		LikelyCause:     "The autoscaler may be unable to read metrics, unable to reach its scale target, pinned at maxReplicas, or below minReplicas.",
+		SuggestedAction: "Inspect HPA conditions, metric targets, and the referenced workload. Check metrics-server/custom metrics health before changing replica bounds.",
+		Priority:        4,
+	},
 	"resource_quota_pressure": {
 		Type:            "resource_quota_pressure",
 		Label:           "Quota pressure",

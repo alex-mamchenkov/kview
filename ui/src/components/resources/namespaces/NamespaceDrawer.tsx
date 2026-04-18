@@ -73,6 +73,7 @@ const sectionMap: Record<string, string> = {
   daemonSets: "daemonsets",
   jobs: "jobs",
   cronJobs: "cronjobs",
+  horizontalPodAutoscalers: "horizontalpodautoscalers",
   services: "services",
   ingresses: "ingresses",
   pvcs: "persistentvolumeclaims",
@@ -399,6 +400,7 @@ export default function NamespaceDrawer(props: {
                           {mapCountChip("DaemonSets", counts.daemonSets, "daemonsets", !!props.onNavigate, navigateTo)}
                           {mapCountChip("Jobs", counts.jobs, "jobs", !!props.onNavigate, navigateTo)}
                           {mapCountChip("CronJobs", counts.cronJobs, "cronjobs", !!props.onNavigate, navigateTo)}
+                          {mapCountChip("HPA", counts.horizontalPodAutoscalers, "horizontalPodAutoscalers", !!props.onNavigate, navigateTo)}
                         </Box>
                       </Section>
 

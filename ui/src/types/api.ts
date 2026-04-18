@@ -206,6 +206,7 @@ export type DashboardSignalsPanel = {
   pvcWarnings: number;
   roleWarnings: number;
   roleBindingWarnings: number;
+  hpaWarnings: number;
   filters?: DashboardSignalFilter[];
   top?: DashboardSignalItem[];
   items?: DashboardSignalItem[];
@@ -281,6 +282,7 @@ export type ApiDashboardClusterResponse = {
       replicaSets: number;
       jobs: number;
       cronJobs: number;
+      horizontalPodAutoscalers: number;
       services: number;
       ingresses: number;
       persistentVolumeClaims: number;
@@ -542,6 +544,7 @@ export type NamespaceResourceCounts = {
   daemonSets: number;
   jobs: number;
   cronJobs: number;
+  horizontalPodAutoscalers: number;
   services: number;
   ingresses: number;
   pvcs: number;

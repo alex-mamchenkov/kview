@@ -21,8 +21,9 @@ import (
 	"github.com/alex-mamchenkov/kview/internal/cluster"
 	"github.com/alex-mamchenkov/kview/internal/dataplane"
 	"github.com/alex-mamchenkov/kview/internal/kube"
-	clusterroles "github.com/alex-mamchenkov/kview/internal/kube/resource/clusterroles"
+	"github.com/alex-mamchenkov/kview/internal/kube/dto"
 	crbindings "github.com/alex-mamchenkov/kview/internal/kube/resource/clusterrolebindings"
+	clusterroles "github.com/alex-mamchenkov/kview/internal/kube/resource/clusterroles"
 	configmaps "github.com/alex-mamchenkov/kview/internal/kube/resource/configmaps"
 	cronjobs "github.com/alex-mamchenkov/kview/internal/kube/resource/cronjobs"
 	crds "github.com/alex-mamchenkov/kview/internal/kube/resource/customresourcedefinitions"
@@ -30,6 +31,7 @@ import (
 	deployments "github.com/alex-mamchenkov/kview/internal/kube/resource/deployments"
 	kubeevents "github.com/alex-mamchenkov/kview/internal/kube/resource/events"
 	kubehelm "github.com/alex-mamchenkov/kview/internal/kube/resource/helm"
+	hpas "github.com/alex-mamchenkov/kview/internal/kube/resource/horizontalpodautoscalers"
 	ingresses "github.com/alex-mamchenkov/kview/internal/kube/resource/ingresses"
 	jobs "github.com/alex-mamchenkov/kview/internal/kube/resource/jobs"
 	namespaces "github.com/alex-mamchenkov/kview/internal/kube/resource/namespaces"
@@ -38,13 +40,12 @@ import (
 	pvs "github.com/alex-mamchenkov/kview/internal/kube/resource/persistentvolumes"
 	pods "github.com/alex-mamchenkov/kview/internal/kube/resource/pods"
 	replicasets "github.com/alex-mamchenkov/kview/internal/kube/resource/replicasets"
-	roles "github.com/alex-mamchenkov/kview/internal/kube/resource/roles"
 	rolebindings "github.com/alex-mamchenkov/kview/internal/kube/resource/rolebindings"
+	roles "github.com/alex-mamchenkov/kview/internal/kube/resource/roles"
 	secrets "github.com/alex-mamchenkov/kview/internal/kube/resource/secrets"
 	serviceaccounts "github.com/alex-mamchenkov/kview/internal/kube/resource/serviceaccounts"
 	svcs "github.com/alex-mamchenkov/kview/internal/kube/resource/services"
 	statefulsets "github.com/alex-mamchenkov/kview/internal/kube/resource/statefulsets"
-	"github.com/alex-mamchenkov/kview/internal/kube/dto"
 	"github.com/alex-mamchenkov/kview/internal/runtime"
 	"github.com/alex-mamchenkov/kview/internal/session"
 	"github.com/alex-mamchenkov/kview/internal/stream"
@@ -1580,7 +1581,7 @@ func (s *Server) Router() http.Handler {
 			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
 		})
 
-		// Namespaced workload list routes below (daemonsets, statefulsets, replicasets, jobs, cronjobs) are
+		// Namespaced workload list routes below (daemonsets, statefulsets, replicasets, jobs, cronjobs, HPAs) are
 		// dataplane-backed: s.dp.*Snapshot + writeDataplaneListResponse. kube.List* for these kinds runs only
 		// inside internal/dataplane snapshot executors, not in handlers. Detail/events/yaml stay direct-read.
 		api.Get("/namespaces/{ns}/daemonsets", dataplaneNamespacedListHandler(s, s.dp.DaemonSetsSnapshot, func(items []dto.DaemonSetDTO) any {
@@ -1903,6 +1904,62 @@ func (s *Server) Router() http.Handler {
 			}
 
 			evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "CronJob", name)
+			if err != nil {
+				status := http.StatusInternalServerError
+				if apierrors.IsForbidden(err) {
+					status = http.StatusForbidden
+				}
+				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		})
+
+		api.Get("/namespaces/{ns}/horizontalpodautoscalers", dataplaneNamespacedListHandler(s, s.dp.HPAsSnapshot, func(items []dto.HorizontalPodAutoscalerDTO) any {
+			return items
+		}))
+
+		api.Get("/namespaces/{ns}/horizontalpodautoscalers/{name}", func(w http.ResponseWriter, r *http.Request) {
+			ns := chi.URLParam(r, "ns")
+			name := chi.URLParam(r, "name")
+
+			ctx, cancel := context.WithTimeout(r.Context(), ctxTimeoutList)
+			defer cancel()
+
+			clients, active, err := s.mgr.GetClients(ctx)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			det, err := hpas.GetHorizontalPodAutoscalerDetails(ctx, clients, ns, name)
+			if err != nil {
+				status := http.StatusInternalServerError
+				if apierrors.IsForbidden(err) {
+					status = http.StatusForbidden
+				}
+				writeJSON(w, status, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{"active": active, "item": det})
+		})
+
+		api.Get("/namespaces/{ns}/horizontalpodautoscalers/{name}/events", func(w http.ResponseWriter, r *http.Request) {
+			ns := chi.URLParam(r, "ns")
+			name := chi.URLParam(r, "name")
+
+			ctx, cancel := context.WithTimeout(r.Context(), ctxTimeoutList)
+			defer cancel()
+
+			clients, active, err := s.mgr.GetClients(ctx)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "active": active})
+				return
+			}
+
+			evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "HorizontalPodAutoscaler", name)
 			if err != nil {
 				status := http.StatusInternalServerError
 				if apierrors.IsForbidden(err) {

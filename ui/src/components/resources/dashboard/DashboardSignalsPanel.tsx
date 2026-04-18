@@ -55,6 +55,7 @@ export function inspectTargetFromSignal(f: DashboardSignalItem): InspectTarget |
     case "Pod":
     case "Job":
     case "CronJob":
+    case "HorizontalPodAutoscaler":
     case "ConfigMap":
     case "Secret":
     case "ServiceAccount":
@@ -82,6 +83,7 @@ function signalFilterLabel(filter: string): string {
     case "HelmRelease": return "Stuck Helm releases";
     case "Job": return "Jobs";
     case "CronJob": return "CronJobs";
+    case "HorizontalPodAutoscaler": return "HPA";
     case "ConfigMap": return "Empty ConfigMaps";
     case "Secret": return "Empty Secrets";
     case "PersistentVolumeClaim": return "PVCs";

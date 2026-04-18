@@ -40,6 +40,7 @@ const (
 	ResourceKindReplicaSets         ResourceKind = "replicasets"
 	ResourceKindJobs                ResourceKind = "jobs"
 	ResourceKindCronJobs            ResourceKind = "cronjobs"
+	ResourceKindHPAs                ResourceKind = "horizontalpodautoscalers"
 	ResourceKindResourceQuotas      ResourceKind = "resourcequotas"
 	ResourceKindLimitRanges         ResourceKind = "limitranges"
 )
@@ -53,6 +54,7 @@ func dataplaneNamespacedListResourceKinds() []ResourceKind {
 		ResourceKindReplicaSets,
 		ResourceKindJobs,
 		ResourceKindCronJobs,
+		ResourceKindHPAs,
 		ResourceKindServices,
 		ResourceKindIngresses,
 		ResourceKindPVCs,

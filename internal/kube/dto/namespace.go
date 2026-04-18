@@ -110,6 +110,7 @@ type NamespaceResourceCounts struct {
 	DaemonSets      int `json:"daemonSets"`
 	Jobs            int `json:"jobs"`
 	CronJobs        int `json:"cronJobs"`
+	HPAs            int `json:"horizontalPodAutoscalers"`
 	Services        int `json:"services"`
 	Ingresses       int `json:"ingresses"`
 	PVCs            int `json:"pvcs"`

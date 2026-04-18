@@ -9,6 +9,7 @@ export type Section =
   | "replicasets"
   | "jobs"
   | "cronjobs"
+  | "horizontalpodautoscalers"
   | "services"
   | "ingresses"
   | "configmaps"

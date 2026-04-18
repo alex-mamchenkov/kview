@@ -147,6 +147,50 @@ func TestAggregateClusterDashboard_PodRestartsAreSignals(t *testing.T) {
 	}
 }
 
+func TestDetectHPASignalsPinnedMaxIsLowSeverity(t *testing.T) {
+	items := detectHPANeedsAttentionSignals(time.Now(), "app", dashboardSnapshotSet{
+		hpasOK: true,
+		hpas: HPAsSnapshot{Items: []dto.HorizontalPodAutoscalerDTO{{
+			Name:             "api",
+			Namespace:        "app",
+			MinReplicas:      1,
+			MaxReplicas:      1,
+			CurrentReplicas:  1,
+			DesiredReplicas:  1,
+			NeedsAttention:   true,
+			AttentionReasons: []string{"replicas are pinned at maxReplicas"},
+		}}},
+	})
+	if len(items) != 1 {
+		t.Fatalf("expected one HPA signal, got %d", len(items))
+	}
+	if items[0].Severity != "low" {
+		t.Fatalf("expected pinned max to be low severity, got %+v", items[0])
+	}
+}
+
+func TestDetectHPASignalsFailuresStayMediumSeverity(t *testing.T) {
+	items := detectHPANeedsAttentionSignals(time.Now(), "app", dashboardSnapshotSet{
+		hpasOK: true,
+		hpas: HPAsSnapshot{Items: []dto.HorizontalPodAutoscalerDTO{{
+			Name:             "api",
+			Namespace:        "app",
+			MinReplicas:      2,
+			MaxReplicas:      5,
+			CurrentReplicas:  1,
+			DesiredReplicas:  2,
+			NeedsAttention:   true,
+			AttentionReasons: []string{"current replicas are below minReplicas"},
+		}}},
+	})
+	if len(items) != 1 {
+		t.Fatalf("expected one HPA signal, got %d", len(items))
+	}
+	if items[0].Severity != "medium" {
+		t.Fatalf("expected HPA failure to be medium severity, got %+v", items[0])
+	}
+}
+
 func TestDetectDashboardSignalsRanksSignals(t *testing.T) {
 	now := time.Now().UTC()
 	ns := "app"

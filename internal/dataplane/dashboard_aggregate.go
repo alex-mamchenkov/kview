@@ -104,6 +104,10 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 			res.CronJobs += len(s.cjs.Items)
 			aggregateMetas = append(aggregateMetas, s.cjs.Meta)
 		}
+		if s.hpasOK {
+			res.HorizontalPodAutoscalers += len(s.hpas.Items)
+			aggregateMetas = append(aggregateMetas, s.hpas.Meta)
+		}
 		if s.svcsOK {
 			res.Services += len(s.svcs.Items)
 			aggregateMetas = append(aggregateMetas, s.svcs.Meta)
@@ -180,6 +184,7 @@ func buildSnapshotSetForNamespace(plane *clusterPlane, ns string, restartThresho
 	rsSnap, rsOK := plane.rsStore.getCached(ns)
 	jobsSnap, jobsOK := plane.jobsStore.getCached(ns)
 	cjSnap, cjOK := plane.cjStore.getCached(ns)
+	hpaSnap, hpaOK := plane.hpaStore.getCached(ns)
 	svcsSnap, svcsOK := plane.svcsStore.getCached(ns)
 	ingsSnap, ingsOK := plane.ingStore.getCached(ns)
 	pvcSnap, pvcOK := plane.pvcsStore.getCached(ns)
@@ -207,6 +212,8 @@ func buildSnapshotSetForNamespace(plane *clusterPlane, ns string, restartThresho
 		jobsOK:           jobsOK && jobsSnap.Err == nil,
 		cjs:              cjSnap,
 		cjsOK:            cjOK && cjSnap.Err == nil,
+		hpas:             hpaSnap,
+		hpasOK:           hpaOK && hpaSnap.Err == nil,
 		svcs:             svcsSnap,
 		svcsOK:           svcsOK && svcsSnap.Err == nil,
 		ings:             ingsSnap,
@@ -251,6 +258,8 @@ type dashboardSnapshotSet struct {
 	jobsOK         bool
 	cjs            CronJobsSnapshot
 	cjsOK          bool
+	hpas           HPAsSnapshot
+	hpasOK         bool
 	svcs           ServicesSnapshot
 	svcsOK         bool
 	ings           IngressesSnapshot
@@ -370,6 +379,7 @@ func isEmptyLookingNamespace(s dashboardSnapshotSet) bool {
 		len(s.rs.Items) == 0 &&
 		len(s.jobs.Items) == 0 &&
 		len(s.cjs.Items) == 0 &&
+		(!s.hpasOK || len(s.hpas.Items) == 0) &&
 		len(s.svcs.Items) == 0 &&
 		len(s.ings.Items) == 0 &&
 		len(s.pvcs.Items) == 0 &&
@@ -487,6 +497,8 @@ func (p *ClusterDashboardSignalsPanel) incrementSignalCounter(counter string) {
 		p.RoleWarnings++
 	case "rolebinding_warnings":
 		p.RoleBindingWarnings++
+	case "hpa_warnings":
+		p.HPAWarnings++
 	}
 }
 
@@ -746,7 +758,7 @@ func dashboardSignalKindPriority(kind string) int {
 		return 3
 	case "ResourceQuota":
 		return 4
-	case "Job", "CronJob":
+	case "Job", "CronJob", "HorizontalPodAutoscaler":
 		return 5
 	case "PersistentVolumeClaim", "Service", "Ingress":
 		return 6
@@ -798,6 +810,9 @@ func namespaceHasCachedDataplaneList(plane *clusterPlane, ns string) bool {
 		return true
 	}
 	if _, ok := plane.cjStore.getCached(ns); ok {
+		return true
+	}
+	if _, ok := plane.hpaStore.getCached(ns); ok {
 		return true
 	}
 	if _, ok := plane.svcsStore.getCached(ns); ok {

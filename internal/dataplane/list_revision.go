@@ -81,6 +81,8 @@ func ParseListRevisionResourceKind(s string) (ResourceKind, bool) {
 		return ResourceKindJobs, true
 	case string(ResourceKindCronJobs):
 		return ResourceKindCronJobs, true
+	case string(ResourceKindHPAs):
+		return ResourceKindHPAs, true
 	case string(ResourceKindResourceQuotas):
 		return ResourceKindResourceQuotas, true
 	case string(ResourceKindLimitRanges):
@@ -231,6 +233,12 @@ func (p *clusterPlane) listSnapshotRevision(kind ResourceKind, namespace string)
 		fillListRevisionEnvFromSnap(&env, snap, snap.Err)
 	case ResourceKindCronJobs:
 		snap, ok := peekNamespacedSnapshot(&p.cjStore, namespace)
+		if !ok {
+			return env
+		}
+		fillListRevisionEnvFromSnap(&env, snap, snap.Err)
+	case ResourceKindHPAs:
+		snap, ok := peekNamespacedSnapshot(&p.hpaStore, namespace)
 		if !ok {
 			return env
 		}

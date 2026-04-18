@@ -10,6 +10,7 @@ export const dataplaneSearchSectionByKind: Record<string, Section> = {
   replicasets: "replicasets",
   jobs: "jobs",
   cronjobs: "cronjobs",
+  horizontalpodautoscalers: "horizontalpodautoscalers",
   services: "services",
   ingresses: "ingresses",
   configmaps: "configmaps",

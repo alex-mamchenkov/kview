@@ -138,6 +138,7 @@ export default function NamespaceSignalsTab({
       case "DaemonSet": onNavigate("daemonSets"); return;
       case "StatefulSet": onNavigate("statefulSets"); return;
       case "CronJob": onNavigate("cronJobs"); return;
+      case "HorizontalPodAutoscaler": onNavigate("horizontalPodAutoscalers"); return;
       case "ReplicaSet": onNavigate("replicaSets"); return;
     }
   }
@@ -156,6 +157,7 @@ export default function NamespaceSignalsTab({
       case "PersistentVolumeClaim": onNavigate("pvcs"); return;
       case "ServiceAccount": onNavigate("serviceAccounts"); return;
       case "CronJob": onNavigate("cronJobs"); return;
+      case "HorizontalPodAutoscaler": onNavigate("horizontalPodAutoscalers"); return;
     }
   }
 
