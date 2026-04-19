@@ -27,9 +27,9 @@ import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import {
   allListResourceKeys,
+  applyDataplaneProfile,
   customActionResourceKeys,
   dataplaneNamespaceWarmResourceKeys,
-  dataplaneSettingsForProfile,
   dataplaneTTLResourceKeys,
   exportUserSettingsJSON,
   newCustomActionDefinition,
@@ -258,10 +258,6 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
       );
       return updateCustomActions(prev, { actions });
     });
-  };
-
-  const setDataplane = (patch: Partial<DataplaneSettings>) => {
-    setSettings((prev) => updateDataplane(prev, patch));
   };
 
   const setNamespaceEnrichment = (patch: Partial<DataplaneSettings["namespaceEnrichment"]>) => {
@@ -951,7 +947,11 @@ export default function SettingsView({ contexts, namespaces, activeContext, acti
               size="small"
               label="Dataplane profile"
               value={dp.profile}
-              onChange={(e) => setDataplane(dataplaneSettingsForProfile(e.target.value as DataplaneProfile))}
+              onChange={(e) =>
+                setSettings((prev) =>
+                  updateDataplane(prev, applyDataplaneProfile(prev.dataplane, e.target.value as DataplaneProfile)),
+                )
+              }
               helperText="Manual keeps dataplane snapshots but disables background enhancement."
             >
               <MenuItem value="manual">Manual: user interaction only</MenuItem>

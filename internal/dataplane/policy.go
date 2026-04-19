@@ -124,7 +124,7 @@ func DefaultDataplanePolicy() DataplanePolicy {
 			InvalidateAfterKnownWrites: true,
 		},
 		Persistence: PersistencePolicy{
-			Enabled:     false,
+			Enabled:     true,
 			MaxAgeHours: 168,
 		},
 		Observers: ObserverPolicy{

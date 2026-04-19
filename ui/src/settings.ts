@@ -313,7 +313,7 @@ export function defaultDataplaneSettings(): DataplaneSettings {
       invalidateAfterKnownMutations: true,
     },
     persistence: {
-      enabled: false,
+      enabled: true,
       maxAgeHours: 168,
     },
     observers: {
@@ -409,6 +409,14 @@ export function dataplaneSettingsForProfile(profile: DataplaneProfile): Dataplan
       break;
   }
   return next;
+}
+
+export function applyDataplaneProfile(current: DataplaneSettings, profile: DataplaneProfile): DataplaneSettings {
+  const next = dataplaneSettingsForProfile(profile);
+  return {
+    ...next,
+    persistence: { ...current.persistence },
+  };
 }
 
 export function newSmartFilterRule(): SmartFilterRule {

@@ -1,7 +1,8 @@
-// @vitest-environment jsdom
+// @vitest-environment node
 
 import { describe, expect, it, beforeEach } from "vitest";
 import {
+  applyDataplaneProfile,
   defaultUserSettings,
   exportUserSettingsJSON,
   customCommandsForContainer,
@@ -15,11 +16,27 @@ import {
 
 describe("user settings", () => {
   beforeEach(() => {
-    window.localStorage.clear();
+    const store = new Map<string, string>();
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        localStorage: {
+          clear: () => store.clear(),
+          getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+          removeItem: (key: string) => store.delete(key),
+          setItem: (key: string, value: string) => store.set(key, value),
+        },
+      },
+    });
   });
 
   it("loads defaults when no profile exists", () => {
     expect(loadUserSettings()).toEqual(defaultUserSettings());
+  });
+
+  it("enables dataplane persistence by default", () => {
+    expect(defaultUserSettings().dataplane.persistence.enabled).toBe(true);
+    expect(validateUserSettings({ v: 1 })?.dataplane.persistence.enabled).toBe(true);
   });
 
   it("falls back to defaults for unsupported versions", () => {
@@ -88,6 +105,37 @@ describe("user settings", () => {
     const settings = defaultUserSettings();
     const exported = exportUserSettingsJSON(settings);
     expect(parseUserSettingsJSON(exported)).toEqual(settings);
+  });
+
+  it("preserves explicit dataplane persistence when normalizing settings", () => {
+    const parsed = validateUserSettings({
+      ...defaultUserSettings(),
+      dataplane: {
+        ...defaultUserSettings().dataplane,
+        persistence: {
+          ...defaultUserSettings().dataplane.persistence,
+          enabled: false,
+        },
+      },
+    });
+
+    expect(parsed?.dataplane.persistence.enabled).toBe(false);
+  });
+
+  it("keeps dataplane persistence unchanged when applying a profile", () => {
+    const current = {
+      ...defaultUserSettings().dataplane,
+      persistence: {
+        enabled: false,
+        maxAgeHours: 12,
+      },
+    };
+
+    const next = applyDataplaneProfile(current, "wide");
+
+    expect(next.profile).toBe("wide");
+    expect(next.namespaceEnrichment.sweep.enabled).toBe(true);
+    expect(next.persistence).toEqual({ enabled: false, maxAgeHours: 12 });
   });
 
   it("provides and matches default custom commands", () => {

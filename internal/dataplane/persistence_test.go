@@ -212,12 +212,14 @@ func TestManagerHydratesPersistedSnapshotsWhenPlaneIsCreated(t *testing.T) {
 	}
 }
 
-func TestManagerPersistenceDisabledByDefaultDoesNotOpenOrSearchCache(t *testing.T) {
+func TestManagerPersistenceEnabledByDefaultOpensCache(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 
 	m := NewManager(ManagerConfig{}).(*manager)
-	if sp := m.currentPersistence(); sp != nil {
-		t.Fatalf("default manager opened persistence unexpectedly: %#v", sp)
+	if sp := m.currentPersistence(); sp == nil {
+		t.Fatalf("default manager did not open persistence")
+	} else {
+		t.Cleanup(func() { _ = sp.Close() })
 	}
 
 	planeAny, err := m.PlaneForCluster(context.Background(), "ctx")
@@ -225,16 +227,16 @@ func TestManagerPersistenceDisabledByDefaultDoesNotOpenOrSearchCache(t *testing.
 		t.Fatalf("plane for cluster: %v", err)
 	}
 	plane := planeAny.(*clusterPlane)
-	if sp := plane.currentPersistence(); sp != nil {
-		t.Fatalf("default plane has persistence unexpectedly: %#v", sp)
+	if sp := plane.currentPersistence(); sp == nil {
+		t.Fatalf("default plane has no persistence")
 	}
 
 	got, err := m.SearchCachedResources(context.Background(), "ctx", "api", 10, 0)
 	if err != nil {
-		t.Fatalf("search with persistence disabled: %v", err)
+		t.Fatalf("search with default persistence: %v", err)
 	}
 	if got.HasMore || len(got.Items) != 0 {
-		t.Fatalf("search with persistence disabled = %+v", got)
+		t.Fatalf("empty default cache search = %+v", got)
 	}
 }
 
