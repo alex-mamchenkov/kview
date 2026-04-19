@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Tooltip } from "@mui/material";
-import { GAUGE_BORDER_RADIUS, GAUGE_HEIGHT } from "../../theme/sxTokens";
+import { GAUGE_BORDER_RADIUS, GAUGE_HEIGHT, GAUGE_TRACK_BG } from "../../theme/sxTokens";
 
 export type BarSegment = {
   label: string;
@@ -17,7 +17,7 @@ export default function StackedMetricBar({ segments }: { segments: BarSegment[] 
           height: GAUGE_HEIGHT,
           borderRadius: GAUGE_BORDER_RADIUS,
           border: "1px solid var(--panel-border)",
-          backgroundColor: "rgba(0,0,0,0.05)",
+          backgroundColor: GAUGE_TRACK_BG,
         }}
       />
     );
@@ -31,7 +31,7 @@ export default function StackedMetricBar({ segments }: { segments: BarSegment[] 
         overflow: "hidden",
         borderRadius: GAUGE_BORDER_RADIUS,
         border: "1px solid var(--panel-border)",
-        backgroundColor: "rgba(0,0,0,0.04)",
+        backgroundColor: GAUGE_TRACK_BG,
       }}
     >
       {segments

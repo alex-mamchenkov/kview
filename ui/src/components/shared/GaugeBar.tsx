@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, LinearProgress, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { GAUGE_BORDER_RADIUS, GAUGE_HEIGHT } from "../../theme/sxTokens";
+import { GAUGE_BORDER_RADIUS, GAUGE_HEIGHT, GAUGE_TRACK_BG } from "../../theme/sxTokens";
 
 export type GaugeTone = "success" | "warning" | "error" | "info" | "primary" | "default";
 
@@ -47,7 +47,7 @@ export default function GaugeBar({
           height,
           borderRadius: GAUGE_BORDER_RADIUS,
           border: "1px solid var(--panel-border)",
-          backgroundColor: theme.palette.action.hover,
+          backgroundColor: GAUGE_TRACK_BG,
           "& .MuiLinearProgress-bar": {
             backgroundColor: color,
             borderRadius: GAUGE_BORDER_RADIUS,
@@ -61,7 +61,7 @@ export default function GaugeBar({
             position: "absolute",
             width: "100%",
             textAlign: "center",
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: 600,
             color: clamped >= 50 ? theme.palette.getContrastText(color) : "text.primary",
             lineHeight: `${height}px`,

@@ -8,19 +8,24 @@ import {
   TableBody,
   TableCell,
   TableRow,
-  Tooltip,
   Typography,
 } from "@mui/material";
 import { apiGet, apiGetWithContext } from "../../../api";
 import type { ApiDashboardClusterResponse } from "../../../types/api";
 import { dataplaneCoarseStateChipColor } from "../../../utils/k8sUi";
 import { fmtAgeShort, fmtBytes, fmtByteRate, fmtPercent, fmtRate } from "../../../utils/format";
-import { STAT_CELL_LABEL_WIDTH } from "../../../theme/sxTokens";
+import {
+  STAT_CELL_LABEL_WIDTH,
+  GAUGE_COLOR_HEALTHY,
+  GAUGE_COLOR_WARNING,
+  GAUGE_COLOR_ERROR,
+} from "../../../theme/sxTokens";
 import { useActiveContext } from "../../../activeContext";
 import { useUserSettings } from "../../../settingsContext";
 import InfoHint from "../../shared/InfoHint";
 import MetricCard from "../../shared/MetricCard";
 import StackedMetricBar from "../../shared/StackedMetricBar";
+import GaugeTableRow from "../../shared/GaugeTableRow";
 import DashboardSignalsPanel from "./DashboardSignalsPanel";
 import DashboardDerivedPanel from "./DashboardDerivedPanel";
 import type { InspectTarget } from "./dashboardTypes";
@@ -77,32 +82,6 @@ function StatCell({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function DataplaneVisualRow({
-  label,
-  hint,
-  visual,
-  summary,
-}: {
-  label: string;
-  hint?: string;
-  visual: React.ReactNode;
-  summary: React.ReactNode;
-}) {
-  return (
-    <TableRow>
-      <TableCell sx={{ width: "24%", py: 0.8, pl: 0, fontWeight: 600, border: 0 }}>
-        <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
-          <span>{label}</span>
-          {hint ? <InfoHint title={hint} /> : null}
-        </Box>
-      </TableCell>
-      <TableCell sx={{ width: "46%", py: 0.8, border: 0 }}>{visual}</TableCell>
-      <TableCell sx={{ width: "30%", py: 0.8, pr: 0, textAlign: "right", whiteSpace: "nowrap", border: 0 }}>
-        {summary}
-      </TableCell>
-    </TableRow>
-  );
-}
 
 function DashboardInspectDrawers({
   token,
@@ -514,91 +493,83 @@ export default function DashboardView(props: Props) {
                     <Chip size="small" variant="outlined" label={`Avg fetch ${fmtBytes(dataplane.traffic.avgBytesPerFetch)}`} />
                   </Box>
                   <Box sx={dashboardPanelSectionSx}>
-                    <Table size="small">
-                      <TableBody>
-                        <DataplaneVisualRow
+                        <GaugeTableRow
                           label="Requests"
                           hint="All dataplane snapshot requests since app startup. Green is served from fresh cache; yellow needed a fetch."
-                          visual={
+                          bar={
                             <StackedMetricBar
                               segments={[
-                                { label: "Fresh Hit", value: dataplane.requests.freshHits, color: "#2e7d32" },
-                                { label: "Miss", value: dataplane.requests.misses, color: "#ed6c02" },
+                                { label: "Fresh Hit", value: dataplane.requests.freshHits, color: GAUGE_COLOR_HEALTHY },
+                                { label: "Miss", value: dataplane.requests.misses, color: GAUGE_COLOR_WARNING },
                               ]}
                             />
                           }
                           summary={`${fmtPercent(dataplane.requests.hitRatio)} hit · ${dataplane.requests.freshHits}/${dataplane.requests.total} req`}
                         />
-                        <DataplaneVisualRow
+                        <GaugeTableRow
                           label="Traffic Mix"
                           hint="Payload bytes handled by dataplane. Green is restored from hydrated cache; yellow is newly fetched live payload."
-                          visual={
+                          bar={
                             <StackedMetricBar
                               segments={[
-                                { label: "Hydrated Bytes", value: dataplane.traffic.hydratedBytes, color: "#2e7d32" },
-                                { label: "Live Bytes", value: dataplane.traffic.liveBytes, color: "#ed6c02" },
+                                { label: "Hydrated Bytes", value: dataplane.traffic.hydratedBytes, color: GAUGE_COLOR_HEALTHY },
+                                { label: "Live Bytes", value: dataplane.traffic.liveBytes, color: GAUGE_COLOR_WARNING },
                               ]}
                             />
                           }
                           summary={`${fmtBytes(dataplane.traffic.liveBytes)} live · ${fmtBytes(dataplane.traffic.hydratedBytes)} restored`}
                         />
-                        <DataplaneVisualRow
+                        <GaugeTableRow
                           label="Cache Footprint"
                           hint="Current cached snapshot bytes compared with session live payload volume. Green is retained cache bytes; yellow is live bytes fetched this session."
-                          visual={
+                          bar={
                             <StackedMetricBar
                               segments={[
-                                { label: "Cache Bytes", value: dataplane.cache.currentBytes, color: "#2e7d32" },
-                                { label: "Session Live Bytes", value: dataplane.traffic.liveBytes, color: "#ed6c02" },
+                                { label: "Cache Bytes", value: dataplane.cache.currentBytes, color: GAUGE_COLOR_HEALTHY },
+                                { label: "Session Live Bytes", value: dataplane.traffic.liveBytes, color: GAUGE_COLOR_WARNING },
                               ]}
                             />
                           }
                           summary={`${dataplane.cache.snapshotsStored} snapshots · ${fmtBytes(dataplane.cache.avgBytesPerSnapshot)} avg`}
                         />
-                        <DataplaneVisualRow
+                        <GaugeTableRow
                           label="Execution"
                           hint="Scheduler run-time spread. Green is average run duration; yellow is the remaining distance up to the slowest observed run."
-                          visual={
-                            <Tooltip title={`Avg ${dataplane.execution.avgRunMs}ms of max ${dataplane.execution.maxRunMs}ms`}>
-                              <Box>
-                                <StackedMetricBar
-                                  segments={[
-                                    { label: "Average Run", value: dataplane.execution.avgRunMs, color: "#2e7d32" },
-                                    {
-                                      label: "Headroom To Max",
-                                      value: Math.max(0, dataplane.execution.maxRunMs - dataplane.execution.avgRunMs),
-                                      color: "#ed6c02",
-                                    },
-                                  ]}
-                                />
-                              </Box>
-                            </Tooltip>
+                          bar={
+                            <StackedMetricBar
+                              segments={[
+                                { label: "Average Run", value: dataplane.execution.avgRunMs, color: GAUGE_COLOR_HEALTHY },
+                                {
+                                  label: "Headroom To Max",
+                                  value: Math.max(0, dataplane.execution.maxRunMs - dataplane.execution.avgRunMs),
+                                  color: GAUGE_COLOR_WARNING,
+                                },
+                              ]}
+                            />
                           }
                           summary={`${dataplane.execution.avgRunMs}ms avg · ${dataplane.execution.maxRunMs}ms max · ${dataplane.execution.preemptions} preempt`}
                         />
                         {dataplane.sources?.map((source) => (
-                          <DataplaneVisualRow
+                          <GaugeTableRow
                             key={source.source}
                             label={`${source.source.charAt(0).toUpperCase()}${source.source.slice(1)} Hit/Miss`}
                             hint={`Dataplane requests attributed to ${source.source}. Green is requests satisfied without a new fetch; yellow needed a fetch; red ended in error.`}
-                            visual={
+                            bar={
                               <StackedMetricBar
                                 segments={[
                                   {
                                     label: `${source.source} Hit`,
                                     value: Math.max(0, source.requests - source.fetches),
-                                    color: "#2e7d32",
+                                    color: GAUGE_COLOR_HEALTHY,
                                   },
-                                  { label: `${source.source} Fetch`, value: source.fetches, color: "#ed6c02" },
-                                  { label: `${source.source} Error`, value: source.errors, color: "#d32f2f" },
+                                  { label: `${source.source} Fetch`, value: source.fetches, color: GAUGE_COLOR_WARNING },
+                                  { label: `${source.source} Error`, value: source.errors, color: GAUGE_COLOR_ERROR },
                                 ]}
                               />
                             }
                             summary={`${fmtPercent(source.requests > 0 ? ((source.requests - source.fetches) * 100) / source.requests : 0)} hit · ${Math.max(0, source.requests - source.fetches)}/${source.requests} req`}
                           />
                         ))}
-                      </TableBody>
-                    </Table>
                   </Box>
                 </Paper>
               </>

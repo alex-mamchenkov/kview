@@ -49,6 +49,7 @@ import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import MetadataSection from "../../shared/MetadataSection";
 import GaugeBar, { type GaugeTone } from "../../shared/GaugeBar";
+import GaugeTableRow from "../../shared/GaugeTableRow";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import RightDrawer from "../../layout/RightDrawer";
@@ -160,9 +161,6 @@ function worstSignalSeverity(signals: DashboardSignalItem[]): string {
   return "";
 }
 
-function signalsForQuotaEntry(signals: DashboardSignalItem[], entryKey: string): DashboardSignalItem[] {
-  return signals.filter((signal) => signal.signalType === "resource_quota_pressure" && (signal.actualData || "").startsWith(`${entryKey}:`));
-}
 
 function ResourceSignalsChip({ signals, label }: { signals: DashboardSignalItem[]; label?: string }) {
   if (signals.length === 0) return null;
@@ -498,36 +496,20 @@ export default function NamespaceDrawer(props: {
                             ]}
                             columns={2}
                           />
-                          <Table size="small" sx={{ mt: 1.5 }}>
-                            <TableHead>
-                              <TableRow>
-                                <TableCell sx={{ width: "30%", fontWeight: 600 }}>Resource</TableCell>
-                                <TableCell sx={{ width: "50%", fontWeight: 600 }}>Usage</TableCell>
-                                <TableCell sx={{ width: "20%", fontWeight: 600, textAlign: "right" }}>Used / Hard</TableCell>
-                              </TableRow>
-                            </TableHead>
-                            <TableBody>
+                          <Box sx={{ mt: 1.5 }}>
                               {quota.entries.map((entry) => {
-                                const entrySignals = signalsForQuotaEntry(quotaSignals, entry.key);
                                 const pct = entry.ratio != null ? Math.round(entry.ratio * 100) : null;
                                 const tone = quotaGaugeTone(entry.ratio);
                                 return (
-                                  <TableRow key={entry.key}>
-                                    <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>{entry.key}</TableCell>
-                                    <TableCell>
-                                      <GaugeBar value={pct != null ? pct : 0} tone={tone} label={pct != null ? `${pct}%` : "-"} height={20} />
-                                    </TableCell>
-                                    <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
-                                      <Box sx={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: 0.5 }}>
-                                        <ResourceSignalsChip signals={entrySignals} label={entrySignals[0]?.calculatedData || "signal"} />
-                                        <span>{entry.used} / {entry.hard}</span>
-                                      </Box>
-                                    </TableCell>
-                                  </TableRow>
+                                  <GaugeTableRow
+                                    key={entry.key}
+                                    label={entry.key}
+                                    bar={<GaugeBar value={pct ?? 0} tone={tone} />}
+                                    summary={pct != null ? `${pct}% · ${entry.used} / ${entry.hard}` : `${entry.used} / ${entry.hard}`}
+                                  />
                                 );
                               })}
-                            </TableBody>
-                          </Table>
+                          </Box>
                         </Section>
                       );
                     })

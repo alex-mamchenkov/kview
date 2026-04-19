@@ -27,6 +27,7 @@ import MetadataSection from "../../shared/MetadataSection";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import GaugeBar, { type GaugeTone } from "../../shared/GaugeBar";
+import GaugeTableRow from "../../shared/GaugeTableRow";
 import type { ApiItemResponse, ApiListResponse, EventDTO } from "../../../types/api";
 import { drawerBodySx, drawerTabContentCompactSx, loadingCenterSx, panelBoxSx } from "../../../theme/sxTokens";
 
@@ -100,48 +101,6 @@ function targetRefText(ref?: { kind?: string; name?: string; apiVersion?: string
   return ref.apiVersion ? `${base} (${ref.apiVersion})` : base;
 }
 
-function GaugeRow({
-  label,
-  gauge,
-  caption,
-}: {
-  label: string;
-  gauge?: HPAGauge;
-  caption: string;
-}) {
-  return (
-    <Box>
-      <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, mb: 0.5 }}>
-        <Typography variant="caption" color="text.secondary">{label}</Typography>
-        <Typography variant="caption" color="text.secondary">{caption}</Typography>
-      </Box>
-      <GaugeBar value={gauge?.percent ?? 0} tone={gauge?.tone || "success"} />
-    </Box>
-  );
-}
-
-function HPAMetricGauge({ metric }: { metric: HPAMetric }) {
-  const showBar = typeof metric.gaugePercent === "number";
-  return (
-    <Box>
-      <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, mb: 0.5 }}>
-        <Typography variant="caption" color="text.secondary">
-          {[metric.type, metric.name].filter(Boolean).join(" / ") || "Metric"}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {valueOrDash(metric.current)} / {valueOrDash(metric.target)}
-        </Typography>
-      </Box>
-      {showBar ? (
-        <GaugeBar value={metric.gaugePercent || 0} tone={metric.gaugeTone || "success"} />
-      ) : (
-        <Typography variant="body2" color="text.secondary">
-          Current and target metric values are not both available for a gauge yet.
-        </Typography>
-      )}
-    </Box>
-  );
-}
 
 export default function HorizontalPodAutoscalerDrawer(props: {
   open: boolean;
@@ -230,22 +189,20 @@ export default function HorizontalPodAutoscalerDrawer(props: {
                     }
                   >
                     <Box sx={panelBoxSx}>
-                      <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
-                        <GaugeRow
-                          label="Current replicas"
-                          gauge={details.summary.currentGauge}
-                          caption={`${details.summary.currentReplicas} current / ${details.summary.maxReplicas} max`}
-                        />
-                        <GaugeRow
-                          label="Desired replicas"
-                          gauge={details.summary.desiredGauge}
-                          caption={`${details.summary.desiredReplicas} desired / min ${details.summary.minReplicas}`}
-                        />
-                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
-                          <Chip size="small" variant="outlined" label={`Min ${details.summary.minReplicas}`} />
-                          <Chip size="small" variant="outlined" label={`Max ${details.summary.maxReplicas}`} />
-                          <Chip size="small" variant="outlined" label={`Last scale ${details.summary.lastScaleTime ? fmtTs(details.summary.lastScaleTime) : "-"}`} />
-                        </Box>
+                      <GaugeTableRow
+                        label="Current replicas"
+                        bar={<GaugeBar value={details.summary.currentGauge?.percent ?? 0} tone={details.summary.currentGauge?.tone} />}
+                        summary={`${details.summary.currentReplicas} current / ${details.summary.maxReplicas} max`}
+                      />
+                      <GaugeTableRow
+                        label="Desired replicas"
+                        bar={<GaugeBar value={details.summary.desiredGauge?.percent ?? 0} tone={details.summary.desiredGauge?.tone} />}
+                        summary={`${details.summary.desiredReplicas} desired / min ${details.summary.minReplicas}`}
+                      />
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
+                        <Chip size="small" variant="outlined" label={`Min ${details.summary.minReplicas}`} />
+                        <Chip size="small" variant="outlined" label={`Max ${details.summary.maxReplicas}`} />
+                        <Chip size="small" variant="outlined" label={`Last scale ${details.summary.lastScaleTime ? fmtTs(details.summary.lastScaleTime) : "-"}`} />
                       </Box>
                     </Box>
                     {details.summary.attentionReasons?.length ? (
@@ -266,11 +223,14 @@ export default function HorizontalPodAutoscalerDrawer(props: {
                       <EmptyState message="No metric targets configured." />
                     ) : (
                       <Box sx={panelBoxSx}>
-                        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
-                          {details.metrics.map((metric, idx) => (
-                            <HPAMetricGauge key={`${metric.type}-${metric.name || idx}`} metric={metric} />
-                          ))}
-                        </Box>
+                        {details.metrics.map((metric, idx) => (
+                          <GaugeTableRow
+                            key={`${metric.type}-${metric.name || idx}`}
+                            label={[metric.type, metric.name].filter(Boolean).join(" / ") || "Metric"}
+                            bar={<GaugeBar value={metric.gaugePercent ?? 0} tone={metric.gaugeTone ?? "default"} />}
+                            summary={`${valueOrDash(metric.current)} / ${valueOrDash(metric.target)}`}
+                          />
+                        ))}
                       </Box>
                     )}
                   </Section>
@@ -279,27 +239,27 @@ export default function HorizontalPodAutoscalerDrawer(props: {
                     {!details.conditions?.length ? (
                       <EmptyState message="No conditions reported." />
                     ) : (
-                      <Table size="small">
+                      <Table size="small" sx={{ width: "100%", tableLayout: "fixed" }}>
                         <TableHead>
                           <TableRow>
-                            <TableCell>Type</TableCell>
-                            <TableCell>Status</TableCell>
+                            <TableCell sx={{ width: "22%" }}>Type</TableCell>
+                            <TableCell sx={{ width: "14%" }}>Status</TableCell>
                             <TableCell>Reason</TableCell>
-                            <TableCell>Changed</TableCell>
+                            <TableCell sx={{ width: "18%" }}>Changed</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
                           {details.conditions.map((cond) => (
                             <TableRow key={cond.type}>
-                              <TableCell>{cond.type}</TableCell>
+                              <TableCell sx={{ overflowWrap: "anywhere" }}>{cond.type}</TableCell>
                               <TableCell><Chip size="small" label={cond.status} color={conditionStatusColor(cond.status)} /></TableCell>
-                              <TableCell>
+                              <TableCell sx={{ overflowWrap: "anywhere" }}>
                                 <Typography variant="body2" sx={{ fontWeight: 600 }}>{valueOrDash(cond.reason)}</Typography>
                                 {cond.message ? (
                                   <Typography variant="caption" color="text.secondary">{cond.message}</Typography>
                                 ) : null}
                               </TableCell>
-                              <TableCell>{cond.lastTransitionTime ? fmtTs(cond.lastTransitionTime) : "-"}</TableCell>
+                              <TableCell sx={{ overflowWrap: "anywhere" }}>{cond.lastTransitionTime ? fmtTs(cond.lastTransitionTime) : "-"}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>

@@ -7,7 +7,6 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  Tooltip,
   Typography,
 } from "@mui/material";
 import type {
@@ -21,6 +20,15 @@ import type {
 import { dataplaneCoarseStateChipColor } from "../../../utils/k8sUi";
 import EmptyState from "../../shared/EmptyState";
 import Section from "../../shared/Section";
+import StackedMetricBar from "../../shared/StackedMetricBar";
+import GaugeTableRow from "../../shared/GaugeTableRow";
+import {
+  GAUGE_COLOR_HEALTHY,
+  GAUGE_COLOR_WARNING,
+  GAUGE_COLOR_ERROR,
+  GAUGE_COLOR_NEUTRAL,
+  GAUGE_COLOR_UNKNOWN,
+} from "../../../theme/sxTokens";
 import NamespaceActions from "./NamespaceActions";
 
 function signalSeverityColor(severity?: string): "error" | "warning" | "info" | "default" {
@@ -62,38 +70,6 @@ function workloadSignalSummary(rollup?: WorkloadKindHealthRollup): string {
   return `${rollup.healthy} ok · ${rollup.progressing} prog · ${rollup.degraded} deg / ${rollup.total}`;
 }
 
-type HealthBarSegment = { label: string; count: number; color: string };
-
-function stackedHealthBar(segments: HealthBarSegment[]) {
-  const total = segments.reduce((sum, s) => sum + s.count, 0);
-  if (total === 0) return null;
-  return (
-    <Box
-      sx={{
-        display: "flex",
-        height: 20,
-        overflow: "hidden",
-        borderRadius: 1,
-        backgroundColor: "rgba(0,0,0,0.08)",
-        border: "1px solid var(--panel-border)",
-      }}
-    >
-      {segments.map((segment, index) =>
-        segment.count > 0 ? (
-          <Tooltip key={`${segment.label}-${index}`} title={`${segment.label}: ${segment.count}`}>
-            <Box
-              sx={{
-                width: `${(segment.count / total) * 100}%`,
-                backgroundColor: segment.color,
-                minWidth: segment.count > 0 ? 6 : 0,
-              }}
-            />
-          </Tooltip>
-        ) : null
-      )}
-    </Box>
-  );
-}
 
 type Props = {
   token: string;
@@ -169,124 +145,87 @@ export default function NamespaceSignalsTab({
 
       {(workloadByKind || podHealth) && (
         <Section title="Health overview">
-          <Table size="small" sx={{ mt: 1 }}>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ width: "24%", fontWeight: 600 }}>Scope</TableCell>
-                <TableCell sx={{ width: "46%", fontWeight: 600 }}>Health mix</TableCell>
-                <TableCell sx={{ width: "30%", fontWeight: 600, textAlign: "right" }}>Summary</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
+          <Box sx={{ mt: 1 }}>
               {podHealth && podHealthSummary(podHealth) !== "-" && (
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600 }}>Pods</TableCell>
-                  <TableCell>
-                    {stackedHealthBar([
-                      { label: "Running", count: podHealth.running, color: "#2e7d32" },
-                      { label: "Pending", count: podHealth.pending, color: "#ed6c02" },
-                      { label: "Failed", count: podHealth.failed, color: "#d32f2f" },
-                      { label: "Succeeded", count: podHealth.succeeded, color: "#607d8b" },
-                      { label: "Unknown", count: podHealth.unknown, color: "#8e24aa" },
-                    ])}
-                  </TableCell>
-                  <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
-                    {podHealthSummary(podHealth)}
-                  </TableCell>
-                </TableRow>
+                <GaugeTableRow
+                  label="Pods"
+                  bar={<StackedMetricBar segments={[
+                    { label: "Running", value: podHealth.running, color: GAUGE_COLOR_HEALTHY },
+                    { label: "Pending", value: podHealth.pending, color: GAUGE_COLOR_WARNING },
+                    { label: "Failed", value: podHealth.failed, color: GAUGE_COLOR_ERROR },
+                    { label: "Succeeded", value: podHealth.succeeded, color: GAUGE_COLOR_NEUTRAL },
+                    { label: "Unknown", value: podHealth.unknown, color: GAUGE_COLOR_UNKNOWN },
+                  ]} />}
+                  summary={podHealthSummary(podHealth)}
+                />
               )}
               {workloadByKind?.deployments?.total ? (
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600 }}>Deployments</TableCell>
-                  <TableCell>
-                    {stackedHealthBar([
-                      { label: "Healthy", count: workloadByKind.deployments.healthy, color: "#2e7d32" },
-                      { label: "Progressing", count: workloadByKind.deployments.progressing, color: "#ed6c02" },
-                      { label: "Degraded", count: workloadByKind.deployments.degraded, color: "#d32f2f" },
-                    ])}
-                  </TableCell>
-                  <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
-                    {workloadSignalSummary(workloadByKind.deployments)}
-                  </TableCell>
-                </TableRow>
+                <GaugeTableRow
+                  label="Deployments"
+                  bar={<StackedMetricBar segments={[
+                    { label: "Healthy", value: workloadByKind.deployments.healthy, color: GAUGE_COLOR_HEALTHY },
+                    { label: "Progressing", value: workloadByKind.deployments.progressing, color: GAUGE_COLOR_WARNING },
+                    { label: "Degraded", value: workloadByKind.deployments.degraded, color: GAUGE_COLOR_ERROR },
+                  ]} />}
+                  summary={workloadSignalSummary(workloadByKind.deployments)}
+                />
               ) : null}
               {workloadByKind?.daemonSets?.total ? (
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600 }}>DaemonSets</TableCell>
-                  <TableCell>
-                    {stackedHealthBar([
-                      { label: "Healthy", count: workloadByKind.daemonSets.healthy, color: "#2e7d32" },
-                      { label: "Progressing", count: workloadByKind.daemonSets.progressing, color: "#ed6c02" },
-                      { label: "Degraded", count: workloadByKind.daemonSets.degraded, color: "#d32f2f" },
-                    ])}
-                  </TableCell>
-                  <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
-                    {workloadSignalSummary(workloadByKind.daemonSets)}
-                  </TableCell>
-                </TableRow>
+                <GaugeTableRow
+                  label="DaemonSets"
+                  bar={<StackedMetricBar segments={[
+                    { label: "Healthy", value: workloadByKind.daemonSets.healthy, color: GAUGE_COLOR_HEALTHY },
+                    { label: "Progressing", value: workloadByKind.daemonSets.progressing, color: GAUGE_COLOR_WARNING },
+                    { label: "Degraded", value: workloadByKind.daemonSets.degraded, color: GAUGE_COLOR_ERROR },
+                  ]} />}
+                  summary={workloadSignalSummary(workloadByKind.daemonSets)}
+                />
               ) : null}
               {workloadByKind?.statefulSets?.total ? (
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600 }}>StatefulSets</TableCell>
-                  <TableCell>
-                    {stackedHealthBar([
-                      { label: "Healthy", count: workloadByKind.statefulSets.healthy, color: "#2e7d32" },
-                      { label: "Progressing", count: workloadByKind.statefulSets.progressing, color: "#ed6c02" },
-                      { label: "Degraded", count: workloadByKind.statefulSets.degraded, color: "#d32f2f" },
-                    ])}
-                  </TableCell>
-                  <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
-                    {workloadSignalSummary(workloadByKind.statefulSets)}
-                  </TableCell>
-                </TableRow>
+                <GaugeTableRow
+                  label="StatefulSets"
+                  bar={<StackedMetricBar segments={[
+                    { label: "Healthy", value: workloadByKind.statefulSets.healthy, color: GAUGE_COLOR_HEALTHY },
+                    { label: "Progressing", value: workloadByKind.statefulSets.progressing, color: GAUGE_COLOR_WARNING },
+                    { label: "Degraded", value: workloadByKind.statefulSets.degraded, color: GAUGE_COLOR_ERROR },
+                  ]} />}
+                  summary={workloadSignalSummary(workloadByKind.statefulSets)}
+                />
               ) : null}
               {workloadByKind?.jobs?.total ? (
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600 }}>Jobs</TableCell>
-                  <TableCell>
-                    {stackedHealthBar([
-                      { label: "Healthy", count: workloadByKind.jobs.healthy, color: "#2e7d32" },
-                      { label: "Progressing", count: workloadByKind.jobs.progressing, color: "#ed6c02" },
-                      { label: "Degraded", count: workloadByKind.jobs.degraded, color: "#d32f2f" },
-                    ])}
-                  </TableCell>
-                  <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
-                    {workloadSignalSummary(workloadByKind.jobs)}
-                  </TableCell>
-                </TableRow>
+                <GaugeTableRow
+                  label="Jobs"
+                  bar={<StackedMetricBar segments={[
+                    { label: "Healthy", value: workloadByKind.jobs.healthy, color: GAUGE_COLOR_HEALTHY },
+                    { label: "Progressing", value: workloadByKind.jobs.progressing, color: GAUGE_COLOR_WARNING },
+                    { label: "Degraded", value: workloadByKind.jobs.degraded, color: GAUGE_COLOR_ERROR },
+                  ]} />}
+                  summary={workloadSignalSummary(workloadByKind.jobs)}
+                />
               ) : null}
               {workloadByKind?.cronJobs?.total ? (
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600 }}>CronJobs</TableCell>
-                  <TableCell>
-                    {stackedHealthBar([
-                      { label: "Healthy", count: workloadByKind.cronJobs.healthy, color: "#2e7d32" },
-                      { label: "Progressing", count: workloadByKind.cronJobs.progressing, color: "#ed6c02" },
-                      { label: "Degraded", count: workloadByKind.cronJobs.degraded, color: "#d32f2f" },
-                    ])}
-                  </TableCell>
-                  <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
-                    {workloadSignalSummary(workloadByKind.cronJobs)}
-                  </TableCell>
-                </TableRow>
+                <GaugeTableRow
+                  label="CronJobs"
+                  bar={<StackedMetricBar segments={[
+                    { label: "Healthy", value: workloadByKind.cronJobs.healthy, color: GAUGE_COLOR_HEALTHY },
+                    { label: "Progressing", value: workloadByKind.cronJobs.progressing, color: GAUGE_COLOR_WARNING },
+                    { label: "Degraded", value: workloadByKind.cronJobs.degraded, color: GAUGE_COLOR_ERROR },
+                  ]} />}
+                  summary={workloadSignalSummary(workloadByKind.cronJobs)}
+                />
               ) : null}
               {workloadByKind?.replicaSets?.total ? (
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 600 }}>ReplicaSets</TableCell>
-                  <TableCell>
-                    {stackedHealthBar([
-                      { label: "Healthy", count: workloadByKind.replicaSets.healthy, color: "#2e7d32" },
-                      { label: "Progressing", count: workloadByKind.replicaSets.progressing, color: "#ed6c02" },
-                      { label: "Degraded", count: workloadByKind.replicaSets.degraded, color: "#d32f2f" },
-                    ])}
-                  </TableCell>
-                  <TableCell sx={{ textAlign: "right", fontSize: 12, whiteSpace: "nowrap" }}>
-                    {workloadSignalSummary(workloadByKind.replicaSets)}
-                  </TableCell>
-                </TableRow>
+                <GaugeTableRow
+                  label="ReplicaSets"
+                  bar={<StackedMetricBar segments={[
+                    { label: "Healthy", value: workloadByKind.replicaSets.healthy, color: GAUGE_COLOR_HEALTHY },
+                    { label: "Progressing", value: workloadByKind.replicaSets.progressing, color: GAUGE_COLOR_WARNING },
+                    { label: "Degraded", value: workloadByKind.replicaSets.degraded, color: GAUGE_COLOR_ERROR },
+                  ]} />}
+                  summary={workloadSignalSummary(workloadByKind.replicaSets)}
+                />
               ) : null}
-            </TableBody>
-          </Table>
+          </Box>
         </Section>
       )}
 
