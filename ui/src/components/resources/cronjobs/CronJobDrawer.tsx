@@ -28,11 +28,16 @@ import ErrorState from "../../shared/ErrorState";
 import AccessDeniedState from "../../shared/AccessDeniedState";
 import Section from "../../shared/Section";
 import MetadataSection from "../../shared/MetadataSection";
+import AttentionSummary, {
+  type AttentionHealth,
+  type AttentionReason,
+} from "../../shared/AttentionSummary";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
-import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
+import type { ApiItemResponse, ApiListResponse, DashboardSignalItem } from "../../../types/api";
+import useResourceSignals from "../../../utils/useResourceSignals";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -191,6 +196,54 @@ export default function CronJobDrawer(props: {
   const summary = details?.summary;
   const policy = details?.policy;
   const allJobs = details?.allJobs || [];
+  const metadata = details?.metadata;
+
+  const resourceSignals = useResourceSignals({
+    token: props.token,
+    scope: "namespace",
+    namespace: ns,
+    kind: "cronjobs",
+    name: name || "",
+    enabled: !!props.open && !!name,
+    refreshKey: retryNonce,
+  });
+
+  const cronJobSignals = useMemo<DashboardSignalItem[]>(
+    () => resourceSignals.signals || [],
+    [resourceSignals.signals],
+  );
+
+  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
+    if (!summary) return undefined;
+    const lastStatus = summary.lastRunStatus;
+    const tone: AttentionHealth["tone"] =
+      summary.suspend ? "warning" : lastStatus === "Failed" ? "error" : lastStatus === "Complete" ? "success" : "default";
+    return {
+      label: summary.suspend ? "Suspended" : `Last run: ${lastStatus || "unknown"}`,
+      tone,
+      tooltip: `Schedule ${summary.schedule || "-"} · Active jobs ${summary.active ?? 0}`,
+    };
+  }, [summary]);
+
+  const attentionReasons = useMemo<AttentionReason[]>(() => {
+    if (!summary) return [];
+    const reasons: AttentionReason[] = [];
+    if (summary.suspend) {
+      reasons.push({ label: "CronJob is suspended", severity: "warning" });
+    }
+    if ((summary.active ?? 0) > 0) {
+      reasons.push({ label: `${summary.active} active job(s)`, severity: "warning" });
+    }
+    if (summary.lastRunStatus === "Failed") {
+      reasons.push({ label: "Last run failed", severity: "error" });
+    }
+    return reasons;
+  }, [summary]);
+
+  const warningEvents = useMemo(
+    () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
+    [events],
+  );
 
   const hasPolicy =
     policy?.startingDeadlineSeconds != null ||
@@ -244,6 +297,7 @@ export default function CronJobDrawer(props: {
               <Tab label="Jobs" />
               <Tab label="Spec" />
               <Tab label="Events" />
+              <Tab label="Metadata" />
               <Tab label="YAML" />
             </Tabs>
 
@@ -262,17 +316,17 @@ export default function CronJobDrawer(props: {
                     </Section>
                   )}
 
-                  <Box sx={panelBoxSx}>
-                    <KeyValueTable
-                      rows={summaryItems}
-                      columns={3}
-                      valueSx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
-                    />
-                  </Box>
+                  <AttentionSummary
+                    health={attentionHealth}
+                    reasons={attentionReasons}
+                    signals={cronJobSignals}
+                    onJumpToEvents={() => setTab(3)}
+                    onJumpToSpec={() => setTab(2)}
+                  />
 
                   <Accordion defaultExpanded={hasPolicy}>
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="subtitle2">Policy</Typography>
+                      <Typography variant="subtitle2">Key policy state</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
                       <KeyValueTable
@@ -294,6 +348,12 @@ export default function CronJobDrawer(props: {
                       />
                     </AccordionDetails>
                   </Accordion>
+
+                  <Section title="Recent Warning events">
+                    <Box sx={panelBoxSx}>
+                      <EventsList events={warningEvents} emptyMessage="No recent warning events." />
+                    </Box>
+                  </Section>
                 </Box>
               )}
 
@@ -471,18 +531,6 @@ export default function CronJobDrawer(props: {
                     </AccordionDetails>
                   </Accordion>
 
-                  <Accordion>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="subtitle2">Template Metadata</Typography>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <MetadataSection
-                        labels={details?.spec?.metadata?.labels}
-                        annotations={details?.spec?.metadata?.annotations}
-                        wrapInSection={false}
-                      />
-                    </AccordionDetails>
-                  </Accordion>
                 </Box>
               )}
 
@@ -493,8 +541,29 @@ export default function CronJobDrawer(props: {
                 </Box>
               )}
 
-              {/* YAML */}
+              {/* METADATA */}
               {tab === 4 && (
+                <Box sx={drawerTabContentCompactSx}>
+                  <Box sx={panelBoxSx}>
+                    <KeyValueTable
+                      rows={summaryItems}
+                      columns={3}
+                      valueSx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+                    />
+                  </Box>
+                  <MetadataSection labels={metadata?.labels} annotations={metadata?.annotations} />
+                  <Section title="Template Metadata">
+                    <MetadataSection
+                      labels={details?.spec?.metadata?.labels}
+                      annotations={details?.spec?.metadata?.annotations}
+                      wrapInSection={false}
+                    />
+                  </Section>
+                </Box>
+              )}
+
+              {/* YAML */}
+              {tab === 5 && (
                 <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
             </Box>
