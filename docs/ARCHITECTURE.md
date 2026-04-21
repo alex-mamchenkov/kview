@@ -50,6 +50,7 @@ Lists stay visible while a **drawer** shows resource context. Navigation is list
 - React, Vite, TypeScript, MUI
 - Shared components, **design tokens** for spacing/typography/color (avoid one-off inline styling where tokens exist)
 - Capability-aware action rendering
+- Drawer content and tab order follow the **signals-first** contract in [UI_UX_GUIDE.md](UI_UX_GUIDE.md): operational signals/problems first, metadata/YAML in lower-priority tabs
 
 ---
 

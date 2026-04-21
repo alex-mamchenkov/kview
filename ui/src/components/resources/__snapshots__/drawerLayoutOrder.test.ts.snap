@@ -1,0 +1,417 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`drawer layout order snapshots > locks tab order and overview section order for migrated drawers 1`] = `
+[
+  {
+    "drawer": "Pod",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+      ],
+    },
+    "path": "pods/PodDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Containers",
+      "Resources",
+      "Networking",
+      "Events",
+      "Logs",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "Deployment",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Recent Warning events",
+      ],
+    },
+    "path": "deployments/DeploymentDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Rollout",
+      "Pods",
+      "Spec",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "StatefulSet",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Recent Warning events",
+      ],
+    },
+    "path": "statefulsets/StatefulSetDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Pods",
+      "Spec",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "DaemonSet",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Recent Warning events",
+      ],
+    },
+    "path": "daemonsets/DaemonSetDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Pods",
+      "Spec",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "ReplicaSet",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Recent Warning events",
+      ],
+    },
+    "path": "replicasets/ReplicaSetDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Pods",
+      "Spec",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "Job",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Recent Warning events",
+      ],
+    },
+    "path": "jobs/JobDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Pods",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "CronJob",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Recent Warning events",
+      ],
+    },
+    "path": "cronjobs/CronJobDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Jobs",
+      "Spec",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "Service",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Ports",
+        "Traffic Notes",
+        "External URLs",
+        "Recent Warning events",
+      ],
+    },
+    "path": "services/ServiceDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Endpoints",
+      "Ingresses",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "Ingress",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "URLs",
+        "Default Backend",
+        "Recent Warning events",
+      ],
+    },
+    "path": "ingresses/IngressDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Rules",
+      "TLS",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "PVC",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Recent Warning events",
+      ],
+    },
+    "path": "persistentvolumeclaims/PersistentVolumeClaimDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Spec",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "PV",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Recent Warning events",
+      ],
+    },
+    "path": "persistentvolumes/PersistentVolumeDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Spec",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "ConfigMap",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Size",
+        "Recent Warning events",
+      ],
+    },
+    "path": "configmaps/ConfigMapDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Keys",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "Secret",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Recent Warning events",
+      ],
+    },
+    "path": "secrets/SecretDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Keys",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "ServiceAccount",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Recent Warning events",
+      ],
+    },
+    "path": "serviceaccounts/ServiceAccountDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Role Bindings",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "Role",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Recent Warning events",
+      ],
+    },
+    "path": "roles/RoleDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Rules",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "RoleBinding",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Recent Warning events",
+      ],
+    },
+    "path": "rolebindings/RoleBindingDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Subjects",
+      "Role Ref",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "ClusterRole",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Recent Warning events",
+      ],
+    },
+    "path": "clusterroles/ClusterRoleDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Rules",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "ClusterRoleBinding",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Recent Warning events",
+      ],
+    },
+    "path": "clusterrolebindings/ClusterRoleBindingDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Subjects",
+      "Role Ref",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "HelmRelease",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Description",
+        "Managed Resources",
+      ],
+    },
+    "path": "helm/HelmReleaseDrawer.tsx",
+    "tabs": [
+      "Latest release state is failed",
+      "Overview",
+      "Values",
+      "Manifest",
+      "Hooks",
+      "History",
+      "Notes",
+      "Metadata",
+      "YAML",
+      "Name",
+      "Namespace",
+      "Status",
+      "Revision",
+      "Chart",
+      "Chart Version",
+      "App Version",
+      "Storage",
+      "First Deployed",
+      "Last Deployed",
+    ],
+  },
+  {
+    "drawer": "Node",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Derived Projection",
+        "Actions",
+      ],
+    },
+    "path": "nodes/NodeDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Pods",
+      "Conditions",
+      "Metadata",
+      "YAML",
+    ],
+  },
+  {
+    "drawer": "CRD",
+    "overview": {
+      "hasAttentionSummary": true,
+      "sections": [
+        "Actions",
+        "Recent Warning events",
+      ],
+    },
+    "path": "customresourcedefinitions/CustomResourceDefinitionDrawer.tsx",
+    "tabs": [
+      "Overview",
+      "Versions",
+      "Events",
+      "Metadata",
+      "YAML",
+    ],
+  },
+]
+`;
