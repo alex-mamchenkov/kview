@@ -19,6 +19,10 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGetWithContext } from "../../../api";
 import { useActiveContext } from "../../../activeContext";
 import { useConnectionState } from "../../../connectionState";
+import AttentionSummary, {
+  type AttentionHealth,
+  type AttentionReason,
+} from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import ConditionsTable from "../../shared/ConditionsTable";
 import CodeBlock from "../../shared/CodeBlock";
@@ -47,7 +51,9 @@ import type {
   NodePodsSummary,
   NodeSummary,
   NodeTaint,
+  DashboardSignalItem,
 } from "../../../types/api";
+import useResourceSignals from "../../../utils/useResourceSignals";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -145,6 +151,14 @@ export default function NodeDrawer(props: {
     !!details?.capacity?.podsAllocatable;
   const taints = details?.taints || [];
   const derived = details?.derived;
+  const resourceSignals = useResourceSignals({
+    token: props.token,
+    scope: "cluster",
+    kind: "nodes",
+    name: name || "",
+    enabled: !!props.open && !!name,
+    refreshKey: retryNonce,
+  });
 
   const summaryItems = useMemo(
     () => [
@@ -164,6 +178,33 @@ export default function NodeDrawer(props: {
     ],
     [summary]
   );
+  const nodeSignals = useMemo<DashboardSignalItem[]>(
+    () => resourceSignals.signals || [],
+    [resourceSignals.signals],
+  );
+
+  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
+    if (!summary) return undefined;
+    return {
+      label: `Status: ${summary.status || "unknown"}`,
+      tone: summary.status === "Ready" ? "success" : summary.status === "NotReady" ? "error" : "warning",
+      tooltip: `Roles ${(summary.roles || []).join(", ") || "-"} · kubelet ${summary.kubeletVersion || "-"}`,
+    };
+  }, [summary]);
+
+  const attentionReasons = useMemo<AttentionReason[]>(() => {
+    const reasons: AttentionReason[] = [];
+    if (hasUnhealthyConditions) {
+      reasons.push({ label: "Node has unhealthy conditions", severity: "warning" });
+    }
+    if (taints.length > 0) {
+      reasons.push({ label: `${taints.length} taint(s) applied`, severity: "info" });
+    }
+    if (derived) {
+      reasons.push({ label: "View is derived from cached pod snapshots", severity: "warning" });
+    }
+    return reasons;
+  }, [hasUnhealthyConditions, taints.length, derived]);
 
   return (
     <RightDrawer open={props.open} onClose={props.onClose}>
@@ -180,6 +221,7 @@ export default function NodeDrawer(props: {
               <Tab label="Overview" />
               <Tab label="Pods" />
               <Tab label="Conditions" />
+              <Tab label="Metadata" />
               <Tab label="YAML" />
             </Tabs>
 
@@ -213,9 +255,12 @@ export default function NodeDrawer(props: {
                     </Section>
                   )}
 
-                  <Box sx={panelBoxSx}>
-                    <KeyValueTable rows={summaryItems} columns={3} />
-                  </Box>
+                  <AttentionSummary
+                    health={attentionHealth}
+                    reasons={attentionReasons}
+                    signals={nodeSignals}
+                    onJumpToConditions={() => setTab(2)}
+                  />
 
                   <Accordion defaultExpanded={hasCapacityData}>
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -314,7 +359,6 @@ export default function NodeDrawer(props: {
                     </AccordionDetails>
                   </Accordion>
 
-                  <MetadataSection labels={details?.metadata?.labels} annotations={details?.metadata?.annotations} />
                 </Box>
               )}
 
@@ -421,8 +465,18 @@ export default function NodeDrawer(props: {
                 </Box>
               )}
 
-              {/* YAML */}
+              {/* METADATA */}
               {tab === 3 && (
+                <Box sx={drawerTabContentSx}>
+                  <Box sx={panelBoxSx}>
+                    <KeyValueTable rows={summaryItems} columns={3} />
+                  </Box>
+                  <MetadataSection labels={details?.metadata?.labels} annotations={details?.metadata?.annotations} />
+                </Box>
+              )}
+
+              {/* YAML */}
+              {tab === 4 && (
                 <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
             </Box>
