@@ -20,6 +20,10 @@ import KeyValueTable from "../../shared/KeyValueTable";
 import AccessDeniedState from "../../shared/AccessDeniedState";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
+import AttentionSummary, {
+  type AttentionHealth,
+  type AttentionReason,
+} from "../../shared/AttentionSummary";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import Section from "../../shared/Section";
@@ -28,7 +32,8 @@ import ClusterRoleDrawer from "../clusterroles/ClusterRoleDrawer";
 import RoleBindingActions from "./RoleBindingActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
-import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
+import type { ApiItemResponse, ApiListResponse, DashboardSignalItem } from "../../../types/api";
+import useResourceSignals from "../../../utils/useResourceSignals";
 import type { SxProps, Theme } from "@mui/material/styles";
 import { drawerBodySx, drawerTabContentSx, panelBoxSx } from "../../../theme/sxTokens";
 
@@ -119,6 +124,15 @@ export default function RoleBindingDrawer(props: {
   const roleRef = details?.roleRef;
   const subjects = details?.subjects || [];
   const accessDenied = err?.status === 401 || err?.status === 403;
+  const resourceSignals = useResourceSignals({
+    token: props.token,
+    scope: "namespace",
+    namespace: ns,
+    kind: "rolebindings",
+    name: name || "",
+    enabled: !!props.open && !!name && !accessDenied,
+    refreshKey: retryNonce,
+  });
 
   const summaryItems = useMemo(
     () => [
@@ -128,6 +142,35 @@ export default function RoleBindingDrawer(props: {
       { label: "Created", value: summary?.createdAt ? fmtTs(summary.createdAt) : "-" },
     ],
     [summary]
+  );
+  const roleBindingSignals = useMemo<DashboardSignalItem[]>(
+    () => resourceSignals.signals || [],
+    [resourceSignals.signals],
+  );
+
+  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
+    if (!roleRef) return undefined;
+    return {
+      label: `RoleRef: ${roleRef.kind || "-"} / ${roleRef.name || "-"}`,
+      tone: roleRef.name ? "success" : "warning",
+      tooltip: `Subjects ${subjects.length}`,
+    };
+  }, [roleRef, subjects.length]);
+
+  const attentionReasons = useMemo<AttentionReason[]>(() => {
+    const reasons: AttentionReason[] = [];
+    if (subjects.length === 0) {
+      reasons.push({ label: "No subjects bound", severity: "warning" });
+    }
+    if (!roleRef?.name) {
+      reasons.push({ label: "RoleRef name is missing", severity: "warning" });
+    }
+    return reasons;
+  }, [subjects.length, roleRef?.name]);
+
+  const warningEvents = useMemo(
+    () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
+    [events],
   );
 
   function openRoleRef() {
@@ -171,6 +214,7 @@ export default function RoleBindingDrawer(props: {
               <Tab label="Subjects" />
               <Tab label="Role Ref" />
               <Tab label="Events" />
+              <Tab label="Metadata" />
               <Tab label="YAML" />
             </Tabs>
 
@@ -189,9 +233,18 @@ export default function RoleBindingDrawer(props: {
                     </Section>
                   )}
 
-                  <Box sx={panelBoxSx}>
-                    <KeyValueTable rows={summaryItems} columns={3} />
-                  </Box>
+                  <AttentionSummary
+                    health={attentionHealth}
+                    reasons={attentionReasons}
+                    signals={roleBindingSignals}
+                    onJumpToEvents={() => setTab(3)}
+                  />
+
+                  <Section title="Recent Warning events">
+                    <Box sx={panelBoxSx}>
+                      <EventsList events={warningEvents} emptyMessage="No recent warning events." />
+                    </Box>
+                  </Section>
                 </Box>
               )}
 
@@ -251,8 +304,17 @@ export default function RoleBindingDrawer(props: {
                 </Box>
               )}
 
-              {/* YAML */}
+              {/* METADATA */}
               {tab === 4 && (
+                <Box sx={drawerTabContentSx}>
+                  <Box sx={panelBoxSx}>
+                    <KeyValueTable rows={summaryItems} columns={3} />
+                  </Box>
+                </Box>
+              )}
+
+              {/* YAML */}
+              {tab === 5 && (
                 <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
             </Box>
