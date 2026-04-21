@@ -20,6 +20,10 @@ import { parseManifestResources, groupResourcesByKind, canNavigateToKind } from 
 import type { ManifestResource } from "../../../utils/helmManifest";
 import Section from "../../shared/Section";
 import KeyValueTable from "../../shared/KeyValueTable";
+import AttentionSummary, {
+  type AttentionHealth,
+  type AttentionReason,
+} from "../../shared/AttentionSummary";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
@@ -41,7 +45,8 @@ import CustomResourceDefinitionDrawer from "../customresourcedefinitions/CustomR
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
-import type { ApiItemResponse } from "../../../types/api";
+import type { ApiItemResponse, DashboardSignalItem } from "../../../types/api";
+import useResourceSignals from "../../../utils/useResourceSignals";
 import { panelBoxSx, drawerBodySx, loadingCenterSx } from "../../../theme/sxTokens";
 
 type HelmHook = {
@@ -144,6 +149,15 @@ export default function HelmReleaseDrawer(props: {
   const manifest = details?.manifest || "";
   const hooks = details?.hooks || [];
   const yaml = details?.yaml || "";
+  const resourceSignals = useResourceSignals({
+    token: props.token,
+    scope: "namespace",
+    namespace: ns,
+    kind: "helmreleases",
+    name: name || "",
+    enabled: !!props.open && !!name,
+    refreshKey: retryNonce + refreshNonce,
+  });
 
   // Parse manifest resources for cross-links
   const manifestResources = useMemo(
@@ -154,6 +168,43 @@ export default function HelmReleaseDrawer(props: {
     () => groupResourcesByKind(manifestResources),
     [manifestResources],
   );
+  const helmSignals = useMemo<DashboardSignalItem[]>(
+    () => resourceSignals.signals || [],
+    [resourceSignals.signals],
+  );
+
+  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
+    if (!summary) return undefined;
+    const status = summary.status || "unknown";
+    const tone: AttentionHealth["tone"] =
+      status === "deployed"
+        ? "success"
+        : status === "failed" || status === "uninstalled"
+        ? "error"
+        : status === "pending-install" || status === "pending-upgrade" || status === "pending-rollback"
+        ? "warning"
+        : "default";
+    return {
+      label: `Status: ${status}`,
+      tone,
+      tooltip: `Revision ${summary.revision || "-"} · Chart ${summary.chart || "-"}`,
+    };
+  }, [summary]);
+
+  const attentionReasons = useMemo<AttentionReason[]>(() => {
+    const reasons: AttentionReason[] = [];
+    if (!summary) return reasons;
+    if (summary.status === "failed") {
+      reasons.push({ label: "Latest release state is failed", severity: "error" });
+    }
+    if ((history || []).length > 1) {
+      const failedRevs = history.filter((h) => h.status === "failed").length;
+      if (failedRevs > 0) {
+        reasons.push({ label: `${failedRevs} failed revision(s) in history`, severity: "warning" });
+      }
+    }
+    return reasons;
+  }, [summary, history]);
 
   // Build tab labels dynamically, hiding empty optional tabs.
   const tabDefs = useMemo(() => {
@@ -163,6 +214,7 @@ export default function HelmReleaseDrawer(props: {
     if (hooks.length > 0) tabs.push({ label: "Hooks", id: "hooks" });
     tabs.push({ label: "History", id: "history" });
     if (notes.trim()) tabs.push({ label: "Notes", id: "notes" });
+    tabs.push({ label: "Metadata", id: "metadata" });
     if (yaml.trim()) tabs.push({ label: "YAML", id: "yaml" });
     return tabs;
   }, [values, manifest, hooks, notes, yaml]);
@@ -264,9 +316,11 @@ export default function HelmReleaseDrawer(props: {
                     </Section>
                   )}
 
-                  <Box sx={panelBoxSx}>
-                    <KeyValueTable rows={summaryItems} columns={3} />
-                  </Box>
+                  <AttentionSummary
+                    health={attentionHealth}
+                    reasons={attentionReasons}
+                    signals={helmSignals}
+                  />
 
                   {summary?.description && (
                     <Section title="Description">
@@ -436,6 +490,23 @@ export default function HelmReleaseDrawer(props: {
                     }}
                   >
                     <AutolinkText text={notes} />
+                  </Box>
+                </Box>
+              )}
+
+              {/* METADATA */}
+              {activeTabId === "metadata" && (
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 2,
+                    height: "100%",
+                    overflow: "auto",
+                  }}
+                >
+                  <Box sx={panelBoxSx}>
+                    <KeyValueTable rows={summaryItems} columns={3} />
                   </Box>
                 </Box>
               )}
