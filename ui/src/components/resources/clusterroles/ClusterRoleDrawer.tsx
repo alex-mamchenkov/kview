@@ -19,13 +19,18 @@ import KeyValueTable from "../../shared/KeyValueTable";
 import AccessDeniedState from "../../shared/AccessDeniedState";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
+import AttentionSummary, {
+  type AttentionHealth,
+  type AttentionReason,
+} from "../../shared/AttentionSummary";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import Section from "../../shared/Section";
 import ClusterRoleActions from "./ClusterRoleActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
-import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
+import type { ApiItemResponse, ApiListResponse, DashboardSignalItem } from "../../../types/api";
+import useResourceSignals from "../../../utils/useResourceSignals";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -107,6 +112,14 @@ export default function ClusterRoleDrawer(props: {
   const summary = details?.summary;
   const rules = details?.rules || [];
   const accessDenied = err?.status === 401 || err?.status === 403;
+  const resourceSignals = useResourceSignals({
+    token: props.token,
+    scope: "cluster",
+    kind: "clusterroles",
+    name: name || "",
+    enabled: !!props.open && !!name && !accessDenied,
+    refreshKey: retryNonce,
+  });
 
   const summaryItems = useMemo(
     () => [
@@ -116,6 +129,33 @@ export default function ClusterRoleDrawer(props: {
       { label: "Created", value: summary?.createdAt ? fmtTs(summary.createdAt) : "-" },
     ],
     [summary]
+  );
+  const clusterRoleSignals = useMemo<DashboardSignalItem[]>(
+    () => resourceSignals.signals || [],
+    [resourceSignals.signals],
+  );
+
+  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
+    if (!summary) return undefined;
+    const tone: AttentionHealth["tone"] = (summary.rulesCount || 0) > 0 ? "success" : "warning";
+    return {
+      label: `Rules ${summary.rulesCount || 0}`,
+      tone,
+      tooltip: `Cluster-scoped RBAC role`,
+    };
+  }, [summary]);
+
+  const attentionReasons = useMemo<AttentionReason[]>(() => {
+    const reasons: AttentionReason[] = [];
+    if ((summary?.rulesCount || 0) === 0) {
+      reasons.push({ label: "ClusterRole has no rules", severity: "warning" });
+    }
+    return reasons;
+  }, [summary?.rulesCount]);
+
+  const warningEvents = useMemo(
+    () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
+    [events],
   );
 
   return (
@@ -135,6 +175,7 @@ export default function ClusterRoleDrawer(props: {
               <Tab label="Overview" />
               <Tab label="Rules" />
               <Tab label="Events" />
+              <Tab label="Metadata" />
               <Tab label="YAML" />
             </Tabs>
 
@@ -152,9 +193,18 @@ export default function ClusterRoleDrawer(props: {
                     </Section>
                   )}
 
-                  <Box sx={panelBoxSx}>
-                    <KeyValueTable rows={summaryItems} columns={3} />
-                  </Box>
+                  <AttentionSummary
+                    health={attentionHealth}
+                    reasons={attentionReasons}
+                    signals={clusterRoleSignals}
+                    onJumpToEvents={() => setTab(2)}
+                  />
+
+                  <Section title="Recent Warning events">
+                    <Box sx={panelBoxSx}>
+                      <EventsList events={warningEvents} emptyMessage="No recent warning events." />
+                    </Box>
+                  </Section>
                 </Box>
               )}
 
@@ -197,8 +247,17 @@ export default function ClusterRoleDrawer(props: {
                 </Box>
               )}
 
-              {/* YAML */}
+              {/* METADATA */}
               {tab === 3 && (
+                <Box sx={drawerTabContentSx}>
+                  <Box sx={panelBoxSx}>
+                    <KeyValueTable rows={summaryItems} columns={3} />
+                  </Box>
+                </Box>
+              )}
+
+              {/* YAML */}
+              {tab === 4 && (
                 <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
             </Box>
