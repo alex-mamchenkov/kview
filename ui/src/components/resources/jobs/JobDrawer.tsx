@@ -28,16 +28,20 @@ import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import Section from "../../shared/Section";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
+import AttentionSummary, {
+  type AttentionHealth,
+  type AttentionReason,
+} from "../../shared/AttentionSummary";
 import ConditionsTable from "../../shared/ConditionsTable";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
-import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
+import type { ApiItemResponse, ApiListResponse, DashboardSignalItem } from "../../../types/api";
+import useResourceSignals from "../../../utils/useResourceSignals";
 import {
   panelBoxSx,
   drawerBodySx,
-  drawerTabContentCompactSx,
   loadingCenterSx,
 } from "../../../theme/sxTokens";
 
@@ -166,6 +170,53 @@ export default function JobDrawer(props: {
   const linkedPods = details?.linkedPods;
   const hasUnhealthyConditions = (details?.conditions || []).some((c) => !isConditionHealthy(c));
 
+  const resourceSignals = useResourceSignals({
+    token: props.token,
+    scope: "namespace",
+    namespace: ns,
+    kind: "jobs",
+    name: name || "",
+    enabled: !!props.open && !!name,
+    refreshKey: retryNonce,
+  });
+
+  const jobSignals = useMemo<DashboardSignalItem[]>(
+    () => resourceSignals.signals || [],
+    [resourceSignals.signals],
+  );
+
+  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
+    if (!summary) return undefined;
+    const status = summary.status || "Unknown";
+    const tone: AttentionHealth["tone"] =
+      status === "Failed" ? "error" : status === "Running" ? "warning" : status === "Complete" ? "success" : "default";
+    return {
+      label: `Status: ${status}`,
+      tone,
+      tooltip: `Active ${summary.active ?? 0}, Succeeded ${summary.succeeded ?? 0}, Failed ${summary.failed ?? 0}`,
+    };
+  }, [summary]);
+
+  const attentionReasons = useMemo<AttentionReason[]>(() => {
+    if (!summary) return [];
+    const reasons: AttentionReason[] = [];
+    if ((summary.failed ?? 0) > 0) {
+      reasons.push({ label: `${summary.failed} failed pod(s)`, severity: "error" });
+    }
+    if ((summary.active ?? 0) > 0 && (summary.succeeded ?? 0) === 0) {
+      reasons.push({ label: `${summary.active} active pod(s)`, severity: "warning" });
+    }
+    if (hasUnhealthyConditions) {
+      reasons.push({ label: "Unhealthy Job condition(s)", severity: "warning" });
+    }
+    return reasons;
+  }, [summary, hasUnhealthyConditions]);
+
+  const warningEvents = useMemo(
+    () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
+    [events],
+  );
+
   const summaryItems = useMemo(
     () => [
       { label: "Name", value: valueOrDash(summary?.name) },
@@ -226,6 +277,7 @@ export default function JobDrawer(props: {
               <Tab label="Overview" />
               <Tab label="Pods" />
               <Tab label="Events" />
+              <Tab label="Metadata" />
               <Tab label="YAML" />
             </Tabs>
 
@@ -244,39 +296,24 @@ export default function JobDrawer(props: {
                     </Section>
                   )}
 
-                  <Box sx={panelBoxSx}>
-                    <KeyValueTable
-                      rows={summaryItems}
-                      columns={3}
-                      valueSx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
-                    />
-                  </Box>
+                  <AttentionSummary
+                    health={attentionHealth}
+                    reasons={attentionReasons}
+                    signals={jobSignals}
+                    onJumpToEvents={() => setTab(2)}
+                  />
 
-                  <ConditionsTable conditions={details?.conditions || []} isHealthy={(cond) => isConditionHealthy(cond as JobCondition)} />
+                  <ConditionsTable
+                    conditions={details?.conditions || []}
+                    isHealthy={(cond) => isConditionHealthy(cond as JobCondition)}
+                    unhealthyFirst
+                  />
 
-                  {events.length > 0 && (() => {
-                    const lastEvent = events[events.length - 1];
-                    return (
-                      <Section title="Last Event">
-                        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, mt: 1 }}>
-                          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                            <Chip size="small" label={lastEvent.type} color={eventChipColor(lastEvent.type)} />
-                            <Typography variant="body2" fontWeight="medium">{lastEvent.reason}</Typography>
-                            {lastEvent.lastSeen > 0 && (
-                              <Typography variant="caption" color="text.secondary">
-                                {fmtTs(lastEvent.lastSeen)}
-                              </Typography>
-                            )}
-                          </Box>
-                          {lastEvent.message && (
-                            <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-wrap" }}>
-                              {lastEvent.message}
-                            </Typography>
-                          )}
-                        </Box>
-                      </Section>
-                    );
-                  })()}
+                  <Section title="Recent Warning events">
+                    <Box sx={panelBoxSx}>
+                      <EventsList events={warningEvents} emptyMessage="No recent warning events." />
+                    </Box>
+                  </Section>
                 </Box>
               )}
 
@@ -328,8 +365,21 @@ export default function JobDrawer(props: {
                 </Box>
               )}
 
-              {/* YAML */}
+              {/* METADATA */}
               {tab === 3 && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
+                  <Box sx={panelBoxSx}>
+                    <KeyValueTable
+                      rows={summaryItems}
+                      columns={3}
+                      valueSx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+                    />
+                  </Box>
+                </Box>
+              )}
+
+              {/* YAML */}
+              {tab === 4 && (
                 <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
             </Box>
