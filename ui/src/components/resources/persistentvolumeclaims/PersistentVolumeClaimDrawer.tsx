@@ -16,6 +16,10 @@ import KeyValueTable from "../../shared/KeyValueTable";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
+import AttentionSummary, {
+  type AttentionHealth,
+  type AttentionReason,
+} from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import ConditionsTable from "../../shared/ConditionsTable";
 import EventsList from "../../shared/EventsList";
@@ -24,7 +28,8 @@ import PersistentVolumeDrawer from "../persistentvolumes/PersistentVolumeDrawer"
 import PVCActions from "./PVCActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
-import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
+import type { ApiItemResponse, ApiListResponse, DashboardSignalItem } from "../../../types/api";
+import useResourceSignals from "../../../utils/useResourceSignals";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -180,6 +185,15 @@ export default function PersistentVolumeClaimDrawer(props: {
   const metadata = details?.metadata;
   const status = details?.status;
   const volumeName = summary?.volumeName;
+  const resourceSignals = useResourceSignals({
+    token: props.token,
+    scope: "namespace",
+    namespace: ns,
+    kind: "persistentvolumeclaims",
+    name: name || "",
+    enabled: !!props.open && !!name,
+    refreshKey: retryNonce,
+  });
   const pvAccess = useAccessReview({
     token: props.token,
     resource: listResourceAccess.persistentvolumes,
@@ -225,6 +239,43 @@ export default function PersistentVolumeClaimDrawer(props: {
   const selectorExpr = spec?.selector?.matchExpressions || [];
   const finalizers = spec?.finalizers || [];
   const conditions = status?.conditions || [];
+  const pvcSignals = useMemo<DashboardSignalItem[]>(
+    () => resourceSignals.signals || [],
+    [resourceSignals.signals],
+  );
+
+  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
+    const phase = summary?.phase;
+    if (!phase) return undefined;
+    const tone: AttentionHealth["tone"] = phase === "Bound" ? "success" : phase === "Pending" ? "warning" : "default";
+    return {
+      label: `Phase: ${phase}`,
+      tone,
+      tooltip: `Requested ${summary?.requestedStorage || "-"} · Capacity ${summary?.capacity || "-"}`,
+    };
+  }, [summary?.phase, summary?.requestedStorage, summary?.capacity]);
+
+  const attentionReasons = useMemo<AttentionReason[]>(() => {
+    const reasons: AttentionReason[] = [];
+    if (summary?.phase === "Pending") {
+      reasons.push({ label: "PVC is pending binding", severity: "warning" });
+    }
+    if (showPvDeniedHint) {
+      reasons.push({ label: "Bound PV details access denied", severity: "info" });
+    }
+    if ((conditions || []).length > 0) {
+      const nonHealthy = conditions.filter((c) => String(c.status) !== "True");
+      if (nonHealthy.length > 0) {
+        reasons.push({ label: `${nonHealthy.length} non-healthy condition(s)`, severity: "warning" });
+      }
+    }
+    return reasons;
+  }, [summary?.phase, showPvDeniedHint, conditions]);
+
+  const warningEvents = useMemo(
+    () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
+    [events],
+  );
 
   return (
     <RightDrawer open={props.open} onClose={props.onClose}>
@@ -248,6 +299,7 @@ export default function PersistentVolumeClaimDrawer(props: {
               <Tab label="Overview" />
               <Tab label="Spec" />
               <Tab label="Events" />
+              <Tab label="Metadata" />
               <Tab label="YAML" />
             </Tabs>
 
@@ -266,23 +318,27 @@ export default function PersistentVolumeClaimDrawer(props: {
                     </Section>
                   )}
 
-                  <Box sx={panelBoxSx}>
-                    <KeyValueTable rows={summaryItems} columns={3} />
-                    {showPvDeniedHint ? (
-                      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-                        Access denied: you don't have permission to view PersistentVolumes.
-                      </Typography>
-                    ) : null}
-                  </Box>
+                  <AttentionSummary
+                    health={attentionHealth}
+                    reasons={attentionReasons}
+                    signals={pvcSignals}
+                    onJumpToEvents={() => setTab(2)}
+                    onJumpToSpec={() => setTab(1)}
+                  />
 
                   <ConditionsTable
                     conditions={conditions}
                     variant="section"
                     title="Status"
                     emptyMessage="No conditions reported for this PVC."
+                    unhealthyFirst
                   />
 
-                  <MetadataSection labels={metadata?.labels} annotations={metadata?.annotations} />
+                  <Section title="Recent Warning events">
+                    <Box sx={panelBoxSx}>
+                      <EventsList events={warningEvents} emptyMessage="No recent warning events." />
+                    </Box>
+                  </Section>
                 </Box>
               )}
 
@@ -348,8 +404,23 @@ export default function PersistentVolumeClaimDrawer(props: {
                 </Box>
               )}
 
-              {/* YAML */}
+              {/* METADATA */}
               {tab === 3 && (
+                <Box sx={drawerTabContentSx}>
+                  <Box sx={panelBoxSx}>
+                    <KeyValueTable rows={summaryItems} columns={3} />
+                    {showPvDeniedHint ? (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+                        Access denied: you don't have permission to view PersistentVolumes.
+                      </Typography>
+                    ) : null}
+                  </Box>
+                  <MetadataSection labels={metadata?.labels} annotations={metadata?.annotations} />
+                </Box>
+              )}
+
+              {/* YAML */}
+              {tab === 4 && (
                 <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
             </Box>
