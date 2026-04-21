@@ -27,7 +27,10 @@ import { phaseChipColor } from "../../../utils/k8sUi";
 import KeyValueTable from "../../shared/KeyValueTable";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
-import WarningsSection, { type Warning } from "../../shared/WarningsSection";
+import AttentionSummary, {
+  type AttentionHealth,
+  type AttentionReason,
+} from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import ConditionsTable from "../../shared/ConditionsTable";
 import EventsList from "../../shared/EventsList";
@@ -36,7 +39,12 @@ import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
-import type { ApiItemResponse, ApiListResponse } from "../../../types/api";
+import type {
+  ApiItemResponse,
+  ApiListResponse,
+  DashboardSignalItem,
+} from "../../../types/api";
+import useResourceSignals from "../../../utils/useResourceSignals";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -52,6 +60,10 @@ type DeploymentDetails = {
   pods: DeploymentPod[];
   spec: DeploymentSpec;
   yaml: string;
+};
+
+type DeploymentDetailsResponse = ApiItemResponse<DeploymentDetails> & {
+  detailSignals?: DashboardSignalItem[];
 };
 
 type EventDTO = {
@@ -177,6 +189,7 @@ export default function DeploymentDrawer(props: {
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<DeploymentDetails | null>(null);
   const [events, setEvents] = useState<EventDTO[]>([]);
+  const [detailSignals, setDetailSignals] = useState<DashboardSignalItem[]>([]);
   const [err, setErr] = useState("");
   const [drawerPod, setDrawerPod] = useState<string | null>(null);
   const [drawerReplicaSet, setDrawerReplicaSet] = useState<string | null>(null);
@@ -193,18 +206,20 @@ export default function DeploymentDrawer(props: {
     setErr("");
     setDetails(null);
     setEvents([]);
+    setDetailSignals([]);
     setDrawerPod(null);
     setDrawerReplicaSet(null);
     setDrawerNamespace(null);
     setLoading(true);
 
     (async () => {
-      const det = await apiGet<ApiItemResponse<DeploymentDetails>>(
+      const det = await apiGet<DeploymentDetailsResponse>(
         `/api/namespaces/${encodeURIComponent(ns)}/deployments/${encodeURIComponent(name)}`,
         props.token
       );
       const item: DeploymentDetails | null = det?.item ?? null;
       setDetails(item);
+      setDetailSignals(Array.isArray(det?.detailSignals) ? det.detailSignals : []);
 
       const ev = await apiGet<ApiListResponse<EventDTO>>(
         `/api/namespaces/${encodeURIComponent(ns)}/deployments/${encodeURIComponent(name)}/events`,
@@ -228,47 +243,57 @@ export default function DeploymentDrawer(props: {
       rollout.unavailableReplicas > 0 ||
       (rollout.warnings || []).length > 0);
 
-  // Threshold for "unavailable for extended time" warning (10 minutes = 600 seconds)
-  const UNAVAILABLE_THRESHOLD_SEC = 600;
+  const snapshotSignals = useResourceSignals({
+    token: props.token,
+    scope: "namespace",
+    namespace: ns,
+    kind: "deployments",
+    name: name || "",
+    enabled: !!props.open && !!name,
+    refreshKey: retryNonce + refreshNonce,
+  });
 
-  const deploymentWarnings = useMemo((): Warning[] => {
-    const warnings: Warning[] = [];
-    if (!summary || !details) return warnings;
+  const deploymentSignals = useMemo<DashboardSignalItem[]>(
+    () => [...detailSignals, ...(snapshotSignals.signals || [])],
+    [detailSignals, snapshotSignals.signals],
+  );
 
-    // Check if deployment is unavailable for extended time
+  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
+    if (!summary) return undefined;
     const desired = summary.desired ?? 0;
     const available = summary.available ?? 0;
-    const conditions = details.conditions || [];
+    const ready = summary.ready ?? 0;
+    const tone: AttentionHealth["tone"] =
+      desired > 0 && available === 0 ? "error" : ready < desired ? "warning" : "success";
+    return {
+      label: `Ready ${ready}/${desired} · Available ${available}`,
+      tone,
+      tooltip: `Deployment readiness from backend summary counters`,
+    };
+  }, [summary]);
 
-    if (desired > 0 && available === 0) {
-      // Find the "Available" condition
-      const availableCond = conditions.find((c) => c.type === "Available");
-      if (availableCond && availableCond.status === "False" && availableCond.lastTransitionTime) {
-        const nowSec = Math.floor(Date.now() / 1000);
-        const transitionAgeSec = nowSec - availableCond.lastTransitionTime;
-        if (transitionAgeSec > UNAVAILABLE_THRESHOLD_SEC) {
-          const mins = Math.floor(transitionAgeSec / 60);
-          warnings.push({
-            message: `Deployment has been unavailable for ${mins > 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`}.`,
-            detail: availableCond.reason
-              ? `Reason: ${availableCond.reason}${availableCond.message ? ` - ${availableCond.message}` : ""}`
-              : undefined,
-          });
-        }
-      } else if (!availableCond) {
-        // Fallback: if no Available condition but desired > 0, ready == 0, and age > threshold
-        const ageSec = summary.ageSec ?? 0;
-        if (ageSec > UNAVAILABLE_THRESHOLD_SEC) {
-          const mins = Math.floor(ageSec / 60);
-          warnings.push({
-            message: `Deployment has had no available replicas for ${mins > 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`} (best-effort detection).`,
-          });
-        }
-      }
+  const attentionReasons = useMemo<AttentionReason[]>(() => {
+    if (!rollout) return [];
+    const reasons: AttentionReason[] = [];
+    if (rollout.progressDeadlineExceeded) {
+      reasons.push({ label: "Progress deadline exceeded", severity: "error" });
     }
+    if (rollout.unavailableReplicas > 0) {
+      reasons.push({ label: `${rollout.unavailableReplicas} unavailable replica(s)`, severity: "warning" });
+    }
+    if (rollout.missingReplicas > 0) {
+      reasons.push({ label: `${rollout.missingReplicas} missing replica(s)`, severity: "warning" });
+    }
+    if ((rollout.warnings || []).length > 0) {
+      reasons.push({ label: `${rollout.warnings?.length || 0} rollout warning(s)`, severity: "warning" });
+    }
+    return reasons;
+  }, [rollout]);
 
-    return warnings;
-  }, [summary, details]);
+  const warningEvents = useMemo(
+    () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
+    [events],
+  );
 
   const summaryItems = useMemo(
     () => [
@@ -330,6 +355,7 @@ export default function DeploymentDrawer(props: {
               <Tab label="Pods" />
               <Tab label="Spec" />
               <Tab label="Events" />
+              <Tab label="Metadata" />
               <Tab label="YAML" />
             </Tabs>
 
@@ -350,20 +376,25 @@ export default function DeploymentDrawer(props: {
                     </Section>
                   )}
 
-                  <WarningsSection warnings={deploymentWarnings} />
-
-                  <Box sx={panelBoxSx}>
-                    <KeyValueTable
-                      rows={summaryItems}
-                      columns={3}
-                      valueSx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
-                    />
-                  </Box>
+                  <AttentionSummary
+                    health={attentionHealth}
+                    reasons={attentionReasons}
+                    signals={deploymentSignals}
+                    onJumpToEvents={() => setTab(4)}
+                    onJumpToSpec={() => setTab(3)}
+                  />
 
                   <ConditionsTable
                     conditions={details?.conditions || []}
                     isHealthy={(cond) => isConditionHealthy(cond as DeploymentCondition)}
+                    unhealthyFirst
                   />
+
+                  <Section title="Recent Warning events">
+                    <Box sx={panelBoxSx}>
+                      <EventsList events={warningEvents} emptyMessage="No recent warning events." />
+                    </Box>
+                  </Section>
 
                   <Accordion defaultExpanded={!!rollout && (rollout.inProgress || rollout.progressDeadlineExceeded)}>
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -763,18 +794,6 @@ export default function DeploymentDrawer(props: {
                     </AccordionDetails>
                   </Accordion>
 
-                  <Accordion>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="subtitle2">Metadata</Typography>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <MetadataSection
-                        labels={details?.spec?.metadata?.labels}
-                        annotations={details?.spec?.metadata?.annotations}
-                        wrapInSection={false}
-                      />
-                    </AccordionDetails>
-                  </Accordion>
                 </Box>
               )}
 
@@ -785,8 +804,25 @@ export default function DeploymentDrawer(props: {
                 </Box>
               )}
 
-              {/* YAML */}
+              {/* METADATA */}
               {tab === 5 && (
+                <Box sx={drawerTabContentCompactSx}>
+                  <Box sx={panelBoxSx}>
+                    <KeyValueTable
+                      rows={summaryItems}
+                      columns={3}
+                      valueSx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+                    />
+                  </Box>
+                  <MetadataSection
+                    labels={details?.spec?.metadata?.labels}
+                    annotations={details?.spec?.metadata?.annotations}
+                  />
+                </Box>
+              )}
+
+              {/* YAML */}
+              {tab === 6 && (
                 <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
             </Box>

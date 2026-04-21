@@ -1761,7 +1761,20 @@ func (s *Server) Router() http.Handler {
 				return
 			}
 
-			writeJSON(w, http.StatusOK, map[string]any{"active": active, "item": det})
+			var detailSignals []dto.NamespaceInsightSignalDTO
+			if det != nil {
+				signals := dataplane.DetectDeploymentDetailSignals(time.Now(), ns, *det)
+				detailSignals = dataplane.NamespaceInsightSignalsFromDashboard(signals)
+			}
+			if detailSignals == nil {
+				detailSignals = []dto.NamespaceInsightSignalDTO{}
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{
+				"active":        active,
+				"item":          det,
+				"detailSignals": detailSignals,
+			})
 		})
 
 		api.Get("/namespaces/{ns}/deployments/{name}/events", func(w http.ResponseWriter, r *http.Request) {

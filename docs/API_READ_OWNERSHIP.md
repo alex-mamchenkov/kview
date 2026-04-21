@@ -135,6 +135,8 @@ display in `AttentionSummary`. The list of detail-level detectors lives in
   `DetectPodDetailSignals` (best-effort: an RBAC denial on the resource's
   events list silently suppresses event-derived signals rather than failing
   the detail response).
+- `GET /api/namespaces/{ns}/deployments/{name}` → `detailSignals` from
+  `DetectDeploymentDetailSignals`.
 
 ### 4.5 Product and control-plane APIs
 
