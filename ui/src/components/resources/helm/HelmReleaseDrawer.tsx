@@ -20,10 +20,7 @@ import { parseManifestResources, groupResourcesByKind, canNavigateToKind } from 
 import type { ManifestResource } from "../../../utils/helmManifest";
 import Section from "../../shared/Section";
 import KeyValueTable from "../../shared/KeyValueTable";
-import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
-} from "../../shared/AttentionSummary";
+import AttentionSummary from "../../shared/AttentionSummary";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
@@ -173,39 +170,6 @@ export default function HelmReleaseDrawer(props: {
     [resourceSignals.signals],
   );
 
-  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
-    if (!summary) return undefined;
-    const status = summary.status || "unknown";
-    const tone: AttentionHealth["tone"] =
-      status === "deployed"
-        ? "success"
-        : status === "failed" || status === "uninstalled"
-        ? "error"
-        : status === "pending-install" || status === "pending-upgrade" || status === "pending-rollback"
-        ? "warning"
-        : "default";
-    return {
-      label: `Status: ${status}`,
-      tone,
-      tooltip: `Revision ${summary.revision || "-"} · Chart ${summary.chart || "-"}`,
-    };
-  }, [summary]);
-
-  const attentionReasons = useMemo<AttentionReason[]>(() => {
-    const reasons: AttentionReason[] = [];
-    if (!summary) return reasons;
-    if (summary.status === "failed") {
-      reasons.push({ label: "Latest release state is failed", severity: "error" });
-    }
-    if ((history || []).length > 1) {
-      const failedRevs = history.filter((h) => h.status === "failed").length;
-      if (failedRevs > 0) {
-        reasons.push({ label: `${failedRevs} failed revision(s) in history`, severity: "warning" });
-      }
-    }
-    return reasons;
-  }, [summary, history]);
-
   // Build tab labels dynamically, hiding empty optional tabs.
   const tabDefs = useMemo(() => {
     const tabs: { label: string; id: string }[] = [{ label: "Overview", id: "overview" }];
@@ -317,8 +281,6 @@ export default function HelmReleaseDrawer(props: {
                   )}
 
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={helmSignals}
                   />
 

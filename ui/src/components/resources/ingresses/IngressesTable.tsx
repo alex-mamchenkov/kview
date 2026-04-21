@@ -5,7 +5,7 @@ import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import IngressDrawer from "./IngressDrawer";
-import { deploymentHealthBucketColor } from "../../../utils/k8sUi";
+import { listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
@@ -21,7 +21,9 @@ type Ingress = {
   routingHealthBucket?: string;
   addressState?: string;
   tlsHint?: string;
-  needsAttention?: boolean;
+  listStatus?: string;
+  listSignalSeverity?: string;
+  listSignalCount?: number;
 };
 
 type Row = Ingress & { id: string };
@@ -31,13 +33,12 @@ const resourceLabel = getResourceLabel("ingresses");
 const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
   {
-    field: "routingHealthBucket",
+    field: "listSignalSeverity",
     headerName: "Signal",
     width: 140,
     renderCell: (p) => {
-      const bucket = p.row.routingHealthBucket;
-      if (!bucket) return "-";
-      return <Chip size="small" label={p.row.needsAttention ? "attention" : bucket} color={deploymentHealthBucketColor(bucket)} />;
+      const severity = p.row.listSignalSeverity;
+      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
     },
     sortable: false,
   },
@@ -114,7 +115,7 @@ export default function IngressesTable({
   const filterPredicate = useCallback(
     (row: Row, q: string) =>
       row.name.toLowerCase().includes(q) ||
-      (row.routingHealthBucket || "").toLowerCase().includes(q) ||
+      (row.listSignalSeverity || "").toLowerCase().includes(q) ||
       (row.addressState || "").toLowerCase().includes(q) ||
       (row.tlsHint || "").toLowerCase().includes(q) ||
       (row.ingressClassName || "").toLowerCase().includes(q) ||

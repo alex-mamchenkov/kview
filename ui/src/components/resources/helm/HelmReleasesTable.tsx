@@ -3,7 +3,7 @@ import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
 import { apiGetWithContext } from "../../../api";
 import { fmtTs, valueOrDash } from "../../../utils/format";
-import { deploymentHealthBucketColor } from "../../../utils/k8sUi";
+import { helmStatusChipColor, listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
 import HelmReleaseDrawer from "./HelmReleaseDrawer";
 import { HelmInstallButton } from "./HelmActions";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
@@ -28,57 +28,36 @@ type HelmRelease = {
   storageBackend: string;
   stabilityBucket?: string;
   transitional?: boolean;
-  needsAttention?: boolean;
+  listStatus?: string;
+  listSignalSeverity?: string;
+  listSignalCount?: number;
 };
 
 type Row = HelmRelease & { id: string };
-
-type ChipColor = "success" | "warning" | "error" | "default";
-
-function helmStatusChipColor(status?: string | null): ChipColor {
-  switch (status) {
-    case "deployed":
-      return "success";
-    case "superseded":
-      return "default";
-    case "failed":
-      return "error";
-    case "pending-install":
-    case "pending-upgrade":
-    case "pending-rollback":
-    case "uninstalling":
-    case "unknown":
-      return "warning";
-    default:
-      return "default";
-  }
-}
 
 const resourceLabel = getResourceLabel("helm");
 
 const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 200 },
   {
-    field: "stabilityBucket",
+    field: "listSignalSeverity",
     headerName: "Signal",
     width: 140,
     renderCell: (p) => {
-      const bucket = p.row.stabilityBucket;
-      if (!bucket) return "-";
-      const label = p.row.transitional ? "transitional" : p.row.needsAttention ? "attention" : bucket;
-      return <Chip size="small" label={label} color={deploymentHealthBucketColor(bucket)} />;
+      const severity = p.row.listSignalSeverity;
+      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
     },
     sortable: false,
   },
   {
-    field: "status",
+    field: "listStatus",
     headerName: "Status",
     width: 140,
     renderCell: (p) => (
       <Chip
         size="small"
-        label={valueOrDash(p.value as string | undefined)}
-        color={helmStatusChipColor(p.value as string | undefined)}
+        label={valueOrDash((p.row.listStatus || p.row.status) as string | undefined)}
+        color={helmStatusChipColor((p.row.listStatus || p.row.status) as string | undefined)}
       />
     ),
   },
@@ -133,7 +112,7 @@ export default function HelmReleasesTable({
     (row: Row, q: string) =>
       row.name.toLowerCase().includes(q) ||
       row.chart.toLowerCase().includes(q) ||
-      (row.stabilityBucket || "").toLowerCase().includes(q) ||
+      (row.listSignalSeverity || "").toLowerCase().includes(q) ||
       (row.transitional ? "transitional" : "").includes(q) ||
       (row.appVersion || "").toLowerCase().includes(q),
     [],

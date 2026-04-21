@@ -9,7 +9,7 @@ import {
 } from "../../../types/api";
 import PodDrawer from "./PodDrawer";
 import { fmtAge } from "../../../utils/format";
-import { eventChipColor, listHealthHintColor, phaseChipColor } from "../../../utils/k8sUi";
+import { eventChipColor, listSignalLabel, listSignalSeverityColor, phaseChipColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
@@ -32,7 +32,9 @@ type Pod = PodListItemUsage & {
   };
   /** Snapshot-derived (optional for older backends) */
   restartSeverity?: string;
-  listHealthHint?: string;
+  listStatus?: string;
+  listSignalSeverity?: string;
+  listSignalCount?: number;
 };
 
 type Row = Pod & { id: string };
@@ -78,19 +80,18 @@ const baseColumns: GridColDef<Row>[] = [
     headerName: "Status",
     width: 130,
     renderCell: (p) => {
-      const phase = String(p.value || "");
+      const phase = String(p.row.listStatus || p.value || "");
       return <Chip size="small" label={phase || "-"} color={phaseChipColor(phase)} />;
     },
   },
   { field: "ready", headerName: "Ready", width: 110 },
   {
-    field: "listHealthHint",
+    field: "listSignalSeverity",
     headerName: "Signal",
     width: 120,
     renderCell: (p) => {
-      const hint = p.row.listHealthHint;
-      if (!hint) return "-";
-      return <Chip size="small" label={hint} color={listHealthHintColor(hint)} />;
+      const severity = p.row.listSignalSeverity;
+      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
     },
     sortable: false,
   },
@@ -192,7 +193,7 @@ export default function PodsTable({ token, namespace }: { token: string; namespa
       row.name.toLowerCase().includes(q) ||
       (row.node || "").toLowerCase().includes(q) ||
       (row.phase || "").toLowerCase().includes(q) ||
-      (row.listHealthHint || "").toLowerCase().includes(q) ||
+      (row.listSignalSeverity || "").toLowerCase().includes(q) ||
       (row.restartSeverity || "").toLowerCase().includes(q)
     );
   }, []);

@@ -16,10 +16,7 @@ import KeyValueTable from "../../shared/KeyValueTable";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
-import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
-} from "../../shared/AttentionSummary";
+import AttentionSummary from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import ConditionsTable from "../../shared/ConditionsTable";
 import EventsList from "../../shared/EventsList";
@@ -233,36 +230,6 @@ export default function PersistentVolumeDrawer(props: {
     [resourceSignals.signals],
   );
 
-  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
-    const phase = summary?.phase;
-    if (!phase) return undefined;
-    const tone: AttentionHealth["tone"] =
-      phase === "Bound" ? "success" : phase === "Pending" || phase === "Released" ? "warning" : "default";
-    return {
-      label: `Phase: ${phase}`,
-      tone,
-      tooltip: `Capacity ${summary?.capacity || "-"} · Reclaim ${summary?.reclaimPolicy || "-"}`,
-    };
-  }, [summary?.phase, summary?.capacity, summary?.reclaimPolicy]);
-
-  const attentionReasons = useMemo<AttentionReason[]>(() => {
-    const reasons: AttentionReason[] = [];
-    if (summary?.phase === "Released") {
-      reasons.push({ label: "Volume is released and not reclaimed", severity: "warning" });
-    }
-    if (summary?.phase === "Pending") {
-      reasons.push({ label: "Volume is pending", severity: "warning" });
-    }
-    if (showPvcDeniedHint) {
-      reasons.push({ label: "Bound PVC details access denied", severity: "info" });
-    }
-    const nonHealthy = (conditions || []).filter((c) => String(c.status) !== "True");
-    if (nonHealthy.length > 0) {
-      reasons.push({ label: `${nonHealthy.length} non-healthy condition(s)`, severity: "warning" });
-    }
-    return reasons;
-  }, [summary?.phase, showPvcDeniedHint, conditions]);
-
   const warningEvents = useMemo(
     () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
     [events],
@@ -302,8 +269,6 @@ export default function PersistentVolumeDrawer(props: {
                   )}
 
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={pvSignals}
                     onJumpToEvents={() => setTab(2)}
                     onJumpToSpec={() => setTab(1)}

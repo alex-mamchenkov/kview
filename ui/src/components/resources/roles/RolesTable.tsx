@@ -11,6 +11,7 @@ import {
   type ApiDataplaneListResponse,
 } from "../../../types/api";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
+import { listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
 
 type Role = {
   name: string;
@@ -18,7 +19,9 @@ type Role = {
   rulesCount: number;
   ageSec: number;
   privilegeBreadth?: string;
-  needsAttention?: boolean;
+  listStatus?: string;
+  listSignalSeverity?: string;
+  listSignalCount?: number;
 };
 
 type Row = Role & { id: string };
@@ -28,13 +31,12 @@ const resourceLabel = getResourceLabel("roles");
 const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
   {
-    field: "privilegeBreadth",
+    field: "listSignalSeverity",
     headerName: "Signal",
     width: 130,
     renderCell: (p) => {
-      const breadth = p.row.privilegeBreadth;
-      if (!breadth) return "-";
-      return <Chip size="small" label={breadth} color={breadth === "broad" || breadth === "empty" ? "warning" : "default"} />;
+      const severity = p.row.listSignalSeverity;
+      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
     },
     sortable: false,
   },
@@ -75,7 +77,7 @@ export default function RolesTable({
   }, [token, namespace]);
 
   const filterPredicate = useCallback(
-    (row: Row, q: string) => row.name.toLowerCase().includes(q) || (row.privilegeBreadth || "").toLowerCase().includes(q),
+    (row: Row, q: string) => row.name.toLowerCase().includes(q) || (row.listSignalSeverity || "").toLowerCase().includes(q),
     [],
   );
 

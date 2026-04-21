@@ -4,7 +4,7 @@ import { GridColDef } from "@mui/x-data-grid";
 import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
-import { deploymentHealthBucketColor, pvcPhaseChipColor } from "../../../utils/k8sUi";
+import { listSignalLabel, listSignalSeverityColor, pvcPhaseChipColor } from "../../../utils/k8sUi";
 import PersistentVolumeClaimDrawer from "./PersistentVolumeClaimDrawer";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
@@ -21,9 +21,10 @@ type PersistentVolumeClaim = {
   capacity?: string;
   volumeMode?: string;
   ageSec: number;
-  healthBucket?: string;
-  needsAttention?: boolean;
   resizePending?: boolean;
+  listStatus?: string;
+  listSignalSeverity?: string;
+  listSignalCount?: number;
 };
 
 type Row = PersistentVolumeClaim & { id: string };
@@ -44,14 +45,12 @@ function formatAccessModes(modes?: string[]) {
 const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
   {
-    field: "healthBucket",
+    field: "listSignalSeverity",
     headerName: "Signal",
     width: 140,
     renderCell: (p) => {
-      const bucket = p.row.healthBucket;
-      if (!bucket) return "-";
-      const label = p.row.resizePending ? `${bucket} · resize` : p.row.needsAttention ? "attention" : bucket;
-      return <Chip size="small" label={label} color={deploymentHealthBucketColor(bucket)} />;
+      const severity = p.row.listSignalSeverity;
+      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
     },
     sortable: false,
   },
@@ -62,8 +61,8 @@ const columns: GridColDef<Row>[] = [
     renderCell: (p) => (
       <Chip
         size="small"
-        label={valueOrDash(String(p.value || ""))}
-        color={pvcPhaseChipColor(String(p.value || ""))}
+        label={valueOrDash(String(p.row.listStatus || p.value || ""))}
+        color={pvcPhaseChipColor(String(p.row.listStatus || p.value || ""))}
       />
     ),
   },
@@ -126,7 +125,7 @@ export default function PersistentVolumeClaimsTable({
     (row: Row, q: string) =>
       row.name.toLowerCase().includes(q) ||
       (row.phase || "").toLowerCase().includes(q) ||
-      (row.healthBucket || "").toLowerCase().includes(q) ||
+      (row.listSignalSeverity || "").toLowerCase().includes(q) ||
       (row.storageClassName || "").toLowerCase().includes(q) ||
       (row.volumeName || "").toLowerCase().includes(q),
     [],

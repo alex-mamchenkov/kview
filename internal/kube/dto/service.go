@@ -59,6 +59,9 @@ type ServiceListItemDTO struct {
 	EndpointHealthBucket string   `json:"endpointHealthBucket,omitempty"`
 	ExposureHint         string   `json:"exposureHint,omitempty"`
 	NeedsAttention       bool     `json:"needsAttention,omitempty"`
+	ListStatus           string   `json:"listStatus,omitempty"`
+	ListSignalSeverity   string   `json:"listSignalSeverity,omitempty"` // high | medium | low | ok
+	ListSignalCount      int      `json:"listSignalCount,omitempty"`
 }
 
 type ServiceLinkDTO struct {

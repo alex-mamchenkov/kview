@@ -19,10 +19,7 @@ import Section from "../../shared/Section";
 import KeyValueTable from "../../shared/KeyValueTable";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
-import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
-} from "../../shared/AttentionSummary";
+import AttentionSummary from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import ConditionsTable from "../../shared/ConditionsTable";
 import EventsList from "../../shared/EventsList";
@@ -182,27 +179,6 @@ export default function CustomResourceDefinitionDrawer(props: {
     [resourceSignals.signals],
   );
 
-  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
-    if (!summary) return undefined;
-    return {
-      label: `Established: ${summary.established ? "Yes" : "No"}`,
-      tone: summary.established ? "success" : "warning",
-      tooltip: `Versions ${versions.length} · Scope ${summary.scope || "-"}`,
-    };
-  }, [summary, versions.length]);
-
-  const attentionReasons = useMemo<AttentionReason[]>(() => {
-    const reasons: AttentionReason[] = [];
-    if (!summary?.established) {
-      reasons.push({ label: "CRD is not established", severity: "warning" });
-    }
-    const deprecatedCount = versions.filter((v) => v.deprecated).length;
-    if (deprecatedCount > 0) {
-      reasons.push({ label: `${deprecatedCount} deprecated version(s)`, severity: "warning" });
-    }
-    return reasons;
-  }, [summary?.established, versions]);
-
   const warningEvents = useMemo(
     () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
     [events],
@@ -242,8 +218,6 @@ export default function CustomResourceDefinitionDrawer(props: {
                   )}
 
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={crdSignals}
                     onJumpToEvents={() => setTab(2)}
                   />

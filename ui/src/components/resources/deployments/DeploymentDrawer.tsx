@@ -27,10 +27,7 @@ import { phaseChipColor } from "../../../utils/k8sUi";
 import KeyValueTable from "../../shared/KeyValueTable";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
-import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
-} from "../../shared/AttentionSummary";
+import AttentionSummary from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import ConditionsTable from "../../shared/ConditionsTable";
 import EventsList from "../../shared/EventsList";
@@ -258,38 +255,6 @@ export default function DeploymentDrawer(props: {
     [detailSignals, snapshotSignals.signals],
   );
 
-  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
-    if (!summary) return undefined;
-    const desired = summary.desired ?? 0;
-    const available = summary.available ?? 0;
-    const ready = summary.ready ?? 0;
-    const tone: AttentionHealth["tone"] =
-      desired > 0 && available === 0 ? "error" : ready < desired ? "warning" : "success";
-    return {
-      label: `Ready ${ready}/${desired} · Available ${available}`,
-      tone,
-      tooltip: `Deployment readiness from backend summary counters`,
-    };
-  }, [summary]);
-
-  const attentionReasons = useMemo<AttentionReason[]>(() => {
-    if (!rollout) return [];
-    const reasons: AttentionReason[] = [];
-    if (rollout.progressDeadlineExceeded) {
-      reasons.push({ label: "Progress deadline exceeded", severity: "error" });
-    }
-    if (rollout.unavailableReplicas > 0) {
-      reasons.push({ label: `${rollout.unavailableReplicas} unavailable replica(s)`, severity: "warning" });
-    }
-    if (rollout.missingReplicas > 0) {
-      reasons.push({ label: `${rollout.missingReplicas} missing replica(s)`, severity: "warning" });
-    }
-    if ((rollout.warnings || []).length > 0) {
-      reasons.push({ label: `${rollout.warnings?.length || 0} rollout warning(s)`, severity: "warning" });
-    }
-    return reasons;
-  }, [rollout]);
-
   const warningEvents = useMemo(
     () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
     [events],
@@ -377,8 +342,6 @@ export default function DeploymentDrawer(props: {
                   )}
 
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={deploymentSignals}
                     onJumpToEvents={() => setTab(4)}
                     onJumpToSpec={() => setTab(3)}

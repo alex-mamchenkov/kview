@@ -15,6 +15,9 @@ type ReplicaSetDTO struct {
 	AgeSec         int64              `json:"ageSec"`
 	HealthBucket   string             `json:"healthBucket,omitempty"` // healthy | progressing | degraded | unknown
 	NeedsAttention bool               `json:"needsAttention,omitempty"`
+	ListStatus     string             `json:"listStatus,omitempty"`
+	ListSignalSeverity string         `json:"listSignalSeverity,omitempty"` // high | medium | low | ok
+	ListSignalCount int               `json:"listSignalCount,omitempty"`
 }
 
 type ReplicaSetDetailsDTO struct {

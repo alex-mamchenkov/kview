@@ -1,8 +1,8 @@
 import React from "react";
-import { Box, Chip, Tooltip, Typography } from "@mui/material";
+import { Box, Chip, Typography } from "@mui/material";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import type { ChipColor } from "../../utils/k8sUi";
 import type { DashboardSignalItem } from "../../types/api";
+import type { ChipColor } from "../../utils/k8sUi";
 import Section from "./Section";
 import SignalHintIcons from "./SignalHintIcons";
 
@@ -19,15 +19,17 @@ export type AttentionReason = {
 };
 
 export type AttentionSummaryProps = {
-  /** Primary health chip (e.g. healthBucket / phase). Omit when there is nothing to show. */
+  /** Deprecated. Ignored; retained to avoid breaking migrated drawers mid-rollout. */
   health?: AttentionHealth;
-  /** Attention reasons / structured warnings surfaced by the backend. */
+  /** Deprecated. Ignored; retained to avoid breaking migrated drawers mid-rollout. */
   reasons?: AttentionReason[];
   /** Per-resource signals from the dataplane signal engine. */
   signals?: DashboardSignalItem[];
-  /** Optional jump chips for drill-down. Any handler left undefined hides its chip. */
+  /** Deprecated. Kept for backward-compatible callsites; ignored by this component. */
   onJumpToEvents?: () => void;
+  /** Deprecated. Kept for backward-compatible callsites; ignored by this component. */
   onJumpToConditions?: () => void;
+  /** Deprecated. Kept for backward-compatible callsites; ignored by this component. */
   onJumpToSpec?: () => void;
 };
 
@@ -38,34 +40,22 @@ function severityColor(severity?: string): "error" | "warning" | "info" | "defau
   return "default";
 }
 
-function worstSignalSeverity(signals: DashboardSignalItem[]): "error" | "warning" | "info" | "default" {
-  if (signals.some((s) => s.severity === "high")) return "error";
-  if (signals.some((s) => s.severity === "medium")) return "warning";
-  if (signals.some((s) => s.severity === "low")) return "info";
-  return "default";
-}
-
 function signalText(signal: DashboardSignalItem): string {
   const actual = signal.actualData || signal.reason;
   const parts = [actual];
   if (signal.calculatedData && signal.calculatedData !== actual) parts.push(`Calculated: ${signal.calculatedData}`);
-  if (signal.likelyCause) parts.push(`Likely cause: ${signal.likelyCause}`);
-  if (signal.suggestedAction) parts.push(`Next step: ${signal.suggestedAction}`);
   return parts.join(" · ");
 }
 
 function isEmpty(props: AttentionSummaryProps): boolean {
-  const { health, reasons, signals } = props;
-  if (health && health.label) return false;
-  if (reasons && reasons.length > 0) return false;
+  const { signals } = props;
   if (signals && signals.length > 0) return false;
   return true;
 }
 
 /**
  * AttentionSummary renders the top-of-overview state callout for a resource
- * drawer: health chip, backend-provided attention reasons and a top-signal
- * preview, plus jump chips for drill-down into Events / Conditions / Spec.
+ * drawer: top-signal preview.
  *
  * It returns null when the resource has no attention-worthy state so drawers
  * can render it unconditionally at the top of the Overview tab.
@@ -78,19 +68,7 @@ function isEmpty(props: AttentionSummaryProps): boolean {
 export default function AttentionSummary(props: AttentionSummaryProps) {
   if (isEmpty(props)) return null;
 
-  const {
-    health,
-    reasons = [],
-    signals = [],
-    onJumpToEvents,
-    onJumpToConditions,
-    onJumpToSpec,
-  } = props;
-
-  const worstSignal = signals.length > 0 ? worstSignalSeverity(signals) : "default";
-  const headerColor: ChipColor =
-    (health?.tone && health.tone !== "default" && health.tone) ||
-    (worstSignal !== "default" ? (worstSignal as ChipColor) : "warning");
+  const { signals = [] } = props;
 
   return (
     <Section title="Attention" divider={false} headerSx={{ mb: 0.5 }}>
@@ -107,46 +85,7 @@ export default function AttentionSummary(props: AttentionSummaryProps) {
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
           <WarningAmberIcon sx={{ color: "warning.main", fontSize: 20 }} />
-          {health?.label ? (
-            health.tooltip ? (
-              <Tooltip title={health.tooltip}>
-                <Chip size="small" color={headerColor} label={health.label} />
-              </Tooltip>
-            ) : (
-              <Chip size="small" color={headerColor} label={health.label} />
-            )
-          ) : null}
-          {signals.length > 0 ? (
-            <Chip
-              size="small"
-              color={worstSignal === "default" ? "warning" : worstSignal}
-              label={`Signals: ${signals.length}`}
-            />
-          ) : null}
         </Box>
-
-        {reasons.length > 0 ? (
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
-            {reasons.map((reason, idx) => {
-              const chip = (
-                <Chip
-                  key={`${reason.label}-${idx}`}
-                  size="small"
-                  variant="outlined"
-                  color={severityColor(reason.severity)}
-                  label={reason.label}
-                />
-              );
-              return reason.tooltip ? (
-                <Tooltip key={`${reason.label}-${idx}-tip`} title={reason.tooltip}>
-                  {chip}
-                </Tooltip>
-              ) : (
-                chip
-              );
-            })}
-          </Box>
-        ) : null}
 
         {signals.length > 0 ? (
           <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
@@ -176,20 +115,6 @@ export default function AttentionSummary(props: AttentionSummaryProps) {
             ) : null}
           </Box>
         ) : null}
-
-        {(onJumpToEvents || onJumpToConditions || onJumpToSpec) && (
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-            {onJumpToConditions ? (
-              <Chip size="small" variant="outlined" label="Conditions" onClick={onJumpToConditions} />
-            ) : null}
-            {onJumpToEvents ? (
-              <Chip size="small" variant="outlined" label="Events" onClick={onJumpToEvents} />
-            ) : null}
-            {onJumpToSpec ? (
-              <Chip size="small" variant="outlined" label="Spec" onClick={onJumpToSpec} />
-            ) : null}
-          </Box>
-        )}
       </Box>
     </Section>
   );

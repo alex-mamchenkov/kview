@@ -27,10 +27,7 @@ import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import Section from "../../shared/Section";
 import MetadataSection from "../../shared/MetadataSection";
-import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
-} from "../../shared/AttentionSummary";
+import AttentionSummary from "../../shared/AttentionSummary";
 import ConditionsTable from "../../shared/ConditionsTable";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
@@ -205,41 +202,6 @@ export default function StatefulSetDrawer(props: {
     refreshKey: retryNonce + refreshNonce,
   });
 
-  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
-    if (!summary) return undefined;
-    const desired = summary.desired ?? 0;
-    const ready = summary.ready ?? 0;
-    const updated = summary.updated ?? 0;
-    const tone: AttentionHealth["tone"] =
-      desired > 0 && ready === 0 ? "error" : ready < desired || updated < desired ? "warning" : "success";
-    return {
-      label: `Ready ${ready}/${desired} · Updated ${updated}/${desired}`,
-      tone,
-      tooltip: "StatefulSet readiness and update counters from backend summary.",
-    };
-  }, [summary]);
-
-  const attentionReasons = useMemo<AttentionReason[]>(() => {
-    if (!summary) return [];
-    const reasons: AttentionReason[] = [];
-    if ((summary.desired ?? 0) > (summary.ready ?? 0)) {
-      reasons.push({
-        label: `${(summary.desired ?? 0) - (summary.ready ?? 0)} replica(s) not ready`,
-        severity: "warning",
-      });
-    }
-    if ((summary.desired ?? 0) > (summary.updated ?? 0)) {
-      reasons.push({
-        label: `${(summary.desired ?? 0) - (summary.updated ?? 0)} replica(s) not updated`,
-        severity: "warning",
-      });
-    }
-    if (hasUnhealthyConditions) {
-      reasons.push({ label: "Unhealthy StatefulSet condition(s)", severity: "warning" });
-    }
-    return reasons;
-  }, [summary, hasUnhealthyConditions]);
-
   const warningEvents = useMemo(
     () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
     [events],
@@ -323,8 +285,6 @@ export default function StatefulSetDrawer(props: {
                   )}
 
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={statefulSetSignals}
                     onJumpToEvents={() => setTab(3)}
                     onJumpToSpec={() => setTab(2)}

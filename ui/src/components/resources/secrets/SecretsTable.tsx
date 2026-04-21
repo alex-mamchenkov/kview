@@ -8,6 +8,7 @@ import SecretDrawer from "./SecretDrawer";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
+import { listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
 
 type Secret = {
   name: string;
@@ -18,7 +19,9 @@ type Secret = {
   ageSec: number;
   contentHint?: string;
   typeHint?: string;
-  needsAttention?: boolean;
+  listStatus?: string;
+  listSignalSeverity?: string;
+  listSignalCount?: number;
 };
 
 type Row = Secret & { id: string };
@@ -28,13 +31,12 @@ const resourceLabel = getResourceLabel("secrets");
 const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
   {
-    field: "contentHint",
+    field: "listSignalSeverity",
     headerName: "Signal",
     width: 130,
     renderCell: (p) => {
-      const hint = p.row.contentHint;
-      if (!hint) return "-";
-      return <Chip size="small" label={p.row.needsAttention ? "empty" : hint} color={hint === "empty" ? "warning" : "success"} />;
+      const severity = p.row.listSignalSeverity;
+      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
     },
     sortable: false,
   },
@@ -94,7 +96,7 @@ export default function SecretsTable({
       row.name.toLowerCase().includes(q) ||
       (row.type || "").toLowerCase().includes(q) ||
       (row.typeHint || "").toLowerCase().includes(q) ||
-      (row.contentHint || "").toLowerCase().includes(q),
+      (row.listSignalSeverity || "").toLowerCase().includes(q),
     [],
   );
 

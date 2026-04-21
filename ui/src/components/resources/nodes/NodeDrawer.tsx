@@ -19,10 +19,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGetWithContext } from "../../../api";
 import { useActiveContext } from "../../../activeContext";
 import { useConnectionState } from "../../../connectionState";
-import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
-} from "../../shared/AttentionSummary";
+import AttentionSummary from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import ConditionsTable from "../../shared/ConditionsTable";
 import CodeBlock from "../../shared/CodeBlock";
@@ -183,29 +180,6 @@ export default function NodeDrawer(props: {
     [resourceSignals.signals],
   );
 
-  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
-    if (!summary) return undefined;
-    return {
-      label: `Status: ${summary.status || "unknown"}`,
-      tone: summary.status === "Ready" ? "success" : summary.status === "NotReady" ? "error" : "warning",
-      tooltip: `Roles ${(summary.roles || []).join(", ") || "-"} · kubelet ${summary.kubeletVersion || "-"}`,
-    };
-  }, [summary]);
-
-  const attentionReasons = useMemo<AttentionReason[]>(() => {
-    const reasons: AttentionReason[] = [];
-    if (hasUnhealthyConditions) {
-      reasons.push({ label: "Node has unhealthy conditions", severity: "warning" });
-    }
-    if (taints.length > 0) {
-      reasons.push({ label: `${taints.length} taint(s) applied`, severity: "info" });
-    }
-    if (derived) {
-      reasons.push({ label: "View is derived from cached pod snapshots", severity: "warning" });
-    }
-    return reasons;
-  }, [hasUnhealthyConditions, taints.length, derived]);
-
   return (
     <RightDrawer open={props.open} onClose={props.onClose}>
       <ResourceDrawerShell title={<>Node: {name || "-"}</>} onClose={props.onClose}>
@@ -256,8 +230,6 @@ export default function NodeDrawer(props: {
                   )}
 
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={nodeSignals}
                     onJumpToConditions={() => setTab(2)}
                   />

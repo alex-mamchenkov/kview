@@ -28,6 +28,9 @@ type NodeListItemDTO struct {
 	CPUPctAlloc     float64 `json:"cpuPctAllocatable,omitempty"`
 	MemoryPctAlloc  float64 `json:"memoryPctAllocatable,omitempty"`
 	UsageAvailable  bool    `json:"usageAvailable,omitempty"`
+	ListStatus      string  `json:"listStatus,omitempty"`
+	ListSignalSeverity string `json:"listSignalSeverity,omitempty"` // high | medium | low | ok
+	ListSignalCount int     `json:"listSignalCount,omitempty"`
 }
 
 type NodeDetailsDTO struct {
@@ -89,6 +92,9 @@ type NodeCapacityDTO struct {
 	CPUPctAlloc     float64 `json:"cpuPctAllocatable,omitempty"`
 	MemoryPctAlloc  float64 `json:"memoryPctAllocatable,omitempty"`
 	UsageAvailable  bool    `json:"usageAvailable,omitempty"`
+	ListStatus      string  `json:"listStatus,omitempty"`
+	ListSignalSeverity string `json:"listSignalSeverity,omitempty"` // high | medium | low | ok
+	ListSignalCount int     `json:"listSignalCount,omitempty"`
 }
 
 type NodeTaintDTO struct {

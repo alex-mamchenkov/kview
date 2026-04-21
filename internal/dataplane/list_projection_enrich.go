@@ -23,7 +23,31 @@ const (
 	deployBucketProgressing = "progressing"
 	deployBucketDegraded    = "degraded"
 	deployBucketUnknown     = "unknown"
+
+	listSignalOK = "ok"
 )
+
+func listSignalFromBucket(bucket string, needsAttention bool) (severity string, count int) {
+	switch bucket {
+	case deployBucketDegraded:
+		return "high", 1
+	case deployBucketProgressing:
+		if needsAttention {
+			return "medium", 1
+		}
+		return "low", 1
+	case deployBucketHealthy:
+		if needsAttention {
+			return "low", 1
+		}
+		return listSignalOK, 0
+	default:
+		if needsAttention {
+			return "medium", 1
+		}
+		return listSignalOK, 0
+	}
+}
 
 // ListRestartSeverity maps total pod restarts to a coarse bucket for list APIs (zero → none).
 func ListRestartSeverity(restarts int32) string {
@@ -50,6 +74,27 @@ func EnrichPodListItemsForAPI(items []dto.PodListItemDTO) []dto.PodListItemDTO {
 		p := items[i]
 		p.RestartSeverity = ListRestartSeverity(p.Restarts)
 		p.ListHealthHint = podListHealthHint(p)
+		p.ListStatus = strings.ToLower(strings.TrimSpace(p.Phase))
+		switch p.RestartSeverity {
+		case listRestartHigh:
+			p.ListSignalSeverity = "high"
+			p.ListSignalCount = 1
+		case listRestartMedium:
+			p.ListSignalSeverity = "medium"
+			p.ListSignalCount = 1
+		case listRestartLow:
+			p.ListSignalSeverity = "low"
+			p.ListSignalCount = 1
+		default:
+			switch p.ListHealthHint {
+			case podListHintProblem:
+				p.ListSignalSeverity, p.ListSignalCount = "high", 1
+			case podListHintAttention:
+				p.ListSignalSeverity, p.ListSignalCount = "medium", 1
+			default:
+				p.ListSignalSeverity, p.ListSignalCount = listSignalOK, 0
+			}
+		}
 		out[i] = p
 	}
 	return out
@@ -98,6 +143,8 @@ func EnrichDeploymentListItemsForAPI(items []dto.DeploymentListItemDTO) []dto.De
 		bucket, attention := deploymentListSignals(d)
 		d.HealthBucket = bucket
 		d.RolloutNeedsAttention = attention
+		d.ListStatus = bucket
+		d.ListSignalSeverity, d.ListSignalCount = listSignalFromBucket(bucket, attention)
 		out[i] = d
 	}
 	return out
@@ -130,6 +177,8 @@ func EnrichDaemonSetListItemsForAPI(items []dto.DaemonSetDTO) []dto.DaemonSetDTO
 	for i := range items {
 		ds := items[i]
 		ds.HealthBucket, ds.NeedsAttention = daemonSetListSignals(ds)
+		ds.ListStatus = ds.HealthBucket
+		ds.ListSignalSeverity, ds.ListSignalCount = listSignalFromBucket(ds.HealthBucket, ds.NeedsAttention)
 		out[i] = ds
 	}
 	return out
@@ -157,6 +206,8 @@ func EnrichStatefulSetListItemsForAPI(items []dto.StatefulSetDTO) []dto.Stateful
 	for i := range items {
 		sts := items[i]
 		sts.HealthBucket, sts.NeedsAttention = statefulSetListSignals(sts)
+		sts.ListStatus = sts.HealthBucket
+		sts.ListSignalSeverity, sts.ListSignalCount = listSignalFromBucket(sts.HealthBucket, sts.NeedsAttention)
 		out[i] = sts
 	}
 	return out
@@ -184,6 +235,8 @@ func EnrichReplicaSetListItemsForAPI(items []dto.ReplicaSetDTO) []dto.ReplicaSet
 	for i := range items {
 		rs := items[i]
 		rs.HealthBucket, rs.NeedsAttention = replicaSetListSignals(rs)
+		rs.ListStatus = rs.HealthBucket
+		rs.ListSignalSeverity, rs.ListSignalCount = listSignalFromBucket(rs.HealthBucket, rs.NeedsAttention)
 		out[i] = rs
 	}
 	return out
@@ -211,6 +264,8 @@ func EnrichJobListItemsForAPI(items []dto.JobDTO) []dto.JobDTO {
 	for i := range items {
 		j := items[i]
 		j.HealthBucket, j.NeedsAttention = jobListSignals(j)
+		j.ListStatus = j.HealthBucket
+		j.ListSignalSeverity, j.ListSignalCount = listSignalFromBucket(j.HealthBucket, j.NeedsAttention)
 		out[i] = j
 	}
 	return out
@@ -244,6 +299,14 @@ func EnrichCronJobListItemsForAPI(items []dto.CronJobDTO) []dto.CronJobDTO {
 	for i := range items {
 		cj := items[i]
 		cj.HealthBucket, cj.NeedsAttention = cronJobListSignals(cj)
+		cj.ListStatus = cj.HealthBucket
+		// CronJob "progressing" (active jobs) is a status signal, not attention by itself.
+		// Keep list Signal as OK unless a real attention condition is present.
+		if cj.NeedsAttention {
+			cj.ListSignalSeverity, cj.ListSignalCount = listSignalFromBucket(cj.HealthBucket, cj.NeedsAttention)
+		} else {
+			cj.ListSignalSeverity, cj.ListSignalCount = listSignalOK, 0
+		}
 		out[i] = cj
 	}
 	return out
@@ -272,6 +335,8 @@ func EnrichServiceListItemsForAPI(items []dto.ServiceListItemDTO) []dto.ServiceL
 		svc := items[i]
 		svc.EndpointHealthBucket, svc.NeedsAttention = serviceListSignals(svc)
 		svc.ExposureHint = serviceExposureHint(svc)
+		svc.ListStatus = svc.EndpointHealthBucket
+		svc.ListSignalSeverity, svc.ListSignalCount = listSignalFromBucket(svc.EndpointHealthBucket, svc.NeedsAttention)
 		out[i] = svc
 	}
 	return out
@@ -316,6 +381,8 @@ func EnrichIngressListItemsForAPI(items []dto.IngressListItemDTO) []dto.IngressL
 		ing.RoutingHealthBucket, ing.NeedsAttention = ingressListSignals(ing)
 		ing.AddressState = ingressAddressState(ing)
 		ing.TLSHint = ingressTLSHint(ing)
+		ing.ListStatus = ing.RoutingHealthBucket
+		ing.ListSignalSeverity, ing.ListSignalCount = listSignalFromBucket(ing.RoutingHealthBucket, ing.NeedsAttention)
 		out[i] = ing
 	}
 	return out
@@ -356,6 +423,8 @@ func EnrichPVCListItemsForAPI(items []dto.PersistentVolumeClaimDTO) []dto.Persis
 		pvc := items[i]
 		pvc.HealthBucket, pvc.NeedsAttention = pvcListSignals(pvc)
 		pvc.ResizePending = pvc.RequestedStorage != "" && pvc.Capacity != "" && pvc.RequestedStorage != pvc.Capacity
+		pvc.ListStatus = strings.ToLower(strings.TrimSpace(pvc.Phase))
+		pvc.ListSignalSeverity, pvc.ListSignalCount = listSignalFromBucket(pvc.HealthBucket, pvc.NeedsAttention)
 		out[i] = pvc
 	}
 	return out
@@ -383,6 +452,8 @@ func EnrichHelmReleaseListItemsForAPI(items []dto.HelmReleaseDTO) []dto.HelmRele
 	for i := range items {
 		rel := items[i]
 		rel.StabilityBucket, rel.Transitional, rel.NeedsAttention = helmReleaseListSignals(rel, time.Now())
+		rel.ListStatus = strings.ToLower(strings.TrimSpace(rel.Status))
+		rel.ListSignalSeverity, rel.ListSignalCount = listSignalFromBucket(rel.StabilityBucket, rel.NeedsAttention)
 		out[i] = rel
 	}
 	return out
@@ -419,6 +490,12 @@ func EnrichConfigMapListItemsForAPI(items []dto.ConfigMapDTO) []dto.ConfigMapDTO
 	for i := range items {
 		cm := items[i]
 		cm.ContentHint, cm.NeedsAttention = configContentHint(cm.KeysCount)
+		cm.ListStatus = cm.ContentHint
+		if cm.NeedsAttention {
+			cm.ListSignalSeverity, cm.ListSignalCount = "low", 1
+		} else {
+			cm.ListSignalSeverity, cm.ListSignalCount = listSignalOK, 0
+		}
 		out[i] = cm
 	}
 	return out
@@ -445,6 +522,12 @@ func EnrichSecretListItemsForAPI(items []dto.SecretDTO) []dto.SecretDTO {
 		sec := items[i]
 		sec.ContentHint, sec.NeedsAttention = configContentHint(sec.KeysCount)
 		sec.TypeHint = secretTypeHint(sec.Type)
+		sec.ListStatus = sec.ContentHint
+		if sec.NeedsAttention {
+			sec.ListSignalSeverity, sec.ListSignalCount = "low", 1
+		} else {
+			sec.ListSignalSeverity, sec.ListSignalCount = listSignalOK, 0
+		}
 		out[i] = sec
 	}
 	return out
@@ -480,6 +563,12 @@ func EnrichServiceAccountListItemsForAPI(items []dto.ServiceAccountListItemDTO) 
 		sa := items[i]
 		sa.TokenMountPolicy = serviceAccountTokenMountPolicy(sa.AutomountServiceAccountToken)
 		sa.PullSecretHint = serviceAccountPullSecretHint(sa.ImagePullSecretsCount)
+		sa.ListStatus = sa.TokenMountPolicy
+		if sa.TokenMountPolicy == "enabled" {
+			sa.ListSignalSeverity, sa.ListSignalCount = "low", 1
+		} else {
+			sa.ListSignalSeverity, sa.ListSignalCount = listSignalOK, 0
+		}
 		out[i] = sa
 	}
 	return out
@@ -517,6 +606,8 @@ func EnrichNodeListItemsForAPI(items []dto.NodeListItemDTO) []dto.NodeListItemDT
 		if node.PodDensityBucket == deployBucketDegraded {
 			node.NeedsAttention = true
 		}
+		node.ListStatus = strings.ToLower(strings.TrimSpace(node.Status))
+		node.ListSignalSeverity, node.ListSignalCount = listSignalFromBucket(node.HealthBucket, node.NeedsAttention)
 		out[i] = node
 	}
 	return out
@@ -606,6 +697,12 @@ func EnrichRoleListItemsForAPI(items []dto.RoleListItemDTO) []dto.RoleListItemDT
 	for i := range items {
 		role := items[i]
 		role.PrivilegeBreadth, role.NeedsAttention = rolePrivilegeBreadth(role.RulesCount)
+		role.ListStatus = role.PrivilegeBreadth
+		if role.NeedsAttention {
+			role.ListSignalSeverity, role.ListSignalCount = "medium", 1
+		} else {
+			role.ListSignalSeverity, role.ListSignalCount = listSignalOK, 0
+		}
 		out[i] = role
 	}
 	return out
@@ -634,6 +731,12 @@ func EnrichRoleBindingListItemsForAPI(items []dto.RoleBindingListItemDTO) []dto.
 		rb := items[i]
 		rb.BindingHint = roleBindingHint(rb.RoleRefKind)
 		rb.SubjectBreadth, rb.NeedsAttention = subjectBreadth(rb.SubjectsCount)
+		rb.ListStatus = rb.BindingHint
+		if rb.NeedsAttention {
+			rb.ListSignalSeverity, rb.ListSignalCount = "medium", 1
+		} else {
+			rb.ListSignalSeverity, rb.ListSignalCount = listSignalOK, 0
+		}
 		out[i] = rb
 	}
 	return out
@@ -673,6 +776,8 @@ func EnrichPersistentVolumeListItemsForAPI(items []dto.PersistentVolumeDTO) []dt
 		pv := items[i]
 		pv.HealthBucket, pv.NeedsAttention = persistentVolumeListSignals(pv)
 		pv.BindingHint = persistentVolumeBindingHint(pv)
+		pv.ListStatus = strings.ToLower(strings.TrimSpace(pv.Phase))
+		pv.ListSignalSeverity, pv.ListSignalCount = listSignalFromBucket(pv.HealthBucket, pv.NeedsAttention)
 		out[i] = pv
 	}
 	return out
@@ -713,6 +818,12 @@ func EnrichClusterRoleListItemsForAPI(items []dto.ClusterRoleListItemDTO) []dto.
 	for i := range items {
 		role := items[i]
 		role.PrivilegeBreadth, role.NeedsAttention = rolePrivilegeBreadth(role.RulesCount)
+		role.ListStatus = role.PrivilegeBreadth
+		if role.NeedsAttention {
+			role.ListSignalSeverity, role.ListSignalCount = "medium", 1
+		} else {
+			role.ListSignalSeverity, role.ListSignalCount = listSignalOK, 0
+		}
 		out[i] = role
 	}
 	return out
@@ -728,6 +839,12 @@ func EnrichClusterRoleBindingListItemsForAPI(items []dto.ClusterRoleBindingListI
 		rb := items[i]
 		rb.BindingHint = roleBindingHint(rb.RoleRefKind)
 		rb.SubjectBreadth, rb.NeedsAttention = subjectBreadth(rb.SubjectsCount)
+		rb.ListStatus = rb.BindingHint
+		if rb.NeedsAttention {
+			rb.ListSignalSeverity, rb.ListSignalCount = "medium", 1
+		} else {
+			rb.ListSignalSeverity, rb.ListSignalCount = listSignalOK, 0
+		}
 		out[i] = rb
 	}
 	return out
@@ -748,6 +865,8 @@ func EnrichCRDListItemsForAPI(items []dto.CRDListItemDTO) []dto.CRDListItemDTO {
 			crd.HealthBucket = deployBucketDegraded
 			crd.NeedsAttention = true
 		}
+		crd.ListStatus = crd.HealthBucket
+		crd.ListSignalSeverity, crd.ListSignalCount = listSignalFromBucket(crd.HealthBucket, crd.NeedsAttention)
 		out[i] = crd
 	}
 	return out

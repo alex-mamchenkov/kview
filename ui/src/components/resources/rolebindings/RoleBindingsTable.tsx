@@ -11,6 +11,7 @@ import {
   type ApiDataplaneListResponse,
 } from "../../../types/api";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
+import { listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
 
 type RoleBinding = {
   name: string;
@@ -21,7 +22,9 @@ type RoleBinding = {
   ageSec: number;
   bindingHint?: string;
   subjectBreadth?: string;
-  needsAttention?: boolean;
+  listStatus?: string;
+  listSignalSeverity?: string;
+  listSignalCount?: number;
 };
 
 type Row = RoleBinding & { id: string };
@@ -35,15 +38,12 @@ function formatRoleRef(kind?: string, name?: string) {
 const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 220 },
   {
-    field: "bindingHint",
+    field: "listSignalSeverity",
     headerName: "Signal",
     width: 150,
     renderCell: (p) => {
-      const hint = p.row.bindingHint;
-      const breadth = p.row.subjectBreadth;
-      if (!hint && !breadth) return "-";
-      const label = breadth ? `${hint || "binding"} · ${breadth}` : hint;
-      return <Chip size="small" label={label} color={p.row.needsAttention ? "warning" : "default"} />;
+      const severity = p.row.listSignalSeverity;
+      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
     },
     sortable: false,
   },
@@ -94,7 +94,8 @@ export default function RoleBindingsTable({
     (row: Row, q: string) =>
       row.name.toLowerCase().includes(q) ||
       (row.bindingHint || "").toLowerCase().includes(q) ||
-      (row.subjectBreadth || "").toLowerCase().includes(q),
+      (row.subjectBreadth || "").toLowerCase().includes(q) ||
+      (row.listSignalSeverity || "").toLowerCase().includes(q),
     [],
   );
 

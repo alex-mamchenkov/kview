@@ -11,6 +11,7 @@ import {
   type ApiDataplaneListResponse,
 } from "../../../types/api";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
+import { listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
 
 type ServiceAccount = {
   name: string;
@@ -21,7 +22,9 @@ type ServiceAccount = {
   ageSec: number;
   tokenMountPolicy?: string;
   pullSecretHint?: string;
-  needsAttention?: boolean;
+  listStatus?: string;
+  listSignalSeverity?: string;
+  listSignalCount?: number;
 };
 
 type Row = ServiceAccount & { id: string };
@@ -30,6 +33,16 @@ const resourceLabel = getResourceLabel("serviceaccounts");
 
 const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
+  {
+    field: "listSignalSeverity",
+    headerName: "Signal",
+    width: 130,
+    renderCell: (p) => {
+      const severity = p.row.listSignalSeverity;
+      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
+    },
+    sortable: false,
+  },
   {
     field: "tokenMountPolicy",
     headerName: "Token",
@@ -96,6 +109,7 @@ export default function ServiceAccountsTable({
   const filterPredicate = useCallback(
     (row: Row, q: string) =>
       row.name.toLowerCase().includes(q) ||
+      (row.listSignalSeverity || "").toLowerCase().includes(q) ||
       (row.tokenMountPolicy || "").toLowerCase().includes(q) ||
       (row.pullSecretHint || "").toLowerCase().includes(q),
     [],

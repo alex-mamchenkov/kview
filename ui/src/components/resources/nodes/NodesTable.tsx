@@ -4,7 +4,7 @@ import { GridColDef } from "@mui/x-data-grid";
 import { apiGetWithContext } from "../../../api";
 import NodeDrawer from "./NodeDrawer";
 import { fmtAge, valueOrDash } from "../../../utils/format";
-import { nodeStatusChipColor, deploymentHealthBucketColor } from "../../../utils/k8sUi";
+import { deploymentHealthBucketColor, listSignalLabel, listSignalSeverityColor, nodeStatusChipColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import {
@@ -27,10 +27,8 @@ type Node = NodeListItemUsage & {
   podsCount: number;
   kubeletVersion?: string;
   ageSec: number;
-  healthBucket?: string;
   podDensityBucket?: string;
   podDensityRatio?: number;
-  needsAttention?: boolean;
   derived?: boolean;
   derivedSource?: string;
   derivedCoverage?: string;
@@ -38,6 +36,9 @@ type Node = NodeListItemUsage & {
   namespaceCount?: number;
   problematicPods?: number;
   restartCount?: number;
+  listStatus?: string;
+  listSignalSeverity?: string;
+  listSignalCount?: number;
 };
 
 type Row = Node & { id: string };
@@ -84,18 +85,17 @@ const baseColumns: GridColDef<Row>[] = [
     headerName: "Status",
     width: 140,
     renderCell: (p) => {
-      const status = String(p.value || "");
+      const status = String(p.row.listStatus || p.value || "");
       return <Chip size="small" label={status || "-"} color={nodeStatusChipColor(status)} />;
     },
   },
   {
-    field: "healthBucket",
+    field: "listSignalSeverity",
     headerName: "Signal",
     width: 130,
     renderCell: (p) => {
-      const bucket = p.row.healthBucket;
-      if (!bucket) return "-";
-      return <Chip size="small" label={p.row.needsAttention ? "attention" : bucket} color={deploymentHealthBucketColor(bucket)} />;
+      const severity = p.row.listSignalSeverity;
+      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
     },
     sortable: false,
   },
@@ -216,7 +216,7 @@ export default function NodesTable({ token }: { token: string }) {
     return (
       row.name.toLowerCase().includes(q) ||
       (row.status || "").toLowerCase().includes(q) ||
-      (row.healthBucket || "").toLowerCase().includes(q) ||
+      (row.listSignalSeverity || "").toLowerCase().includes(q) ||
       (row.podDensityBucket || "").toLowerCase().includes(q) ||
       (row.derivedSource || "").toLowerCase().includes(q) ||
       (row.derived ? "derived" : "direct").includes(q) ||

@@ -3,7 +3,7 @@ import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
 import { apiGetWithContext } from "../../../api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
-import { deploymentHealthBucketColor } from "../../../utils/k8sUi";
+import { listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
 import CustomResourceDefinitionDrawer from "./CustomResourceDefinitionDrawer";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
@@ -18,9 +18,10 @@ type CRDItem = {
   versions?: string;
   established?: boolean;
   ageSec: number;
-  healthBucket?: string;
   versionBreadth?: string;
-  needsAttention?: boolean;
+  listStatus?: string;
+  listSignalSeverity?: string;
+  listSignalCount?: number;
 };
 
 type Row = CRDItem & { id: string };
@@ -30,12 +31,12 @@ const resourceLabel = getResourceLabel("customresourcedefinitions");
 const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 300 },
   {
-    field: "healthBucket",
+    field: "listSignalSeverity",
     headerName: "Signal",
     width: 130,
     renderCell: (p) => {
-      const bucket = p.row.healthBucket || "unknown";
-      return <Chip size="small" label={p.row.needsAttention ? "attention" : bucket} color={deploymentHealthBucketColor(bucket)} />;
+      const severity = p.row.listSignalSeverity;
+      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
     },
   },
   {
@@ -106,7 +107,7 @@ export default function CustomResourceDefinitionsTable({ token }: { token: strin
       (row.group || "").toLowerCase().includes(q) ||
       (row.kind || "").toLowerCase().includes(q) ||
       (row.scope || "").toLowerCase().includes(q) ||
-      (row.healthBucket || "").toLowerCase().includes(q) ||
+      (row.listSignalSeverity || "").toLowerCase().includes(q) ||
       (row.versionBreadth || "").toLowerCase().includes(q),
     [],
   );

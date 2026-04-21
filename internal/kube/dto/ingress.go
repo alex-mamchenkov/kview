@@ -12,6 +12,9 @@ type IngressListItemDTO struct {
 	AddressState        string   `json:"addressState,omitempty"`
 	TLSHint             string   `json:"tlsHint,omitempty"`
 	NeedsAttention      bool     `json:"needsAttention,omitempty"`
+	ListStatus          string   `json:"listStatus,omitempty"`
+	ListSignalSeverity  string   `json:"listSignalSeverity,omitempty"` // high | medium | low | ok
+	ListSignalCount     int      `json:"listSignalCount,omitempty"`
 }
 
 type IngressDetailsDTO struct {

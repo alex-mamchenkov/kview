@@ -9,6 +9,9 @@ type ClusterRoleBindingListItemDTO struct {
 	BindingHint    string `json:"bindingHint,omitempty"`
 	SubjectBreadth string `json:"subjectBreadth,omitempty"`
 	NeedsAttention bool   `json:"needsAttention,omitempty"`
+	ListStatus     string `json:"listStatus,omitempty"`
+	ListSignalSeverity string `json:"listSignalSeverity,omitempty"` // high | medium | low | ok
+	ListSignalCount int   `json:"listSignalCount,omitempty"`
 }
 
 type ClusterRoleBindingDetailsDTO struct {

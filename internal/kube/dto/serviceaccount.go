@@ -10,6 +10,9 @@ type ServiceAccountListItemDTO struct {
 	TokenMountPolicy             string `json:"tokenMountPolicy,omitempty"`
 	PullSecretHint               string `json:"pullSecretHint,omitempty"`
 	NeedsAttention               bool   `json:"needsAttention,omitempty"`
+	ListStatus                   string `json:"listStatus,omitempty"`
+	ListSignalSeverity           string `json:"listSignalSeverity,omitempty"` // high | medium | low | ok
+	ListSignalCount              int    `json:"listSignalCount,omitempty"`
 }
 
 type ServiceAccountDetailsDTO struct {

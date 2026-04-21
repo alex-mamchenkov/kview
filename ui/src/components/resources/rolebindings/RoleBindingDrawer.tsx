@@ -20,10 +20,7 @@ import KeyValueTable from "../../shared/KeyValueTable";
 import AccessDeniedState from "../../shared/AccessDeniedState";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
-import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
-} from "../../shared/AttentionSummary";
+import AttentionSummary from "../../shared/AttentionSummary";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import Section from "../../shared/Section";
@@ -148,26 +145,6 @@ export default function RoleBindingDrawer(props: {
     [resourceSignals.signals],
   );
 
-  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
-    if (!roleRef) return undefined;
-    return {
-      label: `RoleRef: ${roleRef.kind || "-"} / ${roleRef.name || "-"}`,
-      tone: roleRef.name ? "success" : "warning",
-      tooltip: `Subjects ${subjects.length}`,
-    };
-  }, [roleRef, subjects.length]);
-
-  const attentionReasons = useMemo<AttentionReason[]>(() => {
-    const reasons: AttentionReason[] = [];
-    if (subjects.length === 0) {
-      reasons.push({ label: "No subjects bound", severity: "warning" });
-    }
-    if (!roleRef?.name) {
-      reasons.push({ label: "RoleRef name is missing", severity: "warning" });
-    }
-    return reasons;
-  }, [subjects.length, roleRef?.name]);
-
   const warningEvents = useMemo(
     () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
     [events],
@@ -234,8 +211,6 @@ export default function RoleBindingDrawer(props: {
                   )}
 
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={roleBindingSignals}
                     onJumpToEvents={() => setTab(3)}
                   />

@@ -5,7 +5,7 @@ import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import ServiceDrawer from "./ServiceDrawer";
-import { deploymentHealthBucketColor } from "../../../utils/k8sUi";
+import { listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
@@ -21,7 +21,9 @@ type Service = {
   ageSec: number;
   endpointHealthBucket?: string;
   exposureHint?: string;
-  needsAttention?: boolean;
+  listStatus?: string;
+  listSignalSeverity?: string;
+  listSignalCount?: number;
 };
 
 type Row = Service & { id: string };
@@ -43,13 +45,12 @@ const columns: GridColDef<Row>[] = [
     renderCell: (p) => <Chip size="small" label={valueOrDash(String(p.value || ""))} />,
   },
   {
-    field: "endpointHealthBucket",
+    field: "listSignalSeverity",
     headerName: "Signal",
     width: 140,
     renderCell: (p) => {
-      const bucket = p.row.endpointHealthBucket;
-      if (!bucket) return "-";
-      return <Chip size="small" label={p.row.needsAttention ? "attention" : bucket} color={deploymentHealthBucketColor(bucket)} />;
+      const severity = p.row.listSignalSeverity;
+      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
     },
     sortable: false,
   },
@@ -108,7 +109,7 @@ export default function ServicesTable({ token, namespace }: { token: string; nam
     return (
       row.name.toLowerCase().includes(q) ||
       (row.type || "").toLowerCase().includes(q) ||
-      (row.endpointHealthBucket || "").toLowerCase().includes(q) ||
+      (row.listSignalSeverity || "").toLowerCase().includes(q) ||
       (row.exposureHint || "").toLowerCase().includes(q) ||
       (row.clusterIPs || []).join(", ").toLowerCase().includes(q) ||
       (row.portsSummary || "").toLowerCase().includes(q)

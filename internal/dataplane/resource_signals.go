@@ -3,6 +3,7 @@ package dataplane
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -135,10 +136,270 @@ func (m *manager) ResourceSignals(ctx context.Context, clusterName, scope, names
 	}
 	items := store.SignalsForResource(kind, name, scope, scopeLocation)
 	out := namespaceInsightSignalsFromDashboard(items)
+	if len(out) == 0 {
+		out = append(out, fallbackSignalsForResource(now, scope, namespace, kind, name, plane)...)
+	}
+	out = dedupeNamespaceSignals(out)
 	if out == nil {
 		out = []dto.NamespaceInsightSignalDTO{}
 	}
 	return ResourceSignalsResult{Signals: out, Meta: meta}, nil
+}
+
+func fallbackSignalsForResource(now time.Time, scope, namespace, kind, name string, plane *clusterPlane) []dto.NamespaceInsightSignalDTO {
+	if plane == nil || kind == "" || name == "" {
+		return nil
+	}
+	if scope == ResourceSignalsScopeNamespace {
+		return fallbackNamespaceSignals(now, namespace, kind, name, plane)
+	}
+	if scope == ResourceSignalsScopeCluster {
+		return fallbackClusterSignals(now, kind, name, plane)
+	}
+	return nil
+}
+
+func fallbackNamespaceSignals(_ time.Time, namespace, kind, name string, plane *clusterPlane) []dto.NamespaceInsightSignalDTO {
+	switch kind {
+	case "Pod":
+		snap, _ := peekNamespacedSnapshot(&plane.podsStore, namespace)
+		for _, item := range EnrichPodListItemsForAPI(snap.Items) {
+			if item.Name != name || item.ListSignalSeverity == "" || item.ListSignalSeverity == listSignalOK {
+				continue
+			}
+			reason := "Pod needs attention."
+			switch {
+			case item.LastEvent != nil && item.LastEvent.Type == "Warning":
+				if strings.TrimSpace(item.LastEvent.Reason) != "" {
+					reason = fmt.Sprintf("Pod reports warning event: %s.", item.LastEvent.Reason)
+				} else {
+					reason = "Pod reports warning events."
+				}
+			case item.Restarts > 0:
+				reason = fmt.Sprintf("Pod restart activity is elevated (%d restarts).", item.Restarts)
+			case strings.EqualFold(strings.TrimSpace(item.Phase), "Pending"):
+				reason = "Pod is still pending scheduling/startup."
+			case strings.EqualFold(strings.TrimSpace(item.Phase), "Failed"):
+				reason = "Pod is in failed phase."
+			case podListNotReady(item.Ready):
+				reason = fmt.Sprintf("Pod is not ready (%s).", item.Ready)
+			}
+			return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, item.ListSignalSeverity, listSeverityScore(item.ListSignalSeverity), reason)}
+		}
+	case "Deployment":
+		snap, _ := peekNamespacedSnapshot(&plane.depsStore, namespace)
+		for _, item := range EnrichDeploymentListItemsForAPI(snap.Items) {
+			if item.Name == name && item.RolloutNeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "medium", 65, "Deployment rollout needs attention.")}
+			}
+		}
+	case "DaemonSet":
+		snap, _ := peekNamespacedSnapshot(&plane.dsStore, namespace)
+		for _, item := range EnrichDaemonSetListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "medium", 62, "DaemonSet state needs attention.")}
+			}
+		}
+	case "StatefulSet":
+		snap, _ := peekNamespacedSnapshot(&plane.stsStore, namespace)
+		for _, item := range EnrichStatefulSetListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "medium", 62, "StatefulSet state needs attention.")}
+			}
+		}
+	case "ReplicaSet":
+		snap, _ := peekNamespacedSnapshot(&plane.rsStore, namespace)
+		for _, item := range EnrichReplicaSetListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "medium", 60, "ReplicaSet state needs attention.")}
+			}
+		}
+	case "Job":
+		snap, _ := peekNamespacedSnapshot(&plane.jobsStore, namespace)
+		for _, item := range EnrichJobListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "medium", 64, "Job state needs attention.")}
+			}
+		}
+	case "CronJob":
+		snap, _ := peekNamespacedSnapshot(&plane.cjStore, namespace)
+		for _, item := range EnrichCronJobListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "medium", 58, "CronJob state needs attention.")}
+			}
+		}
+	case "HorizontalPodAutoscaler":
+		snap, _ := peekNamespacedSnapshot(&plane.hpaStore, namespace)
+		for _, item := range snap.Items {
+			if item.Name == name && item.NeedsAttention {
+				reason := "HorizontalPodAutoscaler needs attention."
+				if len(item.AttentionReasons) > 0 {
+					reason = strings.Join(item.AttentionReasons, "; ")
+				}
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "medium", 62, reason)}
+			}
+		}
+	case "Service":
+		snap, _ := peekNamespacedSnapshot(&plane.svcsStore, namespace)
+		for _, item := range EnrichServiceListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "medium", 62, "Service routing needs attention.")}
+			}
+		}
+	case "Ingress":
+		snap, _ := peekNamespacedSnapshot(&plane.ingStore, namespace)
+		for _, item := range EnrichIngressListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "medium", 62, "Ingress routing needs attention.")}
+			}
+		}
+	case "PersistentVolumeClaim":
+		snap, _ := peekNamespacedSnapshot(&plane.pvcsStore, namespace)
+		for _, item := range EnrichPVCListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "medium", 60, "PersistentVolumeClaim needs attention.")}
+			}
+		}
+	case "ConfigMap":
+		snap, _ := peekNamespacedSnapshot(&plane.cmsStore, namespace)
+		for _, item := range EnrichConfigMapListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "low", 35, "ConfigMap content needs attention.")}
+			}
+		}
+	case "Secret":
+		snap, _ := peekNamespacedSnapshot(&plane.secsStore, namespace)
+		for _, item := range EnrichSecretListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "low", 35, "Secret content needs attention.")}
+			}
+		}
+	case "ServiceAccount":
+		snap, _ := peekNamespacedSnapshot(&plane.saStore, namespace)
+		for _, item := range EnrichServiceAccountListItemsForAPI(snap.Items) {
+			if item.Name != name || item.ListSignalSeverity == "" || item.ListSignalSeverity == listSignalOK {
+				continue
+			}
+			reason := "ServiceAccount posture needs attention."
+			if item.TokenMountPolicy == "enabled" {
+				reason = "ServiceAccount token automount is enabled."
+			}
+			return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, item.ListSignalSeverity, listSeverityScore(item.ListSignalSeverity), reason)}
+		}
+	case "Role":
+		snap, _ := peekNamespacedSnapshot(&plane.rolesStore, namespace)
+		for _, item := range EnrichRoleListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "low", 32, "Role permission surface needs attention.")}
+			}
+		}
+	case "RoleBinding":
+		snap, _ := peekNamespacedSnapshot(&plane.roleBindingsStore, namespace)
+		for _, item := range EnrichRoleBindingListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "low", 32, "RoleBinding subject surface needs attention.")}
+			}
+		}
+	case "HelmRelease":
+		snap, _ := peekNamespacedSnapshot(&plane.helmReleasesStore, namespace)
+		for _, item := range EnrichHelmReleaseListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "medium", 60, "HelmRelease state needs attention.")}
+			}
+		}
+	}
+	return nil
+}
+
+func fallbackClusterSignals(_ time.Time, kind, name string, plane *clusterPlane) []dto.NamespaceInsightSignalDTO {
+	switch kind {
+	case "PersistentVolume":
+		snap, _ := peekClusterSnapshot(&plane.persistentVolumesStore)
+		for _, item := range EnrichPersistentVolumeListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, "", name, "medium", 58, "PersistentVolume state needs attention.")}
+			}
+		}
+	case "ClusterRole":
+		snap, _ := peekClusterSnapshot(&plane.clusterRolesStore)
+		for _, item := range EnrichClusterRoleListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, "", name, "low", 32, "ClusterRole permission surface needs attention.")}
+			}
+		}
+	case "ClusterRoleBinding":
+		snap, _ := peekClusterSnapshot(&plane.clusterRoleBindingsStore)
+		for _, item := range EnrichClusterRoleBindingListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, "", name, "low", 32, "ClusterRoleBinding subject surface needs attention.")}
+			}
+		}
+	case "CustomResourceDefinition":
+		snap, _ := peekClusterSnapshot(&plane.crdsStore)
+		for _, item := range EnrichCRDListItemsForAPI(snap.Items) {
+			if item.Name == name && item.NeedsAttention {
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, "", name, "medium", 56, "CustomResourceDefinition state needs attention.")}
+			}
+		}
+	}
+	return nil
+}
+
+func fallbackSignal(kind, namespace, name, severity string, score int, reason string) dto.NamespaceInsightSignalDTO {
+	scope := ResourceSignalsScopeCluster
+	scopeLocation := ""
+	if namespace != "" {
+		scope = ResourceSignalsScopeNamespace
+		scopeLocation = namespace
+	}
+	return dto.NamespaceInsightSignalDTO{
+		Kind:           kind,
+		Namespace:      namespace,
+		Name:           name,
+		Severity:       severity,
+		Score:          score,
+		Reason:         reason,
+		SignalType:     "resource_needs_attention_fallback",
+		ResourceKind:   kind,
+		ResourceName:   name,
+		Scope:          scope,
+		ScopeLocation:  scopeLocation,
+		ActualData:     reason,
+		CalculatedData: reason,
+	}
+}
+
+func listSeverityScore(severity string) int {
+	switch strings.ToLower(strings.TrimSpace(severity)) {
+	case "high":
+		return 75
+	case "medium":
+		return 60
+	case "low":
+		return 40
+	default:
+		return 30
+	}
+}
+
+func dedupeNamespaceSignals(items []dto.NamespaceInsightSignalDTO) []dto.NamespaceInsightSignalDTO {
+	if len(items) <= 1 {
+		return items
+	}
+	seen := make(map[string]struct{}, len(items))
+	out := make([]dto.NamespaceInsightSignalDTO, 0, len(items))
+	for _, item := range items {
+		key := strings.Join([]string{item.SignalType, item.ResourceKind, item.ResourceName, item.Scope, item.ScopeLocation, item.Reason}, "|")
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, item)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].Score > out[j].Score
+	})
+	return out
 }
 
 // mergeSnapshotMetaForResourceSignals reports the worst-freshness /

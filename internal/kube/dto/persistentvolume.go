@@ -13,6 +13,9 @@ type PersistentVolumeDTO struct {
 	HealthBucket     string   `json:"healthBucket,omitempty"`
 	BindingHint      string   `json:"bindingHint,omitempty"`
 	NeedsAttention   bool     `json:"needsAttention,omitempty"`
+	ListStatus       string   `json:"listStatus,omitempty"`
+	ListSignalSeverity string `json:"listSignalSeverity,omitempty"` // high | medium | low | ok
+	ListSignalCount  int      `json:"listSignalCount,omitempty"`
 }
 
 type PersistentVolumeDetailsDTO struct {

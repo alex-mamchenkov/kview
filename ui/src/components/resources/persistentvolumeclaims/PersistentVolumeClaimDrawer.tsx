@@ -16,10 +16,7 @@ import KeyValueTable from "../../shared/KeyValueTable";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
-import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
-} from "../../shared/AttentionSummary";
+import AttentionSummary from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import ConditionsTable from "../../shared/ConditionsTable";
 import EventsList from "../../shared/EventsList";
@@ -244,34 +241,6 @@ export default function PersistentVolumeClaimDrawer(props: {
     [resourceSignals.signals],
   );
 
-  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
-    const phase = summary?.phase;
-    if (!phase) return undefined;
-    const tone: AttentionHealth["tone"] = phase === "Bound" ? "success" : phase === "Pending" ? "warning" : "default";
-    return {
-      label: `Phase: ${phase}`,
-      tone,
-      tooltip: `Requested ${summary?.requestedStorage || "-"} · Capacity ${summary?.capacity || "-"}`,
-    };
-  }, [summary?.phase, summary?.requestedStorage, summary?.capacity]);
-
-  const attentionReasons = useMemo<AttentionReason[]>(() => {
-    const reasons: AttentionReason[] = [];
-    if (summary?.phase === "Pending") {
-      reasons.push({ label: "PVC is pending binding", severity: "warning" });
-    }
-    if (showPvDeniedHint) {
-      reasons.push({ label: "Bound PV details access denied", severity: "info" });
-    }
-    if ((conditions || []).length > 0) {
-      const nonHealthy = conditions.filter((c) => String(c.status) !== "True");
-      if (nonHealthy.length > 0) {
-        reasons.push({ label: `${nonHealthy.length} non-healthy condition(s)`, severity: "warning" });
-      }
-    }
-    return reasons;
-  }, [summary?.phase, showPvDeniedHint, conditions]);
-
   const warningEvents = useMemo(
     () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
     [events],
@@ -319,8 +288,6 @@ export default function PersistentVolumeClaimDrawer(props: {
                   )}
 
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={pvcSignals}
                     onJumpToEvents={() => setTab(2)}
                     onJumpToSpec={() => setTab(1)}

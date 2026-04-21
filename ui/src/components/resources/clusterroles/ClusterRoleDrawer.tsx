@@ -19,10 +19,7 @@ import KeyValueTable from "../../shared/KeyValueTable";
 import AccessDeniedState from "../../shared/AccessDeniedState";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
-import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
-} from "../../shared/AttentionSummary";
+import AttentionSummary from "../../shared/AttentionSummary";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import Section from "../../shared/Section";
@@ -135,24 +132,6 @@ export default function ClusterRoleDrawer(props: {
     [resourceSignals.signals],
   );
 
-  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
-    if (!summary) return undefined;
-    const tone: AttentionHealth["tone"] = (summary.rulesCount || 0) > 0 ? "success" : "warning";
-    return {
-      label: `Rules ${summary.rulesCount || 0}`,
-      tone,
-      tooltip: `Cluster-scoped RBAC role`,
-    };
-  }, [summary]);
-
-  const attentionReasons = useMemo<AttentionReason[]>(() => {
-    const reasons: AttentionReason[] = [];
-    if ((summary?.rulesCount || 0) === 0) {
-      reasons.push({ label: "ClusterRole has no rules", severity: "warning" });
-    }
-    return reasons;
-  }, [summary?.rulesCount]);
-
   const warningEvents = useMemo(
     () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
     [events],
@@ -194,8 +173,6 @@ export default function ClusterRoleDrawer(props: {
                   )}
 
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={clusterRoleSignals}
                     onJumpToEvents={() => setTab(2)}
                   />

@@ -15,6 +15,9 @@ type HelmReleaseDTO struct {
 	StabilityBucket string `json:"stabilityBucket,omitempty"`
 	Transitional    bool   `json:"transitional,omitempty"`
 	NeedsAttention  bool   `json:"needsAttention,omitempty"`
+	ListStatus      string `json:"listStatus,omitempty"`
+	ListSignalSeverity string `json:"listSignalSeverity,omitempty"` // high | medium | low | ok
+	ListSignalCount int    `json:"listSignalCount,omitempty"`
 }
 
 type HelmReleaseDetailsDTO struct {

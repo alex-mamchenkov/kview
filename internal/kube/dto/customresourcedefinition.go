@@ -12,6 +12,9 @@ type CRDListItemDTO struct {
 	HealthBucket   string `json:"healthBucket,omitempty"`
 	VersionBreadth string `json:"versionBreadth,omitempty"`
 	NeedsAttention bool   `json:"needsAttention,omitempty"`
+	ListStatus     string `json:"listStatus,omitempty"`
+	ListSignalSeverity string `json:"listSignalSeverity,omitempty"` // high | medium | low | ok
+	ListSignalCount int   `json:"listSignalCount,omitempty"`
 }
 
 // CRDDetailsDTO is the full representation for the drawer.

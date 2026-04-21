@@ -13,6 +13,9 @@ type DeploymentListItemDTO struct {
 	// List enrichment (Stage 5C): derived from snapshot row only.
 	HealthBucket          string `json:"healthBucket,omitempty"` // healthy | progressing | degraded | unknown
 	RolloutNeedsAttention bool   `json:"rolloutNeedsAttention,omitempty"`
+	ListStatus            string `json:"listStatus,omitempty"`
+	ListSignalSeverity    string `json:"listSignalSeverity,omitempty"` // high | medium | low | ok
+	ListSignalCount       int    `json:"listSignalCount,omitempty"`
 }
 
 type DeploymentDetailsDTO struct {

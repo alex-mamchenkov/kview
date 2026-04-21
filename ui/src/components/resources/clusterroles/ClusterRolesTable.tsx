@@ -8,13 +8,16 @@ import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResource
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneListMetaFromResponse, type ApiDataplaneListResponse } from "../../../types/api";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
+import { listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
 
 type ClusterRole = {
   name: string;
   rulesCount: number;
   ageSec: number;
   privilegeBreadth?: string;
-  needsAttention?: boolean;
+  listStatus?: string;
+  listSignalSeverity?: string;
+  listSignalCount?: number;
 };
 
 type Row = ClusterRole & { id: string };
@@ -24,12 +27,12 @@ const resourceLabel = getResourceLabel("clusterroles");
 const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
   {
-    field: "privilegeBreadth",
+    field: "listSignalSeverity",
     headerName: "Signal",
     width: 130,
     renderCell: (p) => {
-      const breadth = p.row.privilegeBreadth || "unknown";
-      return <Chip size="small" label={breadth} color={breadth === "broad" || breadth === "empty" ? "warning" : "default"} />;
+      const severity = p.row.listSignalSeverity;
+      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
     },
   },
   {

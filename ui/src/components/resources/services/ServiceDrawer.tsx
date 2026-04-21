@@ -30,10 +30,7 @@ import AccessDeniedState from "../../shared/AccessDeniedState";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import MetadataSection from "../../shared/MetadataSection";
-import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
-} from "../../shared/AttentionSummary";
+import AttentionSummary from "../../shared/AttentionSummary";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import ServiceActions from "./ServiceActions";
@@ -276,42 +273,6 @@ export default function ServiceDrawer(props: {
     [resourceSignals.signals],
   );
 
-  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
-    if (!summary || !endpoints) return undefined;
-    const ready = endpoints.ready || 0;
-    const notReady = endpoints.notReady || 0;
-    const tone: AttentionHealth["tone"] = notReady > 0 ? "warning" : ready > 0 ? "success" : "default";
-    return {
-      label: `${summary.type || "Service"} · Ready endpoints ${ready}`,
-      tone,
-      tooltip: `Ready ${ready}, Not ready ${notReady}, Total ${ready + notReady}`,
-    };
-  }, [summary, endpoints]);
-
-  const attentionReasons = useMemo<AttentionReason[]>(() => {
-    const reasons: AttentionReason[] = [];
-    if (!summary || !endpoints) return reasons;
-    if ((endpoints.notReady || 0) > 0) {
-      reasons.push({
-        label: `${endpoints.notReady} endpoint(s) not ready`,
-        severity: "warning",
-      });
-    }
-    if ((endpoints.ready || 0) === 0) {
-      reasons.push({
-        label: "No ready endpoints",
-        severity: "warning",
-      });
-    }
-    if (summary.type === "ExternalName" && !summary.externalName) {
-      reasons.push({
-        label: "ExternalName service missing external name",
-        severity: "warning",
-      });
-    }
-    return reasons;
-  }, [summary, endpoints]);
-
   const warningEvents = useMemo(
     () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
     [events],
@@ -467,8 +428,6 @@ export default function ServiceDrawer(props: {
                   )}
 
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={serviceSignals}
                     onJumpToEvents={() => setTab(3)}
                   />

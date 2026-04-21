@@ -19,10 +19,7 @@ import Section from "../../shared/Section";
 import KeyValueTable from "../../shared/KeyValueTable";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
-import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
-} from "../../shared/AttentionSummary";
+import AttentionSummary from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
@@ -211,28 +208,6 @@ export default function ConfigMapDrawer(props: {
     [resourceSignals.signals],
   );
 
-  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
-    if (!summary) return undefined;
-    const tone: AttentionHealth["tone"] = summary.immutable ? "success" : "default";
-    return {
-      label: `Keys ${summary.keysCount || 0} · Data ${summary.dataKeysCount || 0} · Binary ${summary.binaryKeysCount || 0}`,
-      tone,
-      tooltip: `Immutable ${summary.immutable ? "yes" : "no"} · Total size ${formatBytes(summary.totalBytes)}`,
-    };
-  }, [summary]);
-
-  const attentionReasons = useMemo<AttentionReason[]>(() => {
-    const reasons: AttentionReason[] = [];
-    if (!summary) return reasons;
-    if ((summary.keysCount || 0) === 0) {
-      reasons.push({ label: "ConfigMap has no keys", severity: "warning" });
-    }
-    if ((summary.totalBytes || 0) > 1024 * 1024) {
-      reasons.push({ label: `Large payload (${formatBytes(summary.totalBytes)})`, severity: "warning" });
-    }
-    return reasons;
-  }, [summary]);
-
   const warningEvents = useMemo(
     () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
     [events],
@@ -283,8 +258,6 @@ export default function ConfigMapDrawer(props: {
                   )}
 
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={configMapSignals}
                     onJumpToEvents={() => setTab(2)}
                   />

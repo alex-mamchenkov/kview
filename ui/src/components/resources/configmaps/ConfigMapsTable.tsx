@@ -8,6 +8,7 @@ import ConfigMapDrawer from "./ConfigMapDrawer";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
+import { listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
 
 type ConfigMap = {
   name: string;
@@ -16,7 +17,9 @@ type ConfigMap = {
   immutable: boolean;
   ageSec: number;
   contentHint?: string;
-  needsAttention?: boolean;
+  listStatus?: string;
+  listSignalSeverity?: string;
+  listSignalCount?: number;
 };
 
 type Row = ConfigMap & { id: string };
@@ -26,13 +29,12 @@ const resourceLabel = getResourceLabel("configmaps");
 const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
   {
-    field: "contentHint",
+    field: "listSignalSeverity",
     headerName: "Signal",
     width: 130,
     renderCell: (p) => {
-      const hint = p.row.contentHint;
-      if (!hint) return "-";
-      return <Chip size="small" label={p.row.needsAttention ? "empty" : hint} color={hint === "empty" ? "warning" : "success"} />;
+      const severity = p.row.listSignalSeverity;
+      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
     },
     sortable: false,
   },
@@ -82,7 +84,7 @@ export default function ConfigMapsTable({
   }, [token, namespace]);
 
   const filterPredicate = useCallback(
-    (row: Row, q: string) => row.name.toLowerCase().includes(q) || (row.contentHint || "").toLowerCase().includes(q),
+    (row: Row, q: string) => row.name.toLowerCase().includes(q) || (row.listSignalSeverity || "").toLowerCase().includes(q),
     [],
   );
 

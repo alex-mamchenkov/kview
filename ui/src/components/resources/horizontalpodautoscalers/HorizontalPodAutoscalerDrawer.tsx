@@ -28,8 +28,6 @@ import MetadataSection from "../../shared/MetadataSection";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
 } from "../../shared/AttentionSummary";
 import GaugeBar, { type GaugeTone } from "../../shared/GaugeBar";
 import GaugeTableRow from "../../shared/GaugeTableRow";
@@ -192,24 +190,9 @@ export default function HorizontalPodAutoscalerDrawer(props: {
 
             <Box sx={drawerBodySx}>
               {tab === 0 && (() => {
-                const attentionHealth: AttentionHealth | undefined =
-                  details.summary.healthBucket || details.summary.needsAttention
-                    ? {
-                        label: details.summary.needsAttention
-                          ? "attention"
-                          : details.summary.healthBucket || "unknown",
-                        tone: deploymentHealthBucketColor(details.summary.healthBucket),
-                      }
-                    : undefined;
-                const attentionReasons: AttentionReason[] = (details.summary.attentionReasons || []).map((reason) => ({
-                  label: reason,
-                  severity: details.summary.needsAttention ? "warning" : "info",
-                }));
                 return (
                 <Box sx={drawerTabContentCompactSx}>
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={resourceSignals.signals}
                     onJumpToEvents={() => setTab(eventsTabIndex)}
                     onJumpToSpec={() => setTab(metadataTabIndex)}

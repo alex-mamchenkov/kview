@@ -76,6 +76,7 @@ func TestResourceSignals_NamespaceScope_ReturnsAttributedSignals(t *testing.T) {
 		Items: []dto.PodListItemDTO{
 			{Name: "api-0", Namespace: ns, Restarts: 12, Phase: "Running", Ready: "1/1"},
 			{Name: "api-1", Namespace: ns, Restarts: 0, Phase: "Running", Ready: "1/1"},
+			{Name: "api-2", Namespace: ns, Restarts: 0, Phase: "Running", Ready: "1/1", LastEvent: &dto.EventBriefDTO{Type: "Warning", Reason: "BackOff"}},
 		},
 	})
 	setNamespacedSnapshot(&plane.secsStore, ns, SecretsSnapshot{
@@ -83,6 +84,13 @@ func TestResourceSignals_NamespaceScope_ReturnsAttributedSignals(t *testing.T) {
 		Items: []dto.SecretDTO{
 			{Name: "creds", Namespace: ns, KeysCount: 0},
 			{Name: "creds-full", Namespace: ns, KeysCount: 3},
+		},
+	})
+	setNamespacedSnapshot(&plane.saStore, ns, ServiceAccountsSnapshot{
+		Meta: meta,
+		Items: []dto.ServiceAccountListItemDTO{
+			{Name: "default", Namespace: ns, AutomountServiceAccountToken: boolPtr(true)},
+			{Name: "locked", Namespace: ns, AutomountServiceAccountToken: boolPtr(false)},
 		},
 	})
 
@@ -149,7 +157,56 @@ func TestResourceSignals_NamespaceScope_ReturnsAttributedSignals(t *testing.T) {
 			t.Fatalf("expected empty result for unknown resource, got %+v", got.Signals)
 		}
 	})
+
+	t.Run("pod warning-event list signal is mirrored in resource signals", func(t *testing.T) {
+		got, err := mm.ResourceSignals(t.Context(), "ctx-rs-ns", ResourceSignalsScopeNamespace, ns, "Pod", "api-2")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got.Signals) == 0 {
+			t.Fatalf("expected fallback signal for warning-event pod")
+		}
+		sig := got.Signals[0]
+		if sig.SignalType != "resource_needs_attention_fallback" {
+			t.Fatalf("expected fallback signal type, got %+v", sig)
+		}
+		if sig.Severity != "medium" {
+			t.Fatalf("expected medium severity, got %+v", sig)
+		}
+		if sig.Reason == "" || sig.Reason == "Pod needs attention." {
+			t.Fatalf("expected specific pod warning reason, got %+v", sig)
+		}
+	})
+
+	t.Run("serviceaccount list signal is mirrored in resource signals", func(t *testing.T) {
+		got, err := mm.ResourceSignals(t.Context(), "ctx-rs-ns", ResourceSignalsScopeNamespace, ns, "ServiceAccount", "default")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got.Signals) == 0 {
+			t.Fatalf("expected fallback signal for serviceaccount")
+		}
+		sig := got.Signals[0]
+		if sig.SignalType != "resource_needs_attention_fallback" || sig.Severity != "low" {
+			t.Fatalf("unexpected serviceaccount signal %+v", sig)
+		}
+		if sig.Reason == "" || sig.Reason == "ServiceAccount posture needs attention." {
+			t.Fatalf("expected explicit serviceaccount reason, got %+v", sig)
+		}
+	})
+
+	t.Run("serviceaccount without list signal returns empty", func(t *testing.T) {
+		got, err := mm.ResourceSignals(t.Context(), "ctx-rs-ns", ResourceSignalsScopeNamespace, ns, "ServiceAccount", "locked")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got.Signals) != 0 {
+			t.Fatalf("expected no signals for non-attention serviceaccount, got %+v", got.Signals)
+		}
+	})
 }
+
+func boolPtr(v bool) *bool { return &v }
 
 func TestResourceSignals_NamespaceScope_NoCacheIsEmpty(t *testing.T) {
 	dm := NewManager(ManagerConfig{})
@@ -160,5 +217,39 @@ func TestResourceSignals_NamespaceScope_NoCacheIsEmpty(t *testing.T) {
 	}
 	if len(got.Signals) != 0 {
 		t.Fatalf("expected no signals when caches are cold, got %+v", got.Signals)
+	}
+}
+
+func TestResourceSignals_ClusterScope_FallbackNeedsAttentionSignals(t *testing.T) {
+	dm := NewManager(ManagerConfig{})
+	mm := dm.(*manager)
+	planeAny, _ := mm.PlaneForCluster(t.Context(), "ctx-rs-cluster")
+	plane := planeAny.(*clusterPlane)
+
+	setClusterSnapshot(&plane.persistentVolumesStore, PersistentVolumesSnapshot{
+		Meta: SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassWarm},
+		Items: []dto.PersistentVolumeDTO{
+			{Name: "pv-critical", Phase: "Failed"},
+			{Name: "pv-healthy", Phase: "Bound"},
+		},
+	})
+
+	got, err := mm.ResourceSignals(t.Context(), "ctx-rs-cluster", ResourceSignalsScopeCluster, "", "PersistentVolume", "pv-critical")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got.Signals) == 0 {
+		t.Fatalf("expected fallback signal for pv-critical")
+	}
+	if got.Signals[0].SignalType == "" {
+		t.Fatalf("expected signal type to be set, got %+v", got.Signals[0])
+	}
+
+	clean, err := mm.ResourceSignals(t.Context(), "ctx-rs-cluster", ResourceSignalsScopeCluster, "", "PersistentVolume", "pv-healthy")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(clean.Signals) != 0 {
+		t.Fatalf("expected no signals for healthy pv, got %+v", clean.Signals)
 	}
 }

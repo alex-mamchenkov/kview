@@ -13,15 +13,10 @@ import type {
   DashboardSignalItem,
   NamespacePodHealth,
   NamespaceProblematicResource,
-  NamespaceSummaryMeta,
   NamespaceWorkloadHealthRollup,
   WorkloadKindHealthRollup,
 } from "../../../types/api";
-import { dataplaneCoarseStateChipColor } from "../../../utils/k8sUi";
-import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
-} from "../../shared/AttentionSummary";
+import AttentionSummary from "../../shared/AttentionSummary";
 import EmptyState from "../../shared/EmptyState";
 import Section from "../../shared/Section";
 import StackedMetricBar from "../../shared/StackedMetricBar";
@@ -34,6 +29,7 @@ import {
   GAUGE_COLOR_UNKNOWN,
 } from "../../../theme/sxTokens";
 import NamespaceActions from "./NamespaceActions";
+import { dataplaneCoarseStateChipColor } from "../../../utils/k8sUi";
 
 function signalSeverityColor(severity?: string): "error" | "warning" | "info" | "default" {
   if (severity === "high") return "error";
@@ -96,58 +92,9 @@ type Props = {
 };
 
 /**
- * buildAttentionSummary derives the props for the shared AttentionSummary
- * block from backend-provided fields only:
- *   - health: the dataplane coarse state of the namespace (ok / degraded / …);
- *   - reasons: compact backend-sourced counts (problematic resources, quota
- *     pressure). These are counts of backend-provided rows, not UI-derived
- *     thresholds. See docs/UI_UX_GUIDE.md.
+ * Namespace signals tab renders only backend-provided per-resource signals in
+ * the shared AttentionSummary.
  */
-function buildAttentionSummary(
-  signals: DashboardSignalItem[],
-  summaryMeta?: NamespaceSummaryMeta,
-  problematicCount?: number,
-  quotaPressure?: { critical: number; warning: number },
-): { health?: AttentionHealth; reasons: AttentionReason[] } {
-  const reasons: AttentionReason[] = [];
-  if (problematicCount && problematicCount > 0) {
-    reasons.push({
-      label: `${problematicCount} problematic resource${problematicCount === 1 ? "" : "s"}`,
-      severity: "warning",
-      tooltip: "Resources flagged by the backend as unhealthy or stuck.",
-    });
-  }
-  if (quotaPressure) {
-    if (quotaPressure.critical > 0) {
-      reasons.push({
-        label: `${quotaPressure.critical} quota entr${quotaPressure.critical === 1 ? "y" : "ies"} critical`,
-        severity: "error",
-        tooltip: "ResourceQuota entries at or above 90% usage (backend ratio).",
-      });
-    }
-    if (quotaPressure.warning > 0) {
-      reasons.push({
-        label: `${quotaPressure.warning} quota entr${quotaPressure.warning === 1 ? "y" : "ies"} warning`,
-        severity: "warning",
-        tooltip: "ResourceQuota entries at or above 80% usage (backend ratio).",
-      });
-    }
-  }
-
-  let health: AttentionHealth | undefined;
-  if (summaryMeta?.state) {
-    const tone = dataplaneCoarseStateChipColor(summaryMeta.state);
-    health = {
-      label: `state: ${summaryMeta.state}`,
-      tone,
-      tooltip: "Coarse namespace state reported by the dataplane.",
-    };
-  } else if (signals.length > 0) {
-    health = { label: `${signals.length} attention signal${signals.length === 1 ? "" : "s"}`, tone: "warning" };
-  }
-  return { health, reasons };
-}
-
 export default function NamespaceSignalsTab({
   token,
   namespaceName,
@@ -167,7 +114,6 @@ export default function NamespaceSignalsTab({
   onJumpToEvents,
   onJumpToConditions,
 }: Props) {
-  const attention = buildAttentionSummary(signals, summaryMeta, problematic.length, quotaPressure);
   function handleProblematic(resource: NamespaceProblematicResource) {
     switch (resource.kind) {
       case "Pod": onOpenPod(resource.name); return;
@@ -206,8 +152,6 @@ export default function NamespaceSignalsTab({
       </Section>
 
       <AttentionSummary
-        health={attention.health}
-        reasons={attention.reasons}
         signals={signals}
         onJumpToEvents={onJumpToEvents}
         onJumpToConditions={onJumpToConditions}

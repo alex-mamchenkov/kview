@@ -100,4 +100,7 @@ func TestEnrichWorkloadListItemsForAPI(t *testing.T) {
 	if cjs[2].HealthBucket != deployBucketProgressing || cjs[2].NeedsAttention {
 		t.Fatalf("cronjob progressing: %+v", cjs[2])
 	}
+	if cjs[2].ListSignalSeverity != listSignalOK || cjs[2].ListSignalCount != 0 {
+		t.Fatalf("cronjob progressing should not emit attention signal: %+v", cjs[2])
+	}
 }

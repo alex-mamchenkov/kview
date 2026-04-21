@@ -29,8 +29,6 @@ import AccessDeniedState from "../../shared/AccessDeniedState";
 import Section from "../../shared/Section";
 import MetadataSection from "../../shared/MetadataSection";
 import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
 } from "../../shared/AttentionSummary";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
@@ -213,33 +211,6 @@ export default function CronJobDrawer(props: {
     [resourceSignals.signals],
   );
 
-  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
-    if (!summary) return undefined;
-    const lastStatus = summary.lastRunStatus;
-    const tone: AttentionHealth["tone"] =
-      summary.suspend ? "warning" : lastStatus === "Failed" ? "error" : lastStatus === "Complete" ? "success" : "default";
-    return {
-      label: summary.suspend ? "Suspended" : `Last run: ${lastStatus || "unknown"}`,
-      tone,
-      tooltip: `Schedule ${summary.schedule || "-"} · Active jobs ${summary.active ?? 0}`,
-    };
-  }, [summary]);
-
-  const attentionReasons = useMemo<AttentionReason[]>(() => {
-    if (!summary) return [];
-    const reasons: AttentionReason[] = [];
-    if (summary.suspend) {
-      reasons.push({ label: "CronJob is suspended", severity: "warning" });
-    }
-    if ((summary.active ?? 0) > 0) {
-      reasons.push({ label: `${summary.active} active job(s)`, severity: "warning" });
-    }
-    if (summary.lastRunStatus === "Failed") {
-      reasons.push({ label: "Last run failed", severity: "error" });
-    }
-    return reasons;
-  }, [summary]);
-
   const warningEvents = useMemo(
     () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
     [events],
@@ -317,8 +288,6 @@ export default function CronJobDrawer(props: {
                   )}
 
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={cronJobSignals}
                     onJumpToEvents={() => setTab(3)}
                     onJumpToSpec={() => setTab(2)}

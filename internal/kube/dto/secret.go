@@ -10,6 +10,9 @@ type SecretDTO struct {
 	ContentHint    string `json:"contentHint,omitempty"`
 	TypeHint       string `json:"typeHint,omitempty"`
 	NeedsAttention bool   `json:"needsAttention,omitempty"`
+	ListStatus     string `json:"listStatus,omitempty"`
+	ListSignalSeverity string `json:"listSignalSeverity,omitempty"` // high | medium | low | ok
+	ListSignalCount int   `json:"listSignalCount,omitempty"`
 }
 
 type SecretDetailsDTO struct {

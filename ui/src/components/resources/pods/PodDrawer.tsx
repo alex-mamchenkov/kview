@@ -73,10 +73,7 @@ import AccessDeniedState from "../../shared/AccessDeniedState";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
-import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
-} from "../../shared/AttentionSummary";
+import AttentionSummary from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import GaugeBar, { type GaugeTone } from "../../shared/GaugeBar";
 import GaugeTableRow from "../../shared/GaugeTableRow";
@@ -1072,36 +1069,6 @@ export default function PodDrawer(props: {
     [detailSignals, snapshotSignals.signals],
   );
 
-  // Backend-sourced health chip for AttentionSummary. Uses the phase string
-  // directly so we never re-derive "healthy/unhealthy" in the UI.
-  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
-    const phase = details?.summary?.phase;
-    if (!phase) return undefined;
-    const ready = details?.summary?.ready;
-    const restarts = details?.summary?.restarts;
-    const tooltipParts: string[] = [`phase ${phase}`];
-    if (ready) tooltipParts.push(`ready ${ready}`);
-    if (typeof restarts === "number") tooltipParts.push(`restarts ${restarts}`);
-    return {
-      label: `Phase: ${phase}`,
-      tone:
-        phase === "Running" || phase === "Succeeded"
-          ? "success"
-          : phase === "Pending"
-          ? "warning"
-          : phase === "Failed"
-          ? "error"
-          : "default",
-      tooltip: tooltipParts.join(" · "),
-    };
-  }, [details?.summary?.phase, details?.summary?.ready, details?.summary?.restarts]);
-
-  // Reasons row is intentionally empty for pods: all attention-worthy
-  // derivations now come from backend signals. Kept as a typed local so
-  // future additions (e.g. backend-provided "degraded by node" reasons) can
-  // slot in without touching the AttentionSummary call site.
-  const attentionReasons: AttentionReason[] = [];
-
   const openController = (kind: string, name: string) => {
     switch (kind) {
       case "ReplicaSet":
@@ -1432,8 +1399,6 @@ export default function PodDrawer(props: {
                   )}
 
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={podSignals}
                     onJumpToEvents={() => setTab(4)}
                   />

@@ -178,3 +178,26 @@ export function helmStatusChipColor(status?: string | null): ChipColor {
       return "default";
   }
 }
+
+export function listSignalSeverityColor(severity?: string | null): ChipColor {
+  switch ((severity || "").toLowerCase()) {
+    case "high":
+      return "error";
+    case "medium":
+      return "warning";
+    case "low":
+      return "default";
+    case "ok":
+      return "success";
+    default:
+      return "default";
+  }
+}
+
+export function listSignalLabel(severity?: string | null, count?: number | null): string {
+  const normalized = (severity || "").toLowerCase();
+  if (!normalized || normalized === "ok") return "OK";
+  const title = normalized[0].toUpperCase() + normalized.slice(1);
+  const signalCount = Number(count || 0);
+  return signalCount > 0 ? `${title} (${signalCount})` : title;
+}

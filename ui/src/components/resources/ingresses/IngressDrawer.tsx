@@ -20,10 +20,7 @@ import KeyValueTable from "../../shared/KeyValueTable";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
-import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
-} from "../../shared/AttentionSummary";
+import AttentionSummary from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
@@ -189,35 +186,6 @@ export default function IngressDrawer(props: {
     [resourceSignals.signals],
   );
 
-  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
-    if (!summary) return undefined;
-    const hostCount = summary.hosts?.length || 0;
-    const tone: AttentionHealth["tone"] =
-      missingBackends.length > 0 ? "error" : noReadyBackends.length > 0 ? "warning" : "success";
-    return {
-      label: `Hosts ${hostCount} · TLS ${summary.tlsCount || 0}`,
-      tone,
-      tooltip: `Addresses ${summary.addresses?.length || 0} · backend warnings ${missingBackends.length + noReadyBackends.length}`,
-    };
-  }, [summary, missingBackends.length, noReadyBackends.length]);
-
-  const attentionReasons = useMemo<AttentionReason[]>(() => {
-    const reasons: AttentionReason[] = [];
-    if (noReadyBackends.length > 0) {
-      reasons.push({
-        label: `${noReadyBackends.length} backend service(s) without ready endpoints`,
-        severity: "warning",
-      });
-    }
-    if (missingBackends.length > 0) {
-      reasons.push({
-        label: `${missingBackends.length} missing backend service(s)`,
-        severity: "error",
-      });
-    }
-    return reasons;
-  }, [missingBackends.length, noReadyBackends.length]);
-
   const warningEvents = useMemo(
     () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
     [events],
@@ -279,8 +247,6 @@ export default function IngressDrawer(props: {
                   )}
 
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={ingressSignals}
                     onJumpToEvents={() => setTab(3)}
                   />

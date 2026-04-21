@@ -12,6 +12,9 @@ type PodListItemDTO struct {
 	// List enrichment (Stage 5C): derived from snapshot row only, no extra kube reads.
 	RestartSeverity string `json:"restartSeverity,omitempty"` // none | low | medium | high
 	ListHealthHint  string `json:"listHealthHint,omitempty"`  // ok | attention | problem
+	ListStatus      string `json:"listStatus,omitempty"`
+	ListSignalSeverity string `json:"listSignalSeverity,omitempty"` // high | medium | low | ok
+	ListSignalCount int `json:"listSignalCount,omitempty"`
 
 	// Aggregated per-pod request/limit totals from the pod spec (milliCPU and
 	// bytes). Populated by the pod list resource layer so projections and

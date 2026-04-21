@@ -28,10 +28,7 @@ import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import Section from "../../shared/Section";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
-import AttentionSummary, {
-  type AttentionHealth,
-  type AttentionReason,
-} from "../../shared/AttentionSummary";
+import AttentionSummary from "../../shared/AttentionSummary";
 import ConditionsTable from "../../shared/ConditionsTable";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
@@ -185,33 +182,6 @@ export default function JobDrawer(props: {
     [resourceSignals.signals],
   );
 
-  const attentionHealth = useMemo<AttentionHealth | undefined>(() => {
-    if (!summary) return undefined;
-    const status = summary.status || "Unknown";
-    const tone: AttentionHealth["tone"] =
-      status === "Failed" ? "error" : status === "Running" ? "warning" : status === "Complete" ? "success" : "default";
-    return {
-      label: `Status: ${status}`,
-      tone,
-      tooltip: `Active ${summary.active ?? 0}, Succeeded ${summary.succeeded ?? 0}, Failed ${summary.failed ?? 0}`,
-    };
-  }, [summary]);
-
-  const attentionReasons = useMemo<AttentionReason[]>(() => {
-    if (!summary) return [];
-    const reasons: AttentionReason[] = [];
-    if ((summary.failed ?? 0) > 0) {
-      reasons.push({ label: `${summary.failed} failed pod(s)`, severity: "error" });
-    }
-    if ((summary.active ?? 0) > 0 && (summary.succeeded ?? 0) === 0) {
-      reasons.push({ label: `${summary.active} active pod(s)`, severity: "warning" });
-    }
-    if (hasUnhealthyConditions) {
-      reasons.push({ label: "Unhealthy Job condition(s)", severity: "warning" });
-    }
-    return reasons;
-  }, [summary, hasUnhealthyConditions]);
-
   const warningEvents = useMemo(
     () => events.filter((e) => String(e.type).toLowerCase() === "warning").slice(0, 5),
     [events],
@@ -297,8 +267,6 @@ export default function JobDrawer(props: {
                   )}
 
                   <AttentionSummary
-                    health={attentionHealth}
-                    reasons={attentionReasons}
                     signals={jobSignals}
                     onJumpToEvents={() => setTab(2)}
                   />

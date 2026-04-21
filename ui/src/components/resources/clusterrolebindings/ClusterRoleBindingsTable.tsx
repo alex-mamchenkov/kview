@@ -8,6 +8,7 @@ import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResource
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneListMetaFromResponse, type ApiDataplaneListResponse } from "../../../types/api";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
+import { listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
 
 type ClusterRoleBinding = {
   name: string;
@@ -17,7 +18,9 @@ type ClusterRoleBinding = {
   ageSec: number;
   bindingHint?: string;
   subjectBreadth?: string;
-  needsAttention?: boolean;
+  listStatus?: string;
+  listSignalSeverity?: string;
+  listSignalCount?: number;
 };
 
 type Row = ClusterRoleBinding & { id: string };
@@ -27,12 +30,12 @@ const resourceLabel = getResourceLabel("clusterrolebindings");
 const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
   {
-    field: "subjectBreadth",
+    field: "listSignalSeverity",
     headerName: "Signal",
     width: 130,
     renderCell: (p) => {
-      const breadth = p.row.subjectBreadth || "unknown";
-      return <Chip size="small" label={breadth} color={breadth === "broad" || breadth === "empty" ? "warning" : "default"} />;
+      const severity = p.row.listSignalSeverity;
+      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
     },
   },
   {
@@ -81,7 +84,8 @@ export default function ClusterRoleBindingsTable({ token }: { token: string }) {
       (row.roleRefKind || "").toLowerCase().includes(q) ||
       (row.roleRefName || "").toLowerCase().includes(q) ||
       (row.bindingHint || "").toLowerCase().includes(q) ||
-      (row.subjectBreadth || "").toLowerCase().includes(q),
+      (row.subjectBreadth || "").toLowerCase().includes(q) ||
+      (row.listSignalSeverity || "").toLowerCase().includes(q),
     [],
   );
 

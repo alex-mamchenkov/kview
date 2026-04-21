@@ -5,7 +5,7 @@ import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import JobDrawer from "./JobDrawer";
 import { fmtAge } from "../../../utils/format";
-import { jobStatusChipColor, deploymentHealthBucketColor } from "../../../utils/k8sUi";
+import { listSignalLabel, listSignalSeverityColor, statusChipColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
@@ -19,8 +19,9 @@ type Job = {
   durationSec?: number;
   ageSec: number;
   status?: string;
-  healthBucket?: string;
-  needsAttention?: boolean;
+  listStatus?: string;
+  listSignalSeverity?: string;
+  listSignalCount?: number;
 };
 
 type Row = Job & { id: string };
@@ -30,20 +31,23 @@ const resourceLabel = getResourceLabel("jobs");
 const columns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 240 },
   {
-    field: "status",
+    field: "listStatus",
     headerName: "Status",
     width: 140,
     renderCell: (p) => {
-      const bucket = p.row.healthBucket || "";
-      const status = String(p.value || "");
-      return (
-        <Chip
-          size="small"
-          label={p.row.needsAttention ? "attention" : status || bucket || "-"}
-          color={bucket ? deploymentHealthBucketColor(bucket) : jobStatusChipColor(status)}
-        />
-      );
+      const status = String(p.row.listStatus || p.row.status || "");
+      return <Chip size="small" label={status || "-"} color={statusChipColor(status)} />;
     },
+  },
+  {
+    field: "listSignalSeverity",
+    headerName: "Signal",
+    width: 130,
+    renderCell: (p) => {
+      const severity = p.row.listSignalSeverity;
+      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
+    },
+    sortable: false,
   },
   { field: "active", headerName: "Active", width: 110, type: "number" },
   { field: "succeeded", headerName: "Succeeded", width: 120, type: "number" },
@@ -83,7 +87,9 @@ export default function JobsTable({ token, namespace }: { token: string; namespa
 
   const filterPredicate = useCallback(
     (row: Row, q: string) =>
-      row.name.toLowerCase().includes(q) || (row.status || "").toLowerCase().includes(q),
+      row.name.toLowerCase().includes(q) ||
+      (row.listStatus || row.status || "").toLowerCase().includes(q) ||
+      (row.listSignalSeverity || "").toLowerCase().includes(q),
     [],
   );
 
