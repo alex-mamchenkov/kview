@@ -38,10 +38,27 @@ type ConditionsTableProps = {
   variant?: "accordion" | "section";
   /** Title for the accordion/section. Default: "Conditions & Health". */
   title?: string;
+  /** When true, pins unhealthy rows to the top of the table, preserving their relative order. */
+  unhealthyFirst?: boolean;
 };
 
 function defaultIsHealthy(cond: Condition): boolean {
   return cond.status === "True";
+}
+
+function orderConditions(
+  conditions: Condition[],
+  isHealthy: (cond: Condition) => boolean,
+  unhealthyFirst: boolean,
+): Condition[] {
+  if (!unhealthyFirst) return conditions;
+  const unhealthy: Condition[] = [];
+  const healthy: Condition[] = [];
+  for (const cond of conditions) {
+    if (isHealthy(cond)) healthy.push(cond);
+    else unhealthy.push(cond);
+  }
+  return [...unhealthy, ...healthy];
 }
 
 function ConditionsBody({
@@ -49,15 +66,19 @@ function ConditionsBody({
   isHealthy,
   chipColor,
   emptyMessage,
+  unhealthyFirst,
 }: {
   conditions: Condition[];
   isHealthy: (cond: Condition) => boolean;
   chipColor: (cond: Condition) => ChipColor;
   emptyMessage: string;
+  unhealthyFirst: boolean;
 }) {
   if (conditions.length === 0) {
     return <EmptyState message={emptyMessage} sx={{ mt: 1 }} />;
   }
+
+  const ordered = orderConditions(conditions, isHealthy, unhealthyFirst);
 
   return (
     <Table size="small" sx={{ mt: 1 }}>
@@ -71,7 +92,7 @@ function ConditionsBody({
         </TableRow>
       </TableHead>
       <TableBody>
-        {conditions.map((c, idx) => {
+        {ordered.map((c, idx) => {
           const unhealthy = !isHealthy(c);
           return (
             <TableRow
@@ -110,6 +131,7 @@ export default function ConditionsTable({
   emptyMessage = "No conditions reported.",
   variant = "accordion",
   title = "Conditions & Health",
+  unhealthyFirst = true,
 }: ConditionsTableProps) {
   const hasUnhealthy = conditions.some((c) => !isHealthy(c));
 
@@ -121,6 +143,7 @@ export default function ConditionsTable({
           isHealthy={isHealthy}
           chipColor={chipColor}
           emptyMessage={emptyMessage}
+          unhealthyFirst={unhealthyFirst}
         />
       </Section>
     );
@@ -140,6 +163,7 @@ export default function ConditionsTable({
           isHealthy={isHealthy}
           chipColor={chipColor}
           emptyMessage={emptyMessage}
+          unhealthyFirst={unhealthyFirst}
         />
       </AccordionDetails>
     </Accordion>

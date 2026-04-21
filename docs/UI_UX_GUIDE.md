@@ -53,6 +53,81 @@ Content Sections
 
 Drawers should stay compact and information‑dense.
 
+All resource drawers must follow the signals‑first content contract defined in
+**Signals‑first Drawer Content** below (canonical tab order, Overview section
+order, and the `AttentionSummary` component).
+
+---
+
+# Signals‑first Drawer Content
+
+Drawers are opened because a row drew the operator's attention.
+Every drawer must answer questions in this order:
+
+1. What's wrong (signals / attention reasons / unhealthy conditions / recent Warning events)
+2. What is it doing now (key operational state)
+3. What is it related to (pods, endpoints, subjects, keys, …)
+4. What is it defined as (spec, metadata)
+5. Raw (events, logs, YAML)
+
+## Tab ordering
+
+All resource drawers follow the same tab order:
+
+Overview → <kind‑specific relation tabs> → Spec? → Events → Logs? → Metadata → YAML
+
+Metadata and YAML are always the two trailing tabs, in that order.
+Events precedes them. Logs, where applicable, sits between Events and Metadata.
+
+Logs is owned by the resource that streams logs (today: Pod). Workload drawers
+that do not stream their own logs must not add a Logs tab; they navigate to a
+Pod drawer via their Pods relation tab, and the Pod drawer is where Logs lives.
+
+## Overview tab content order
+
+Inside the Overview tab, sections must appear in this fixed order. Any section
+with nothing to show is hidden (no empty placeholders).
+
+1. Actions                        (Section, divider={false})
+2. AttentionSummary               (health chip + attention reasons + jump chips)
+3. Signals                        (per‑resource signals, severity‑sorted)
+4. Conditions (unhealthy first)   (ConditionsTable with unhealthyFirst)
+5. Key state                      (replicas / endpoint readiness / usage gauges)
+6. Recent Warning events          (last 3, link to Events tab)
+7. Compact summary KV             (name / namespace / age / phase only)
+
+The full metadata grid (labels, annotations, full key/value summary, spec
+detail) lives in the Metadata / Spec tabs, never in Overview.
+
+## AttentionSummary component
+
+All drawers use the shared `AttentionSummary` component for the top‑of‑overview
+state callout. It consolidates what were previously four separate patterns
+(health chip, loose attention‑reason chips, `WarningsSection`, ad‑hoc signal
+boxes).
+
+`AttentionSummary` renders nothing when a resource has no attention‑worthy
+state. Drawers must not reimplement this block inline.
+
+## Signal sources
+
+Signals are produced by the **backend** dataplane signal engine. The UI must
+not compute, threshold, or aggregate warnings. If a warning needs to exist, it
+is added to the dataplane signal engine first and then exposed through one of
+the sources below.
+
+In priority order:
+
+1. Dedicated signals endpoint (namespaces today; per‑resource over time)
+2. DTO fields populated by the backend: `needsAttention`, `healthBucket`,
+   `attentionReasons`, structured warnings (e.g. `IngressWarningsDTO`)
+3. Conditions with unhealthy status (display‑only sorting, not invented data)
+4. Warning‑type events (display‑only filter, not invented data)
+
+All sources funnel into `AttentionSummary` + the Signals section; no drawer
+invents its own layout for signal display, and no drawer invents its own
+warnings.
+
 ---
 
 # UI Tokens
