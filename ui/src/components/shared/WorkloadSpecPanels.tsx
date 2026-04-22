@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Box, Chip, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from "@mui/material";
+import { Box, Chip, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
 import { panelBoxSx } from "../../theme/sxTokens";
 import { valueOrDash } from "../../utils/format";
 import Section from "./Section";
@@ -103,13 +103,29 @@ function ContainersTable({ containers }: { containers?: ContainerSummary[] }) {
   );
 }
 
-function MissingChip({ refInfo }: { refInfo?: MissingReference }) {
-  if (!refInfo) return null;
-  const title = `${refInfo.kind} ${refInfo.name} was not found in the dataplane snapshot${refInfo.source ? ` (${refInfo.source})` : ""}.`;
+function missingTitle(refInfo?: MissingReference) {
+  if (!refInfo) return undefined;
+  return `${refInfo.kind} ${refInfo.name} was not found in the dataplane snapshot${refInfo.source ? ` (${refInfo.source})` : ""}.`;
+}
+
+function ReferenceChip({
+  kind,
+  name,
+  missing,
+  onOpen,
+}: {
+  kind: "Secret" | "ConfigMap";
+  name: string;
+  missing?: MissingReference;
+  onOpen?: (name: string) => void;
+}) {
   return (
-    <Tooltip title={title} arrow>
-      <Chip size="small" color="warning" label="Missing" />
-    </Tooltip>
+    <ResourceLinkChip
+      label={name}
+      onClick={() => onOpen?.(name)}
+      color={missing ? "warning" : undefined}
+      title={missingTitle(missing) || `${kind} ${name}`}
+    />
   );
 }
 
@@ -155,10 +171,13 @@ export default function WorkloadSpecPanels({
             ) : (
               <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
                 {template.imagePullSecrets.filter(Boolean).map((name) => (
-                  <Box key={name} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                    <ResourceLinkChip label={name} onClick={() => onOpenSecret?.(name)} />
-                    <MissingChip refInfo={missingByKey.get(missingKey("Secret", name))} />
-                  </Box>
+                  <ReferenceChip
+                    key={name}
+                    kind="Secret"
+                    name={name}
+                    missing={missingByKey.get(missingKey("Secret", name))}
+                    onOpen={onOpenSecret}
+                  />
                 ))}
               </Box>
             )}
@@ -271,15 +290,9 @@ export default function WorkloadSpecPanels({
                       <TableCell>{valueOrDash(v.type)}</TableCell>
                       <TableCell>
                         {isSecret && v.source ? (
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap" }}>
-                            <ResourceLinkChip label={v.source} onClick={() => onOpenSecret?.(v.source || "")} />
-                            <MissingChip refInfo={refInfo} />
-                          </Box>
+                          <ReferenceChip kind="Secret" name={v.source} missing={refInfo} onOpen={onOpenSecret} />
                         ) : isConfigMap && v.source ? (
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap" }}>
-                            <ResourceLinkChip label={v.source} onClick={() => onOpenConfigMap?.(v.source || "")} />
-                            <MissingChip refInfo={refInfo} />
-                          </Box>
+                          <ReferenceChip kind="ConfigMap" name={v.source} missing={refInfo} onOpen={onOpenConfigMap} />
                         ) : (
                           valueOrDash(v.source)
                         )}

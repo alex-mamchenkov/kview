@@ -1839,14 +1839,12 @@ export default function PodDrawer(props: {
                                   <TableCell>{valueOrDash(v.type)}</TableCell>
                                   <TableCell>
                                     {String(v.type || "").toLowerCase() === "secret" && v.source ? (
-                                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                                        <ResourceLinkChip label={v.source} onClick={() => setDrawerSecret(v.source || null)} />
-                                        {secretSignal ? (
-                                          <Tooltip title={secretSignal.reason || secretSignal.calculatedData || "Backend signal reports this Secret reference as missing."} arrow>
-                                            <Chip size="small" color="warning" label="Missing?" />
-                                          </Tooltip>
-                                        ) : null}
-                                      </Box>
+                                      <ResourceLinkChip
+                                        label={v.source}
+                                        onClick={() => setDrawerSecret(v.source || null)}
+                                        color={secretSignal ? "warning" : undefined}
+                                        title={secretSignal?.reason || secretSignal?.calculatedData || `Secret ${v.source}`}
+                                      />
                                     ) : (
                                       valueOrDash(v.source)
                                     )}
@@ -1871,14 +1869,13 @@ export default function PodDrawer(props: {
                             .map((s) => {
                               const secretSignal = missingSecretSignalsByName.get(s);
                               return (
-                                <Box key={s} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                                  <ResourceLinkChip label={s} onClick={() => setDrawerSecret(s)} />
-                                  {secretSignal ? (
-                                    <Tooltip title={secretSignal.reason || secretSignal.calculatedData || "Backend signal reports this Secret reference as missing."} arrow>
-                                      <Chip size="small" color="warning" label="Missing?" />
-                                    </Tooltip>
-                                  ) : null}
-                                </Box>
+                                <ResourceLinkChip
+                                  key={s}
+                                  label={s}
+                                  onClick={() => setDrawerSecret(s)}
+                                  color={secretSignal ? "warning" : undefined}
+                                  title={secretSignal?.reason || secretSignal?.calculatedData || `Secret ${s}`}
+                                />
                               );
                             })}
                         </Box>
