@@ -22,6 +22,7 @@ import ConditionsTable from "../../shared/ConditionsTable";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import PersistentVolumeDrawer from "../persistentvolumes/PersistentVolumeDrawer";
+import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import PVCActions from "./PVCActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
@@ -145,6 +146,7 @@ export default function PersistentVolumeClaimDrawer(props: {
   const [events, setEvents] = useState<EventDTO[]>([]);
   const [err, setErr] = useState("");
   const [drawerPV, setDrawerPV] = useState<string | null>(null);
+  const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
 
   const ns = props.namespace;
   const name = props.persistentVolumeClaimName;
@@ -157,6 +159,7 @@ export default function PersistentVolumeClaimDrawer(props: {
     setDetails(null);
     setEvents([]);
     setDrawerPV(null);
+    setDrawerNamespace(null);
     setLoading(true);
 
     (async () => {
@@ -251,7 +254,8 @@ export default function PersistentVolumeClaimDrawer(props: {
       <ResourceDrawerShell
         title={
           <>
-            PVC: {name || "-"} <Typography component="span" variant="body2">({ns})</Typography>
+            PVC: {name || "-"}{" "}
+            {ns ? <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} /> : null}
           </>
         }
         onClose={props.onClose}
@@ -399,6 +403,12 @@ export default function PersistentVolumeClaimDrawer(props: {
         onClose={() => setDrawerPV(null)}
         token={props.token}
         persistentVolumeName={drawerPV}
+      />
+      <NamespaceDrawer
+        open={!!drawerNamespace}
+        onClose={() => setDrawerNamespace(null)}
+        token={props.token}
+        namespaceName={drawerNamespace}
       />
     </RightDrawer>
   );

@@ -2228,7 +2228,7 @@ func (s *Server) Router() http.Handler {
 		})
 
 		api.Get("/namespaces/{ns}/horizontalpodautoscalers", dataplaneNamespacedListHandler(s, s.dp.HPAsSnapshot, func(items []dto.HorizontalPodAutoscalerDTO) any {
-			return items
+			return dataplane.EnrichHorizontalPodAutoscalerListItemsForAPI(items)
 		}))
 
 		api.Get("/namespaces/{ns}/horizontalpodautoscalers/{name}", func(w http.ResponseWriter, r *http.Request) {

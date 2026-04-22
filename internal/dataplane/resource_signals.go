@@ -236,7 +236,8 @@ func fallbackNamespaceSignals(_ time.Time, namespace, kind, name string, plane *
 				if len(item.AttentionReasons) > 0 {
 					reason = strings.Join(item.AttentionReasons, "; ")
 				}
-				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, "medium", 62, reason)}
+				severity, score := hpaSignalSeverityAndScore(item)
+				return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, namespace, name, severity, score, reason)}
 			}
 		}
 	case "Service":

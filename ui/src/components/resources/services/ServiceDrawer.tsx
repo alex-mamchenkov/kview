@@ -23,9 +23,11 @@ import { apiGet, toApiError, type ApiError } from "../../../api";
 import { useConnectionState } from "../../../connectionState";
 import IngressDrawer from "../ingresses/IngressDrawer";
 import PodDrawer from "../pods/PodDrawer";
+import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import { fmtAge, fmtTs, valueOrDash } from "../../../utils/format";
 import Section from "../../shared/Section";
 import KeyValueTable from "../../shared/KeyValueTable";
+import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import AccessDeniedState from "../../shared/AccessDeniedState";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
@@ -189,6 +191,7 @@ export default function ServiceDrawer(props: {
   const [ingressesLoaded, setIngressesLoaded] = useState(false);
   const [ingressesErr, setIngressesErr] = useState<ApiError | null>(null);
   const [drawerIngress, setDrawerIngress] = useState<{ name: string; namespace: string } | null>(null);
+  const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
   const [creatingPortForward, setCreatingPortForward] = useState(false);
   const [portForwardDialogOpen, setPortForwardDialogOpen] = useState(false);
   const [portForwardRemotePort, setPortForwardRemotePort] = useState<string>("");
@@ -213,6 +216,7 @@ export default function ServiceDrawer(props: {
     setIngressesLoaded(false);
     setIngressesErr(null);
     setDrawerIngress(null);
+    setDrawerNamespace(null);
     setLoading(true);
 
     (async () => {
@@ -375,7 +379,8 @@ export default function ServiceDrawer(props: {
       <ResourceDrawerShell
         title={
           <>
-            Service: {name || "-"} <Typography component="span" variant="body2">({ns})</Typography>
+            Service: {name || "-"}{" "}
+            {ns ? <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} /> : null}
           </>
         }
         onClose={props.onClose}
@@ -666,6 +671,12 @@ export default function ServiceDrawer(props: {
         open={!!portForwardCreatedMsg}
         message={portForwardCreatedMsg}
         onClose={() => setPortForwardCreatedMsg("")}
+      />
+      <NamespaceDrawer
+        open={!!drawerNamespace}
+        onClose={() => setDrawerNamespace(null)}
+        token={props.token}
+        namespaceName={drawerNamespace}
       />
     </RightDrawer>
   );

@@ -27,6 +27,8 @@ import AccessDeniedState from "../../shared/AccessDeniedState";
 import MetadataSection from "../../shared/MetadataSection";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
+import ResourceLinkChip from "../../shared/ResourceLinkChip";
+import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import AttentionSummary, {
 } from "../../shared/AttentionSummary";
 import GaugeBar, { type GaugeTone } from "../../shared/GaugeBar";
@@ -119,6 +121,7 @@ export default function HorizontalPodAutoscalerDrawer(props: {
   const [err, setErr] = useState("");
   const [denied, setDenied] = useState(false);
   const [tab, setTab] = useState(0);
+  const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
 
   const ns = props.namespace;
   const name = props.hpaName;
@@ -139,6 +142,7 @@ export default function HorizontalPodAutoscalerDrawer(props: {
     setErr("");
     setDenied(false);
     setTab(0);
+    setDrawerNamespace(null);
     setDetails(null);
     setEvents([]);
 
@@ -163,15 +167,17 @@ export default function HorizontalPodAutoscalerDrawer(props: {
   }, [props.open, name, ns, props.token, retryNonce]);
 
   return (
-    <RightDrawer open={props.open} onClose={props.onClose}>
-      <ResourceDrawerShell
-        title={
-          <>
-            HPA: {name || "-"} <Typography component="span" variant="body2">({ns})</Typography>
-          </>
-        }
-        onClose={props.onClose}
-      >
+    <>
+      <RightDrawer open={props.open} onClose={props.onClose}>
+        <ResourceDrawerShell
+          title={
+            <>
+              HPA: {name || "-"}{" "}
+              {ns ? <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} /> : null}
+            </>
+          }
+          onClose={props.onClose}
+        >
         {loading ? (
           <Box sx={loadingCenterSx}><CircularProgress size={24} /></Box>
         ) : denied ? (
@@ -332,7 +338,14 @@ export default function HorizontalPodAutoscalerDrawer(props: {
             </Box>
           </>
         )}
-      </ResourceDrawerShell>
-    </RightDrawer>
+        </ResourceDrawerShell>
+      </RightDrawer>
+      <NamespaceDrawer
+        open={!!drawerNamespace}
+        onClose={() => setDrawerNamespace(null)}
+        token={props.token}
+        namespaceName={drawerNamespace}
+      />
+    </>
   );
 }

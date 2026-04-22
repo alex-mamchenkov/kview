@@ -14,6 +14,7 @@ import {
 import { apiGet } from "../../../api";
 import { useConnectionState } from "../../../connectionState";
 import ServiceDrawer from "../services/ServiceDrawer";
+import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import Section from "../../shared/Section";
 import KeyValueTable from "../../shared/KeyValueTable";
@@ -135,6 +136,7 @@ export default function IngressDrawer(props: {
   const [events, setEvents] = useState<EventDTO[]>([]);
   const [err, setErr] = useState("");
   const [drawerService, setDrawerService] = useState<string | null>(null);
+  const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
 
   const ns = props.namespace;
   const name = props.ingressName;
@@ -147,6 +149,7 @@ export default function IngressDrawer(props: {
     setDetails(null);
     setEvents([]);
     setDrawerService(null);
+    setDrawerNamespace(null);
     setLoading(true);
 
     (async () => {
@@ -209,7 +212,8 @@ export default function IngressDrawer(props: {
       <ResourceDrawerShell
         title={
           <>
-            Ingress: {name || "-"} <Typography component="span" variant="body2">({ns})</Typography>
+            Ingress: {name || "-"}{" "}
+            {ns ? <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} /> : null}
           </>
         }
         onClose={props.onClose}
@@ -412,6 +416,12 @@ export default function IngressDrawer(props: {
               token={props.token}
               namespace={ns}
               serviceName={drawerService}
+            />
+            <NamespaceDrawer
+              open={!!drawerNamespace}
+              onClose={() => setDrawerNamespace(null)}
+              token={props.token}
+              namespaceName={drawerNamespace}
             />
           </>
         )}

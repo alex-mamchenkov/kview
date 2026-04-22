@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
-  Typography,
   Tabs,
   Tab,
   CircularProgress,
@@ -23,7 +22,9 @@ import AttentionSummary from "../../shared/AttentionSummary";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import Section from "../../shared/Section";
+import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import RoleActions from "./RoleActions";
+import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 import type { ApiItemResponse, ApiListResponse, DashboardSignalItem } from "../../../types/api";
@@ -84,6 +85,7 @@ export default function RoleDrawer(props: {
   const [details, setDetails] = useState<RoleDetails | null>(null);
   const [events, setEvents] = useState<EventDTO[]>([]);
   const [err, setErr] = useState<ApiError | null>(null);
+  const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
 
   const ns = props.namespace;
   const name = props.roleName;
@@ -95,6 +97,7 @@ export default function RoleDrawer(props: {
     setErr(null);
     setDetails(null);
     setEvents([]);
+    setDrawerNamespace(null);
     setLoading(true);
 
     (async () => {
@@ -154,9 +157,7 @@ export default function RoleDrawer(props: {
         title={
           <>
             Role: {name || "-"}{" "}
-            <Typography component="span" variant="body2">
-              ({ns})
-            </Typography>
+            {ns ? <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} /> : null}
           </>
         }
         onClose={props.onClose}
@@ -263,6 +264,12 @@ export default function RoleDrawer(props: {
           </>
         )}
       </ResourceDrawerShell>
+      <NamespaceDrawer
+        open={!!drawerNamespace}
+        onClose={() => setDrawerNamespace(null)}
+        token={props.token}
+        namespaceName={drawerNamespace}
+      />
     </RightDrawer>
   );
 }

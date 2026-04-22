@@ -108,3 +108,40 @@ func TestEnrichWorkloadListItemsForAPI(t *testing.T) {
 		t.Fatalf("cronjob progressing should not emit attention signal: %+v", cjs[2])
 	}
 }
+
+func TestEnrichHorizontalPodAutoscalerListItemsForAPI(t *testing.T) {
+	out := EnrichHorizontalPodAutoscalerListItemsForAPI([]dto.HorizontalPodAutoscalerDTO{
+		{
+			HealthBucket:     deployBucketDegraded,
+			NeedsAttention:   true,
+			MinReplicas:      1,
+			MaxReplicas:      1,
+			CurrentReplicas:  1,
+			DesiredReplicas:  1,
+			AttentionReasons: []string{"replicas are pinned at maxReplicas"},
+		},
+		{
+			HealthBucket:     deployBucketDegraded,
+			NeedsAttention:   true,
+			MinReplicas:      2,
+			MaxReplicas:      5,
+			CurrentReplicas:  1,
+			DesiredReplicas:  2,
+			AttentionReasons: []string{"current replicas are below minReplicas"},
+		},
+		{
+			HealthBucket:    deployBucketProgressing,
+			CurrentReplicas: 1,
+			DesiredReplicas: 2,
+		},
+	})
+	if out[0].ListStatus != deployBucketHealthy || out[0].ListSignalSeverity != "low" || out[0].ListSignalCount != 1 {
+		t.Fatalf("pinned max should be healthy status with low signal: %+v", out[0])
+	}
+	if out[1].ListStatus != deployBucketDegraded || out[1].ListSignalSeverity != "medium" || out[1].ListSignalCount != 1 {
+		t.Fatalf("real HPA attention should stay degraded/medium: %+v", out[1])
+	}
+	if out[2].ListStatus != deployBucketProgressing || out[2].ListSignalSeverity != listSignalOK || out[2].ListSignalCount != 0 {
+		t.Fatalf("HPA progressing should be status only, not an attention signal: %+v", out[2])
+	}
+}

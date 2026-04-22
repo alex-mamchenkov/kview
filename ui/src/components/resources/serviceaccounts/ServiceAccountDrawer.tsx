@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
-  Typography,
   Tabs,
   Tab,
   CircularProgress,
@@ -25,8 +24,10 @@ import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import AttentionSummary from "../../shared/AttentionSummary";
 import ServiceAccountActions from "./ServiceAccountActions";
+import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import type { ApiItemResponse, ApiListResponse, DashboardSignalItem } from "../../../types/api";
 import useResourceSignals from "../../../utils/useResourceSignals";
 import {
@@ -103,6 +104,7 @@ export default function ServiceAccountDrawer(props: {
   const [roleBindingsLoading, setRoleBindingsLoading] = useState(false);
   const [roleBindingsLoaded, setRoleBindingsLoaded] = useState(false);
   const [roleBindingsErr, setRoleBindingsErr] = useState<ApiError | null>(null);
+  const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
 
   const ns = props.namespace;
   const name = props.serviceAccountName;
@@ -118,6 +120,7 @@ export default function ServiceAccountDrawer(props: {
     setRoleBindingsLoading(false);
     setRoleBindingsLoaded(false);
     setRoleBindingsErr(null);
+    setDrawerNamespace(null);
     setLoading(true);
 
     (async () => {
@@ -203,9 +206,7 @@ export default function ServiceAccountDrawer(props: {
         title={
           <>
             ServiceAccount: {name || "-"}{" "}
-            <Typography component="span" variant="body2">
-              ({ns})
-            </Typography>
+            {ns ? <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} /> : null}
           </>
         }
         onClose={props.onClose}
@@ -321,6 +322,12 @@ export default function ServiceAccountDrawer(props: {
           </>
         )}
       </ResourceDrawerShell>
+      <NamespaceDrawer
+        open={!!drawerNamespace}
+        onClose={() => setDrawerNamespace(null)}
+        token={props.token}
+        namespaceName={drawerNamespace}
+      />
     </RightDrawer>
   );
 }

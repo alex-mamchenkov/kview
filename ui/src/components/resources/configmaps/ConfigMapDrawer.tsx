@@ -24,8 +24,10 @@ import MetadataSection from "../../shared/MetadataSection";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import ConfigMapActions from "./ConfigMapActions";
+import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import type { ApiItemResponse, ApiListResponse, DashboardSignalItem } from "../../../types/api";
 import useResourceSignals from "../../../utils/useResourceSignals";
 import {
@@ -142,6 +144,7 @@ export default function ConfigMapDrawer(props: {
   const [events, setEvents] = useState<EventDTO[]>([]);
   const [err, setErr] = useState("");
   const [expandedKeys, setExpandedKeys] = useState<Record<string, boolean>>({});
+  const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
 
   const ns = props.namespace;
   const name = props.configMapName;
@@ -154,6 +157,7 @@ export default function ConfigMapDrawer(props: {
     setDetails(null);
     setEvents([]);
     setExpandedKeys({});
+    setDrawerNamespace(null);
     setLoading(true);
 
     (async () => {
@@ -219,9 +223,7 @@ export default function ConfigMapDrawer(props: {
         title={
           <>
             ConfigMap: {name || "-"}{" "}
-            <Typography component="span" variant="body2">
-              ({ns})
-            </Typography>
+            {ns ? <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} /> : null}
           </>
         }
         onClose={props.onClose}
@@ -379,6 +381,12 @@ export default function ConfigMapDrawer(props: {
           </>
         )}
       </ResourceDrawerShell>
+      <NamespaceDrawer
+        open={!!drawerNamespace}
+        onClose={() => setDrawerNamespace(null)}
+        token={props.token}
+        namespaceName={drawerNamespace}
+      />
     </RightDrawer>
   );
 }

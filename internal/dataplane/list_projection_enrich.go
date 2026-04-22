@@ -329,6 +329,39 @@ func cronJobListSignals(cj dto.CronJobDTO) (bucket string, needsAttention bool) 
 	}
 }
 
+// EnrichHorizontalPodAutoscalerListItemsForAPI returns a shallow copy with snapshot-derived status hints.
+func EnrichHorizontalPodAutoscalerListItemsForAPI(items []dto.HorizontalPodAutoscalerDTO) []dto.HorizontalPodAutoscalerDTO {
+	if len(items) == 0 {
+		return items
+	}
+	out := make([]dto.HorizontalPodAutoscalerDTO, len(items))
+	for i := range items {
+		hpa := items[i]
+		hpa.ListStatus = hpaListStatus(hpa)
+		if hpa.NeedsAttention {
+			hpa.ListSignalSeverity, _ = hpaSignalSeverityAndScore(hpa)
+			hpa.ListSignalCount = 1
+		} else {
+			hpa.ListSignalSeverity, hpa.ListSignalCount = listSignalOK, 0
+		}
+		out[i] = hpa
+	}
+	return out
+}
+
+func hpaListStatus(hpa dto.HorizontalPodAutoscalerDTO) string {
+	if hpa.HealthBucket == deployBucketDegraded {
+		severity, _ := hpaSignalSeverityAndScore(hpa)
+		if severity == "low" {
+			if hpa.CurrentReplicas != hpa.DesiredReplicas {
+				return deployBucketProgressing
+			}
+			return deployBucketHealthy
+		}
+	}
+	return hpa.HealthBucket
+}
+
 // EnrichServiceListItemsForAPI returns a shallow copy with endpoint and exposure hints.
 func EnrichServiceListItemsForAPI(items []dto.ServiceListItemDTO) []dto.ServiceListItemDTO {
 	if len(items) == 0 {

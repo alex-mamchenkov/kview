@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
-  Typography,
   Tabs,
   Tab,
   CircularProgress,
@@ -17,6 +16,7 @@ import { useConnectionState } from "../../../connectionState";
 import JobDrawer from "../jobs/JobDrawer";
 import SecretDrawer from "../secrets/SecretDrawer";
 import ConfigMapDrawer from "../configmaps/ConfigMapDrawer";
+import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import CronJobActions from "./CronJobActions";
 import { fmtAge, fmtTimeAgo, valueOrDash } from "../../../utils/format";
 import { jobStatusChipColor } from "../../../utils/k8sUi";
@@ -25,6 +25,7 @@ import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import AccessDeniedState from "../../shared/AccessDeniedState";
 import Section from "../../shared/Section";
+import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import MetadataSection from "../../shared/MetadataSection";
 import AttentionSummary, {
 } from "../../shared/AttentionSummary";
@@ -166,6 +167,7 @@ export default function CronJobDrawer(props: {
   const [drawerJob, setDrawerJob] = useState<string | null>(null);
   const [drawerSecret, setDrawerSecret] = useState<string | null>(null);
   const [drawerConfigMap, setDrawerConfigMap] = useState<string | null>(null);
+  const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
 
   const ns = props.namespace;
   const name = props.cronJobName;
@@ -181,6 +183,7 @@ export default function CronJobDrawer(props: {
     setDrawerJob(null);
     setDrawerSecret(null);
     setDrawerConfigMap(null);
+    setDrawerNamespace(null);
     setLoading(true);
 
     (async () => {
@@ -261,7 +264,8 @@ export default function CronJobDrawer(props: {
       <ResourceDrawerShell
         title={
           <>
-            CronJob: {name || "-"} <Typography component="span" variant="body2">({ns})</Typography>
+            CronJob: {name || "-"}{" "}
+            {ns ? <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} /> : null}
           </>
         }
         onClose={props.onClose}
@@ -449,6 +453,12 @@ export default function CronJobDrawer(props: {
               token={props.token}
               namespace={ns}
               configMapName={drawerConfigMap}
+            />
+            <NamespaceDrawer
+              open={!!drawerNamespace}
+              onClose={() => setDrawerNamespace(null)}
+              token={props.token}
+              namespaceName={drawerNamespace}
             />
           </>
         )}

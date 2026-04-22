@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
-  Typography,
   Tabs,
   Tab,
   CircularProgress,
@@ -17,6 +16,7 @@ import { useConnectionState } from "../../../connectionState";
 import PodDrawer from "../pods/PodDrawer";
 import SecretDrawer from "../secrets/SecretDrawer";
 import ConfigMapDrawer from "../configmaps/ConfigMapDrawer";
+import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import DaemonSetActions from "./DaemonSetActions";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import { phaseChipColor } from "../../../utils/k8sUi";
@@ -24,6 +24,7 @@ import KeyValueTable from "../../shared/KeyValueTable";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import Section from "../../shared/Section";
+import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import MetadataSection from "../../shared/MetadataSection";
 import AttentionSummary from "../../shared/AttentionSummary";
 import HealthConditionsPanel from "../../shared/HealthConditionsPanel";
@@ -161,6 +162,7 @@ export default function DaemonSetDrawer(props: {
   const [drawerPod, setDrawerPod] = useState<string | null>(null);
   const [drawerSecret, setDrawerSecret] = useState<string | null>(null);
   const [drawerConfigMap, setDrawerConfigMap] = useState<string | null>(null);
+  const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
 
   const ns = props.namespace;
@@ -177,6 +179,7 @@ export default function DaemonSetDrawer(props: {
     setDrawerPod(null);
     setDrawerSecret(null);
     setDrawerConfigMap(null);
+    setDrawerNamespace(null);
     setLoading(true);
 
     (async () => {
@@ -244,9 +247,7 @@ export default function DaemonSetDrawer(props: {
         title={
           <>
             DaemonSet: {name || "-"}{" "}
-            <Typography component="span" variant="body2">
-              ({ns})
-            </Typography>
+            {ns ? <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} /> : null}
           </>
         }
         onClose={props.onClose}
@@ -404,6 +405,12 @@ export default function DaemonSetDrawer(props: {
               token={props.token}
               namespace={ns}
               configMapName={drawerConfigMap}
+            />
+            <NamespaceDrawer
+              open={!!drawerNamespace}
+              onClose={() => setDrawerNamespace(null)}
+              token={props.token}
+              namespaceName={drawerNamespace}
             />
           </>
         )}

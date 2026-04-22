@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
-  Typography,
   Tabs,
   Tab,
   CircularProgress,
@@ -26,9 +25,11 @@ import CodeBlock from "../../shared/CodeBlock";
 import Section from "../../shared/Section";
 import RoleDrawer from "../roles/RoleDrawer";
 import ClusterRoleDrawer from "../clusterroles/ClusterRoleDrawer";
+import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import RoleBindingActions from "./RoleBindingActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import type { ApiItemResponse, ApiListResponse, DashboardSignalItem } from "../../../types/api";
 import useResourceSignals from "../../../utils/useResourceSignals";
 import type { SxProps, Theme } from "@mui/material/styles";
@@ -84,6 +85,7 @@ export default function RoleBindingDrawer(props: {
   const [err, setErr] = useState<ApiError | null>(null);
   const [drawerRole, setDrawerRole] = useState<string | null>(null);
   const [drawerClusterRole, setDrawerClusterRole] = useState<string | null>(null);
+  const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
 
   const ns = props.namespace;
   const name = props.roleBindingName;
@@ -97,6 +99,7 @@ export default function RoleBindingDrawer(props: {
     setEvents([]);
     setDrawerRole(null);
     setDrawerClusterRole(null);
+    setDrawerNamespace(null);
     setLoading(true);
 
     (async () => {
@@ -169,9 +172,7 @@ export default function RoleBindingDrawer(props: {
         title={
           <>
             RoleBinding: {name || "-"}{" "}
-            <Typography component="span" variant="body2">
-              ({ns})
-            </Typography>
+            {ns ? <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} /> : null}
           </>
         }
         onClose={props.onClose}
@@ -309,6 +310,12 @@ export default function RoleBindingDrawer(props: {
         onClose={() => setDrawerClusterRole(null)}
         token={props.token}
         clusterRoleName={drawerClusterRole}
+      />
+      <NamespaceDrawer
+        open={!!drawerNamespace}
+        onClose={() => setDrawerNamespace(null)}
+        token={props.token}
+        namespaceName={drawerNamespace}
       />
     </RightDrawer>
   );

@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
-  Typography,
   Tabs,
   Tab,
   CircularProgress,
@@ -18,6 +17,7 @@ import PodDrawer from "../pods/PodDrawer";
 import CronJobDrawer from "../cronjobs/CronJobDrawer";
 import SecretDrawer from "../secrets/SecretDrawer";
 import ConfigMapDrawer from "../configmaps/ConfigMapDrawer";
+import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import JobActions from "./JobActions";
 import { fmtAge, fmtTimeAgo, valueOrDash } from "../../../utils/format";
 import { jobStatusChipColor, phaseChipColor } from "../../../utils/k8sUi";
@@ -177,6 +177,7 @@ export default function JobDrawer(props: {
   const [drawerCronJob, setDrawerCronJob] = useState<string | null>(null);
   const [drawerSecret, setDrawerSecret] = useState<string | null>(null);
   const [drawerConfigMap, setDrawerConfigMap] = useState<string | null>(null);
+  const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
 
   const ns = props.namespace;
   const name = props.jobName;
@@ -193,6 +194,7 @@ export default function JobDrawer(props: {
     setDrawerCronJob(null);
     setDrawerSecret(null);
     setDrawerConfigMap(null);
+    setDrawerNamespace(null);
     setLoading(true);
 
     (async () => {
@@ -280,7 +282,8 @@ export default function JobDrawer(props: {
       <ResourceDrawerShell
         title={
           <>
-            Job: {name || "-"} <Typography component="span" variant="body2">({ns})</Typography>
+            Job: {name || "-"}{" "}
+            {ns ? <ResourceLinkChip label={ns} onClick={() => setDrawerNamespace(ns)} /> : null}
           </>
         }
         onClose={props.onClose}
@@ -443,6 +446,12 @@ export default function JobDrawer(props: {
               token={props.token}
               namespace={ns}
               configMapName={drawerConfigMap}
+            />
+            <NamespaceDrawer
+              open={!!drawerNamespace}
+              onClose={() => setDrawerNamespace(null)}
+              token={props.token}
+              namespaceName={drawerNamespace}
             />
           </>
         )}
