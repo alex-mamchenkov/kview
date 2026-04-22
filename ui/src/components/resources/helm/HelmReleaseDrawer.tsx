@@ -36,9 +36,17 @@ import ConfigMapDrawer from "../configmaps/ConfigMapDrawer";
 import SecretDrawer from "../secrets/SecretDrawer";
 import JobDrawer from "../jobs/JobDrawer";
 import CronJobDrawer from "../cronjobs/CronJobDrawer";
+import HorizontalPodAutoscalerDrawer from "../horizontalpodautoscalers/HorizontalPodAutoscalerDrawer";
 import PersistentVolumeClaimDrawer from "../persistentvolumeclaims/PersistentVolumeClaimDrawer";
+import PersistentVolumeDrawer from "../persistentvolumes/PersistentVolumeDrawer";
 import ServiceAccountDrawer from "../serviceaccounts/ServiceAccountDrawer";
+import RoleDrawer from "../roles/RoleDrawer";
+import RoleBindingDrawer from "../rolebindings/RoleBindingDrawer";
+import ClusterRoleDrawer from "../clusterroles/ClusterRoleDrawer";
+import ClusterRoleBindingDrawer from "../clusterrolebindings/ClusterRoleBindingDrawer";
 import CustomResourceDefinitionDrawer from "../customresourcedefinitions/CustomResourceDefinitionDrawer";
+import PodDrawer from "../pods/PodDrawer";
+import NodeDrawer from "../nodes/NodeDrawer";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
@@ -144,7 +152,7 @@ export default function HelmReleaseDrawer(props: {
   const notes = details?.notes || "";
   const values = details?.values || "";
   const manifest = details?.manifest || "";
-  const hooks = details?.hooks || [];
+  const hooks = useMemo(() => details?.hooks || [], [details?.hooks]);
   const yaml = details?.yaml || "";
   const resourceSignals = useResourceSignals({
     token: props.token,
@@ -218,9 +226,17 @@ export default function HelmReleaseDrawer(props: {
   );
 
   function openManifestResource(r: ManifestResource) {
+    if (r.kind === "Namespace") {
+      setDrawerNamespace(r.name);
+      return;
+    }
     if (canNavigateToKind(r.kind)) {
       setLinkedResource(r);
     }
+  }
+
+  function hookResource(hook: HelmHook): ManifestResource {
+    return { kind: hook.kind, name: hook.name, namespace: ns };
   }
 
   const linkedKind = linkedResource?.kind;
@@ -351,8 +367,15 @@ export default function HelmReleaseDrawer(props: {
                       <TableBody>
                         {hooks.map((hook, idx) => (
                           <TableRow key={idx}>
-                            <TableCell sx={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
-                              {valueOrDash(hook.name)}
+                            <TableCell>
+                              {hook.name && canNavigateToKind(hook.kind) ? (
+                                <ResourceLinkChip
+                                  label={hook.name}
+                                  onClick={() => openManifestResource(hookResource(hook))}
+                                />
+                              ) : (
+                                valueOrDash(hook.name)
+                              )}
                             </TableCell>
                             <TableCell>{valueOrDash(hook.kind)}</TableCell>
                             <TableCell>
@@ -543,6 +566,13 @@ export default function HelmReleaseDrawer(props: {
               namespace={linkedResource?.namespace || ns}
               cronJobName={linkedResource?.kind === "CronJob" ? linkedResource.name : null}
             />
+            <HorizontalPodAutoscalerDrawer
+              open={linkedKind === "HorizontalPodAutoscaler"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              namespace={linkedResource?.namespace || ns}
+              hpaName={linkedResource?.kind === "HorizontalPodAutoscaler" ? linkedResource.name : null}
+            />
             <PersistentVolumeClaimDrawer
               open={linkedKind === "PersistentVolumeClaim"}
               onClose={() => setLinkedResource(null)}
@@ -550,12 +580,57 @@ export default function HelmReleaseDrawer(props: {
               namespace={linkedResource?.namespace || ns}
               persistentVolumeClaimName={linkedResource?.kind === "PersistentVolumeClaim" ? linkedResource.name : null}
             />
+            <PersistentVolumeDrawer
+              open={linkedKind === "PersistentVolume"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              persistentVolumeName={linkedResource?.kind === "PersistentVolume" ? linkedResource.name : null}
+            />
             <ServiceAccountDrawer
               open={linkedKind === "ServiceAccount"}
               onClose={() => setLinkedResource(null)}
               token={props.token}
               namespace={linkedResource?.namespace || ns}
               serviceAccountName={linkedResource?.kind === "ServiceAccount" ? linkedResource.name : null}
+            />
+            <RoleDrawer
+              open={linkedKind === "Role"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              namespace={linkedResource?.namespace || ns}
+              roleName={linkedResource?.kind === "Role" ? linkedResource.name : null}
+            />
+            <RoleBindingDrawer
+              open={linkedKind === "RoleBinding"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              namespace={linkedResource?.namespace || ns}
+              roleBindingName={linkedResource?.kind === "RoleBinding" ? linkedResource.name : null}
+            />
+            <ClusterRoleDrawer
+              open={linkedKind === "ClusterRole"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              clusterRoleName={linkedResource?.kind === "ClusterRole" ? linkedResource.name : null}
+            />
+            <ClusterRoleBindingDrawer
+              open={linkedKind === "ClusterRoleBinding"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              clusterRoleBindingName={linkedResource?.kind === "ClusterRoleBinding" ? linkedResource.name : null}
+            />
+            <PodDrawer
+              open={linkedKind === "Pod"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              namespace={linkedResource?.namespace || ns}
+              podName={linkedResource?.kind === "Pod" ? linkedResource.name : null}
+            />
+            <NodeDrawer
+              open={linkedKind === "Node"}
+              onClose={() => setLinkedResource(null)}
+              token={props.token}
+              nodeName={linkedResource?.kind === "Node" ? linkedResource.name : null}
             />
             <CustomResourceDefinitionDrawer
               open={linkedKind === "CustomResourceDefinition"}

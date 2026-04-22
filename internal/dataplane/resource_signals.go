@@ -137,7 +137,7 @@ func (m *manager) ResourceSignals(ctx context.Context, clusterName, scope, names
 	items := store.SignalsForResource(kind, name, scope, scopeLocation)
 	out := namespaceInsightSignalsFromDashboard(items)
 	if len(out) == 0 {
-		out = append(out, fallbackSignalsForResource(now, scope, namespace, kind, name, plane)...)
+		out = append(out, fallbackSignalsForResource(now, scope, namespace, kind, name, plane, int32(policy.Dashboard.RestartElevatedThreshold))...)
 	}
 	out = dedupeNamespaceSignals(out)
 	if out == nil {
@@ -146,7 +146,7 @@ func (m *manager) ResourceSignals(ctx context.Context, clusterName, scope, names
 	return ResourceSignalsResult{Signals: out, Meta: meta}, nil
 }
 
-func fallbackSignalsForResource(now time.Time, scope, namespace, kind, name string, plane *clusterPlane) []dto.NamespaceInsightSignalDTO {
+func fallbackSignalsForResource(now time.Time, scope, namespace, kind, name string, plane *clusterPlane, restartThreshold int32) []dto.NamespaceInsightSignalDTO {
 	if plane == nil || kind == "" || name == "" {
 		return nil
 	}
@@ -154,7 +154,7 @@ func fallbackSignalsForResource(now time.Time, scope, namespace, kind, name stri
 		return fallbackNamespaceSignals(now, namespace, kind, name, plane)
 	}
 	if scope == ResourceSignalsScopeCluster {
-		return fallbackClusterSignals(now, kind, name, plane)
+		return fallbackClusterSignals(now, kind, name, plane, restartThreshold)
 	}
 	return nil
 }
@@ -312,8 +312,31 @@ func fallbackNamespaceSignals(_ time.Time, namespace, kind, name string, plane *
 	return nil
 }
 
-func fallbackClusterSignals(_ time.Time, kind, name string, plane *clusterPlane) []dto.NamespaceInsightSignalDTO {
+func fallbackClusterSignals(_ time.Time, kind, name string, plane *clusterPlane, restartThreshold int32) []dto.NamespaceInsightSignalDTO {
 	switch kind {
+	case "Node":
+		snap, _ := peekClusterSnapshot(&plane.nodesStore)
+		items := snap.Items
+		if derived := derivedNodeListItemsForSignals(plane, restartThreshold); len(derived) > 0 {
+			items = MergeDirectAndDerivedNodeListItems(items, derived)
+		}
+		for _, item := range EnrichNodeListItemsForAPI(items) {
+			if item.Name != name || item.ListSignalSeverity == "" || item.ListSignalSeverity == listSignalOK {
+				continue
+			}
+			reason := "Node state needs attention."
+			switch {
+			case strings.EqualFold(strings.TrimSpace(item.Status), "NotReady"):
+				reason = "Node is not ready."
+			case strings.EqualFold(strings.TrimSpace(item.Status), "Unknown"):
+				reason = "Node readiness is unknown."
+			case item.PodDensityBucket == deployBucketDegraded:
+				reason = "Node pod density is high."
+			case item.Derived && item.ProblematicPods > 0:
+				reason = fmt.Sprintf("Node has %d problematic pod%s in cached pod snapshots.", item.ProblematicPods, pluralSuffix(item.ProblematicPods))
+			}
+			return []dto.NamespaceInsightSignalDTO{fallbackSignal(kind, "", name, item.ListSignalSeverity, listSeverityScore(item.ListSignalSeverity), reason)}
+		}
 	case "PersistentVolume":
 		snap, _ := peekClusterSnapshot(&plane.persistentVolumesStore)
 		for _, item := range EnrichPersistentVolumeListItemsForAPI(snap.Items) {
@@ -344,6 +367,37 @@ func fallbackClusterSignals(_ time.Time, kind, name string, plane *clusterPlane)
 		}
 	}
 	return nil
+}
+
+func derivedNodeListItemsForSignals(plane *clusterPlane, restartThreshold int32) []dto.NodeListItemDTO {
+	if plane == nil {
+		return nil
+	}
+	if restartThreshold <= 0 {
+		restartThreshold = signalRestartMinThreshold
+	}
+	proj := buildDerivedNodesProjection(plane, cachedPodNamespaces(plane), restartThreshold, NodesSnapshot{}, "derived")
+	if len(proj.Nodes) == 0 {
+		return nil
+	}
+	out := make([]dto.NodeListItemDTO, 0, len(proj.Nodes))
+	for _, n := range proj.Nodes {
+		out = append(out, dto.NodeListItemDTO{
+			Name:            n.Name,
+			Status:          "Derived",
+			PodsCount:       n.Pods,
+			HealthBucket:    n.Severity,
+			NeedsAttention:  n.ProblematicPods > 0,
+			Derived:         true,
+			DerivedSource:   proj.Meta.Source,
+			DerivedCoverage: proj.Meta.Coverage,
+			DerivedNote:     proj.Meta.Note,
+			NamespaceCount:  n.NamespaceCount,
+			ProblematicPods: n.ProblematicPods,
+			RestartCount:    n.RestartCount,
+		})
+	}
+	return out
 }
 
 func fallbackSignal(kind, namespace, name, severity string, score int, reason string) dto.NamespaceInsightSignalDTO {
@@ -381,6 +435,13 @@ func listSeverityScore(severity string) int {
 	default:
 		return 30
 	}
+}
+
+func pluralSuffix(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "s"
 }
 
 func dedupeNamespaceSignals(items []dto.NamespaceInsightSignalDTO) []dto.NamespaceInsightSignalDTO {

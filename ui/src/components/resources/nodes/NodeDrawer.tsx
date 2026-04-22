@@ -6,25 +6,21 @@ import {
   Tab,
   CircularProgress,
   Chip,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Table,
   TableHead,
   TableRow,
   TableCell,
   TableBody,
 } from "@mui/material";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { apiGetWithContext } from "../../../api";
 import { useActiveContext } from "../../../activeContext";
 import { useConnectionState } from "../../../connectionState";
 import AttentionSummary from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
-import ConditionsTable from "../../shared/ConditionsTable";
+import HealthConditionsPanel from "../../shared/HealthConditionsPanel";
 import CodeBlock from "../../shared/CodeBlock";
 import PodDrawer from "../pods/PodDrawer";
-import { fmtAge, fmtTs, valueOrDash } from "../../../utils/format";
+import { fmtAge, valueOrDash } from "../../../utils/format";
 import { nodeStatusChipColor, phaseChipColor } from "../../../utils/k8sUi";
 import KeyValueTable from "../../shared/KeyValueTable";
 import EmptyState from "../../shared/EmptyState";
@@ -138,7 +134,6 @@ export default function NodeDrawer(props: {
 
   const summary = details?.summary;
   const conditions = details?.conditions || [];
-  const hasUnhealthyConditions = conditions.some((c) => !isNodeConditionHealthy(c));
   const hasCapacityData =
     !!details?.capacity?.cpuCapacity ||
     !!details?.capacity?.cpuAllocatable ||
@@ -234,78 +229,78 @@ export default function NodeDrawer(props: {
                     onJumpToConditions={() => setTab(2)}
                   />
 
-                  <Accordion defaultExpanded={hasCapacityData}>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="subtitle2">Capacity</Typography>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <KeyValueTable
-                        columns={2}
-                        rows={[
-                          {
-                            label: "CPU capacity / allocatable",
-                            value: `${valueOrDash(details?.capacity?.cpuCapacity)} / ${valueOrDash(
-                              details?.capacity?.cpuAllocatable
-                            )}`,
-                          },
-                          {
-                            label: "Memory capacity / allocatable",
-                            value: `${valueOrDash(details?.capacity?.memoryCapacity)} / ${valueOrDash(
-                              details?.capacity?.memoryAllocatable
-                            )}`,
-                          },
-                          {
-                            label: "Pods capacity / allocatable",
-                            value: `${valueOrDash(details?.capacity?.podsCapacity)} / ${valueOrDash(
-                              details?.capacity?.podsAllocatable
-                            )}`,
-                          },
-                        ]}
-                      />
-                      {metricsUsable && details?.capacity?.usageAvailable ? (
-                        <Box sx={{ mt: 1.5 }}>
-                          <GaugeTableRow
-                            label="CPU usage"
-                            hint="Live CPU usage as percentage of allocatable; sourced from metrics.k8s.io."
-                            bar={
-                              details.capacity.cpuPctAllocatable != null && details.capacity.cpuPctAllocatable > 0 ? (
-                                <GaugeBar
-                                  value={details.capacity.cpuPctAllocatable}
-                                  tone={nodeUsageTone(details.capacity.cpuPctAllocatable)}
-                                  label={formatPct(details.capacity.cpuPctAllocatable)}
-                                />
-                              ) : (
-                                <Box sx={{ fontSize: 12, color: "text.secondary" }}>No allocatable reported</Box>
-                              )
-                            }
-                            summary={formatCPUMilli(details.capacity.cpuMilliUsed)}
+                  <Section title="Capacity">
+                    <Box sx={panelBoxSx}>
+                      {hasCapacityData ? (
+                        <>
+                          <KeyValueTable
+                            columns={2}
+                            rows={[
+                              {
+                                label: "CPU capacity / allocatable",
+                                value: `${valueOrDash(details?.capacity?.cpuCapacity)} / ${valueOrDash(
+                                  details?.capacity?.cpuAllocatable
+                                )}`,
+                              },
+                              {
+                                label: "Memory capacity / allocatable",
+                                value: `${valueOrDash(details?.capacity?.memoryCapacity)} / ${valueOrDash(
+                                  details?.capacity?.memoryAllocatable
+                                )}`,
+                              },
+                              {
+                                label: "Pods capacity / allocatable",
+                                value: `${valueOrDash(details?.capacity?.podsCapacity)} / ${valueOrDash(
+                                  details?.capacity?.podsAllocatable
+                                )}`,
+                              },
+                            ]}
                           />
-                          <GaugeTableRow
-                            label="Memory usage"
-                            hint="Live memory usage as percentage of allocatable; sourced from metrics.k8s.io."
-                            bar={
-                              details.capacity.memoryPctAllocatable != null && details.capacity.memoryPctAllocatable > 0 ? (
-                                <GaugeBar
-                                  value={details.capacity.memoryPctAllocatable}
-                                  tone={nodeUsageTone(details.capacity.memoryPctAllocatable)}
-                                  label={formatPct(details.capacity.memoryPctAllocatable)}
-                                />
-                              ) : (
-                                <Box sx={{ fontSize: 12, color: "text.secondary" }}>No allocatable reported</Box>
-                              )
-                            }
-                            summary={formatMemoryBytes(details.capacity.memoryBytesUsed)}
-                          />
-                        </Box>
-                      ) : null}
-                    </AccordionDetails>
-                  </Accordion>
+                          {metricsUsable && details?.capacity?.usageAvailable ? (
+                            <Box sx={{ mt: 1.5 }}>
+                              <GaugeTableRow
+                                label="CPU usage"
+                                hint="Live CPU usage as percentage of allocatable; sourced from metrics.k8s.io."
+                                bar={
+                                  details.capacity.cpuPctAllocatable != null && details.capacity.cpuPctAllocatable > 0 ? (
+                                    <GaugeBar
+                                      value={details.capacity.cpuPctAllocatable}
+                                      tone={nodeUsageTone(details.capacity.cpuPctAllocatable)}
+                                      label={formatPct(details.capacity.cpuPctAllocatable)}
+                                    />
+                                  ) : (
+                                    <Box sx={{ fontSize: 12, color: "text.secondary" }}>No allocatable reported</Box>
+                                  )
+                                }
+                                summary={formatCPUMilli(details.capacity.cpuMilliUsed)}
+                              />
+                              <GaugeTableRow
+                                label="Memory usage"
+                                hint="Live memory usage as percentage of allocatable; sourced from metrics.k8s.io."
+                                bar={
+                                  details.capacity.memoryPctAllocatable != null && details.capacity.memoryPctAllocatable > 0 ? (
+                                    <GaugeBar
+                                      value={details.capacity.memoryPctAllocatable}
+                                      tone={nodeUsageTone(details.capacity.memoryPctAllocatable)}
+                                      label={formatPct(details.capacity.memoryPctAllocatable)}
+                                    />
+                                  ) : (
+                                    <Box sx={{ fontSize: 12, color: "text.secondary" }}>No allocatable reported</Box>
+                                  )
+                                }
+                                summary={formatMemoryBytes(details.capacity.memoryBytesUsed)}
+                              />
+                            </Box>
+                          ) : null}
+                        </>
+                      ) : (
+                        <EmptyState message="No capacity data reported for this node." />
+                      )}
+                    </Box>
+                  </Section>
 
-                  <Accordion defaultExpanded={taints.length > 0}>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="subtitle2">Taints</Typography>
-                    </AccordionSummary>
-                    <AccordionDetails>
+                  <Section title="Taints">
+                    <Box sx={panelBoxSx}>
                       {taints.length === 0 ? (
                         <EmptyState message="No taints on this node." />
                       ) : (
@@ -328,8 +323,8 @@ export default function NodeDrawer(props: {
                           </TableBody>
                         </Table>
                       )}
-                    </AccordionDetails>
-                  </Accordion>
+                    </Box>
+                  </Section>
 
                 </Box>
               )}
@@ -427,8 +422,8 @@ export default function NodeDrawer(props: {
 
               {/* CONDITIONS */}
               {tab === 2 && (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  <ConditionsTable
+                <Box sx={drawerTabContentSx}>
+                  <HealthConditionsPanel
                     conditions={conditions}
                     isHealthy={(cond) => isNodeConditionHealthy(cond as NodeCondition)}
                     chipColor={(cond) => nodeConditionChipColor(cond as NodeCondition)}

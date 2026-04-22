@@ -14,13 +14,35 @@ import {
 import { valueOrDash } from "../../../utils/format";
 import KeyValueTable from "../../shared/KeyValueTable";
 import Section from "../../shared/Section";
+import AttentionSummary from "../../shared/AttentionSummary";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 import EmptyState from "../../shared/EmptyState";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import { drawerBodySx, drawerTabContentSx, panelBoxSx } from "../../../theme/sxTokens";
-import type { HelmChart, HelmChartVersion } from "../../../types/api";
+import type { DashboardSignalItem, HelmChart, HelmChartVersion } from "../../../types/api";
+
+function chartSignalSummary(chart: HelmChart, versions: HelmChartVersion[]): DashboardSignalItem[] {
+  const signalCount = Number(chart.needsAttention || 0);
+  if (signalCount <= 0) return [];
+  const statusText = (chart.statuses || []).join(", ") || "unknown";
+  const versionParts = versions
+    .filter((version) => Number(version.needsAttention || 0) > 0)
+    .map((version) => `${valueOrDash(version.chartVersion)}: ${version.needsAttention}`);
+  return [{
+    kind: "HelmChart",
+    name: chart.chartName,
+    severity: "medium",
+    score: 60,
+    signalType: "helm_chart_release_attention",
+    reason: `${signalCount} release${signalCount === 1 ? "" : "s"} for this chart need attention.`,
+    actualData: versionParts.length ? `Affected versions: ${versionParts.join(", ")}` : `Statuses: ${statusText}`,
+    calculatedData: `Statuses: ${statusText}`,
+    likelyCause: "One or more Helm releases for this chart are not in a healthy deployed state.",
+    suggestedAction: "Open the affected Helm release rows for the chart version and inspect release status, hooks, events, and managed resources.",
+  }];
+}
 
 export default function HelmChartDrawer(props: {
   open: boolean;
@@ -46,6 +68,10 @@ export default function HelmChartDrawer(props: {
   }, [chart]);
   const namespaces = chart?.namespaces || [];
   const statuses = chart?.statuses || [];
+  const chartSignals = useMemo<DashboardSignalItem[]>(
+    () => (chart ? chartSignalSummary(chart, versions) : []),
+    [chart, versions],
+  );
 
   const summaryItems = useMemo(
     () =>
@@ -82,6 +108,8 @@ export default function HelmChartDrawer(props: {
                   <Box sx={panelBoxSx}>
                     <KeyValueTable rows={summaryItems} columns={3} />
                   </Box>
+
+                  <AttentionSummary signals={chartSignals} />
 
                   {chart.derived ? (
                     <Section title="Derived Projection">
@@ -135,7 +163,13 @@ export default function HelmChartDrawer(props: {
                             <TableCell>{version.namespaces?.length || 0}</TableCell>
                             <TableCell>{(version.statuses || []).join(", ") || "-"}</TableCell>
                             <TableCell>
-                              {version.needsAttention ? <Chip size="small" color="warning" label={version.needsAttention} /> : "-"}
+                              {version.needsAttention ? (
+                                <Chip
+                                  size="small"
+                                  color="warning"
+                                  label={`${version.needsAttention} release${version.needsAttention === 1 ? "" : "s"}`}
+                                />
+                              ) : "-"}
                             </TableCell>
                           </TableRow>
                         ))}

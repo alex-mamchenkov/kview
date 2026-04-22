@@ -24,7 +24,7 @@ import { useConnectionState } from "../../../connectionState";
 import IngressDrawer from "../ingresses/IngressDrawer";
 import PodDrawer from "../pods/PodDrawer";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
-import { fmtAge, fmtTs, valueOrDash } from "../../../utils/format";
+import { fmtAge, valueOrDash } from "../../../utils/format";
 import Section from "../../shared/Section";
 import KeyValueTable from "../../shared/KeyValueTable";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
@@ -238,7 +238,7 @@ export default function ServiceDrawer(props: {
   }, [props.open, name, ns, props.token, retryNonce]);
 
   useEffect(() => {
-    if (!props.open || !name || tab !== 2) return;
+    if (!props.open || !name || tab !== 1) return;
     if (ingressesLoading || ingressesLoaded) return;
 
     setIngressesLoading(true);
@@ -260,8 +260,6 @@ export default function ServiceDrawer(props: {
   }, [props.open, name, ns, props.token, tab, ingressesLoading, ingressesLoaded]);
 
   const summary = details?.summary;
-  const endpoints = details?.endpoints;
-  const totalEndpoints = (endpoints?.ready || 0) + (endpoints?.notReady || 0);
   const resourceSignals = useResourceSignals({
     token: props.token,
     scope: "namespace",
@@ -395,8 +393,7 @@ export default function ServiceDrawer(props: {
           <>
             <Tabs value={tab} onChange={(_, v) => setTab(v)}>
               <Tab label="Overview" />
-              <Tab label="Endpoints" />
-              <Tab label="Ingresses" />
+              <Tab label="Inventory" />
               <Tab label="Events" />
               <Tab label="Metadata" />
               <Tab label="YAML" />
@@ -434,53 +431,56 @@ export default function ServiceDrawer(props: {
 
                   <AttentionSummary
                     signals={serviceSignals}
-                    onJumpToEvents={() => setTab(3)}
+                    onJumpToEvents={() => setTab(2)}
                   />
 
                   <Section title="Ports">
-                    {(details?.ports || []).length === 0 ? (
-                      <EmptyState message="No ports defined for this Service." sx={{ mt: 1 }} />
-                    ) : (
-                      <Table size="small" sx={{ mt: 1 }}>
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Name</TableCell>
-                            <TableCell>Service Port</TableCell>
-                            <TableCell>Target Port</TableCell>
-                            <TableCell>Protocol</TableCell>
-                            <TableCell>NodePort</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {(details?.ports || []).map((p, idx) => (
-                            <TableRow key={`${p.name ?? "port"}-${idx}`}>
-                              <TableCell>{valueOrDash(p.name)}</TableCell>
-                              <TableCell>{valueOrDash(p.port)}</TableCell>
-                              <TableCell>{valueOrDash(p.targetPort)}</TableCell>
-                              <TableCell>{valueOrDash(p.protocol)}</TableCell>
-                              <TableCell>{p.nodePort ? p.nodePort : "-"}</TableCell>
+                    <Box sx={panelBoxSx}>
+                      {(details?.ports || []).length === 0 ? (
+                        <EmptyState message="No ports defined for this Service." />
+                      ) : (
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Name</TableCell>
+                              <TableCell>Service Port</TableCell>
+                              <TableCell>Target Port</TableCell>
+                              <TableCell>Protocol</TableCell>
+                              <TableCell>NodePort</TableCell>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
+                          </TableHead>
+                          <TableBody>
+                            {(details?.ports || []).map((p, idx) => (
+                              <TableRow key={`${p.name ?? "port"}-${idx}`}>
+                                <TableCell>{valueOrDash(p.name)}</TableCell>
+                                <TableCell>{valueOrDash(p.port)}</TableCell>
+                                <TableCell>{valueOrDash(p.targetPort)}</TableCell>
+                                <TableCell>{valueOrDash(p.protocol)}</TableCell>
+                                <TableCell>{p.nodePort ? p.nodePort : "-"}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </Box>
                   </Section>
 
                   <Section title="Traffic Notes">
-                    <KeyValueTable
-                      columns={2}
-                      sx={{ mt: 1 }}
-                      rows={[
-                        {
-                          label: "External Traffic Policy",
-                          value: valueOrDash(details?.traffic?.externalTrafficPolicy),
-                        },
-                        {
-                          label: "LoadBalancer Ingress",
-                          value: (details?.traffic?.loadBalancerIngress || []).join(", ") || "-",
-                        },
-                      ]}
-                    />
+                    <Box sx={panelBoxSx}>
+                      <KeyValueTable
+                        columns={2}
+                        rows={[
+                          {
+                            label: "External Traffic Policy",
+                            value: valueOrDash(details?.traffic?.externalTrafficPolicy),
+                          },
+                          {
+                            label: "LoadBalancer Ingress",
+                            value: (details?.traffic?.loadBalancerIngress || []).join(", ") || "-",
+                          },
+                        ]}
+                      />
+                    </Box>
                   </Section>
 
                   {(() => {
@@ -513,113 +513,110 @@ export default function ServiceDrawer(props: {
                 </Box>
               )}
 
-              {/* ENDPOINTS */}
+              {/* INVENTORY */}
               {tab === 1 && (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                    <Chip size="small" label={`Ready: ${endpoints?.ready ?? 0}`} color="success" />
-                    <Chip size="small" label={`Not Ready: ${endpoints?.notReady ?? 0}`} color="warning" />
-                    <Chip size="small" label={`Total: ${totalEndpoints}`} />
-                  </Box>
-
-                  {(details?.endpoints?.pods || []).length === 0 ? (
-                    <EmptyState message="No endpoints found for this Service." />
-                  ) : (
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Pod</TableCell>
-                          <TableCell>Namespace</TableCell>
-                          <TableCell>Node</TableCell>
-                          <TableCell>Ready</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {(details?.endpoints?.pods || []).map((p, idx) => (
-                          <TableRow
-                            key={`${p.namespace}/${p.name}-${idx}`}
-                            hover
-                            onClick={() => {
-                              if (!p.name) return;
-                              setDrawerPod(p.name);
-                              setDrawerPodNs(p.namespace || ns);
-                            }}
-                            sx={{ cursor: p.name ? "pointer" : "default" }}
-                          >
-                            <TableCell>{valueOrDash(p.name)}</TableCell>
-                            <TableCell>{valueOrDash(p.namespace)}</TableCell>
-                            <TableCell>{valueOrDash(p.node)}</TableCell>
-                            <TableCell>
-                              <Chip size="small" label={p.ready ? "Ready" : "Not Ready"} color={p.ready ? "success" : "warning"} />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </Box>
-              )}
-
-              {/* INGRESSES */}
-              {tab === 2 && (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  {ingressesLoading ? (
-                    <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
-                      <CircularProgress />
+                <Box sx={drawerTabContentSx}>
+                  <Section title="Endpoint Pods">
+                    <Box sx={panelBoxSx}>
+                      {(details?.endpoints?.pods || []).length === 0 ? (
+                        <EmptyState message="No endpoints found for this Service." />
+                      ) : (
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Pod</TableCell>
+                              <TableCell>Namespace</TableCell>
+                              <TableCell>Node</TableCell>
+                              <TableCell>Ready</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {(details?.endpoints?.pods || []).map((p, idx) => (
+                              <TableRow
+                                key={`${p.namespace}/${p.name}-${idx}`}
+                                hover
+                                onClick={() => {
+                                  if (!p.name) return;
+                                  setDrawerPod(p.name);
+                                  setDrawerPodNs(p.namespace || ns);
+                                }}
+                                sx={{ cursor: p.name ? "pointer" : "default" }}
+                              >
+                                <TableCell>{valueOrDash(p.name)}</TableCell>
+                                <TableCell>{valueOrDash(p.namespace)}</TableCell>
+                                <TableCell>{valueOrDash(p.node)}</TableCell>
+                                <TableCell>
+                                  <Chip size="small" label={p.ready ? "Ready" : "Not Ready"} color={p.ready ? "success" : "warning"} />
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
                     </Box>
-                  ) : ingressesAccessDenied ? (
-                    <AccessDeniedState status={ingressesErr?.status} resourceLabel="Ingresses" />
-                  ) : ingressesErr ? (
-                    <ErrorState message={ingressesErr.message} />
-                  ) : ingresses.length === 0 ? (
-                    <EmptyState message="No ingresses reference this Service." />
-                  ) : (
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Name</TableCell>
-                          <TableCell>Class</TableCell>
-                          <TableCell>Hosts</TableCell>
-                          <TableCell>TLS</TableCell>
-                          <TableCell>Address</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {ingresses.map((ing) => (
-                          <TableRow
-                            key={`${ing.namespace}/${ing.name}`}
-                            hover
-                            onClick={() =>
-                              ing.name && ing.namespace ? setDrawerIngress({ name: ing.name, namespace: ing.namespace }) : null
-                            }
-                            sx={{ cursor: ing.name ? "pointer" : "default" }}
-                          >
-                            <TableCell>{valueOrDash(ing.name)}</TableCell>
-                            <TableCell>
-                              <Chip size="small" label={valueOrDash(ing.ingressClassName)} />
-                            </TableCell>
-                            <TableCell>{formatIngressHostsSummary(ing.hosts)}</TableCell>
-                            <TableCell>
-                              <Chip size="small" label={formatIngressTlsLabel(ing.tlsCount)} />
-                            </TableCell>
-                            <TableCell>{formatIngressAddresses(ing.addresses)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
+                  </Section>
+
+                  <Section title="Ingresses">
+                    <Box sx={panelBoxSx}>
+                      {ingressesLoading ? (
+                        <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
+                          <CircularProgress />
+                        </Box>
+                      ) : ingressesAccessDenied ? (
+                        <AccessDeniedState status={ingressesErr?.status} resourceLabel="Ingresses" />
+                      ) : ingressesErr ? (
+                        <ErrorState message={ingressesErr.message} />
+                      ) : ingresses.length === 0 ? (
+                        <EmptyState message="No ingresses reference this Service." />
+                      ) : (
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Name</TableCell>
+                              <TableCell>Class</TableCell>
+                              <TableCell>Hosts</TableCell>
+                              <TableCell>TLS</TableCell>
+                              <TableCell>Address</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {ingresses.map((ing) => (
+                              <TableRow
+                                key={`${ing.namespace}/${ing.name}`}
+                                hover
+                                onClick={() =>
+                                  ing.name && ing.namespace ? setDrawerIngress({ name: ing.name, namespace: ing.namespace }) : null
+                                }
+                                sx={{ cursor: ing.name ? "pointer" : "default" }}
+                              >
+                                <TableCell>{valueOrDash(ing.name)}</TableCell>
+                                <TableCell>
+                                  <Chip size="small" label={valueOrDash(ing.ingressClassName)} />
+                                </TableCell>
+                                <TableCell>{formatIngressHostsSummary(ing.hosts)}</TableCell>
+                                <TableCell>
+                                  <Chip size="small" label={formatIngressTlsLabel(ing.tlsCount)} />
+                                </TableCell>
+                                <TableCell>{formatIngressAddresses(ing.addresses)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </Box>
+                  </Section>
                 </Box>
               )}
 
               {/* EVENTS */}
-              {tab === 3 && (
+              {tab === 2 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
                   <EventsList events={events} emptyMessage="No events found for this Service." />
                 </Box>
               )}
 
               {/* METADATA */}
-              {tab === 4 && (
+              {tab === 3 && (
                 <Box sx={drawerTabContentSx}>
                   <Box sx={panelBoxSx}>
                     <KeyValueTable rows={summaryItems} columns={3} />
@@ -629,7 +626,7 @@ export default function ServiceDrawer(props: {
               )}
 
               {/* YAML */}
-              {tab === 5 && (
+              {tab === 4 && (
                 <CodeBlock code={details?.yaml || ""} language="yaml" />
               )}
             </Box>

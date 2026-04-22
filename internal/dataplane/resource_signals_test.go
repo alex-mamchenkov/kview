@@ -9,10 +9,10 @@ import (
 
 func TestResourceSignalKindFromRoute(t *testing.T) {
 	tests := []struct {
-		scope   string
-		route   string
-		want    string
-		wantOK  bool
+		scope  string
+		route  string
+		want   string
+		wantOK bool
 	}{
 		{ResourceSignalsScopeNamespace, "pods", "Pod", true},
 		{ResourceSignalsScopeNamespace, "PODS", "Pod", true},
@@ -150,7 +150,8 @@ func TestResourceSignals_NamespaceScope_ReturnsAttributedSignals(t *testing.T) {
 	})
 
 	t.Run("unknown name returns empty signals", func(t *testing.T) {
-		got, err := mm.ResourceSignals(t.Context(), "ctx-rs-ns", ResourceSignalsScopeNamespace, ns, "Pod", "missing"); if err != nil {
+		got, err := mm.ResourceSignals(t.Context(), "ctx-rs-ns", ResourceSignalsScopeNamespace, ns, "Pod", "missing")
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(got.Signals) != 0 {
@@ -233,6 +234,13 @@ func TestResourceSignals_ClusterScope_FallbackNeedsAttentionSignals(t *testing.T
 			{Name: "pv-healthy", Phase: "Bound"},
 		},
 	})
+	setClusterSnapshot(&plane.nodesStore, NodesSnapshot{
+		Meta: SnapshotMetadata{ObservedAt: time.Now().UTC(), Freshness: FreshnessClassWarm},
+		Items: []dto.NodeListItemDTO{
+			{Name: "node-warn", Status: "Unknown"},
+			{Name: "node-ok", Status: "Ready"},
+		},
+	})
 
 	got, err := mm.ResourceSignals(t.Context(), "ctx-rs-cluster", ResourceSignalsScopeCluster, "", "PersistentVolume", "pv-critical")
 	if err != nil {
@@ -251,5 +259,21 @@ func TestResourceSignals_ClusterScope_FallbackNeedsAttentionSignals(t *testing.T
 	}
 	if len(clean.Signals) != 0 {
 		t.Fatalf("expected no signals for healthy pv, got %+v", clean.Signals)
+	}
+
+	nodeSignals, err := mm.ResourceSignals(t.Context(), "ctx-rs-cluster", ResourceSignalsScopeCluster, "", "Node", "node-warn")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(nodeSignals.Signals) == 0 || nodeSignals.Signals[0].Reason == "" {
+		t.Fatalf("expected fallback signal for node-warn, got %+v", nodeSignals.Signals)
+	}
+
+	nodeClean, err := mm.ResourceSignals(t.Context(), "ctx-rs-cluster", ResourceSignalsScopeCluster, "", "Node", "node-ok")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(nodeClean.Signals) != 0 {
+		t.Fatalf("expected no signals for healthy node, got %+v", nodeClean.Signals)
 	}
 }

@@ -115,6 +115,7 @@ const kindToNavKey: Record<string, string> = {
   Secret: "secrets",
   Job: "jobs",
   CronJob: "cronjobs",
+  HorizontalPodAutoscaler: "horizontalpodautoscalers",
   PersistentVolumeClaim: "persistentvolumeclaims",
   PersistentVolume: "persistentvolumes",
   ServiceAccount: "serviceaccounts",
