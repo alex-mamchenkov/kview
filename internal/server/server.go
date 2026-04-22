@@ -781,8 +781,9 @@ func (s *Server) Router() http.Handler {
 
 		api.Get("/contexts", func(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{
-				"active":   s.mgr.ActiveContext(),
-				"contexts": s.mgr.ListContexts(),
+				"active":     s.mgr.ActiveContext(),
+				"contexts":   s.mgr.ListContexts(),
+				"kubeconfig": s.mgr.KubeconfigInfo(),
 			})
 		})
 

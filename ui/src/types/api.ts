@@ -96,7 +96,15 @@ export type ApiNamespacesEnrichmentPoll = {
 };
 
 /** /api/contexts response */
-export type ApiContextsResponse = { contexts?: Array<{ name: string }> };
+export type ApiContextsResponse = {
+  active?: string;
+  contexts?: Array<{ name: string; cluster?: string; authInfo?: string; namespace?: string }>;
+  kubeconfig?: {
+    files?: string[];
+    explicitlySet?: boolean;
+    defaultPath?: string;
+  };
+};
 
 export type ApiDataplaneSearchItem = {
   cluster: string;

@@ -53,6 +53,7 @@ import SettingsView from "./components/settings/SettingsView";
 import DataplaneQuickSearch from "./components/search/DataplaneQuickSearch";
 import DataplaneSearchDrawer from "./components/search/DataplaneSearchDrawer";
 import type { ApiDataplaneSearchItem } from "./types/api";
+import StartupDialog, { type StartupKubeconfigInfo, type StartupStep, type StartupStepStatus } from "./components/StartupDialog";
 import { POLL_STATUS_INTERVAL_MS } from "./constants/pollIntervals";
 import { dataplaneSearchSectionByKind } from "./constants/resourceSections";
 import "./styles/theme.css";
@@ -64,6 +65,9 @@ function getToken(): string {
 
 const INITIAL_NAMESPACE_RETRY_ATTEMPTS = 5;
 const INITIAL_NAMESPACE_RETRY_DELAY_MS = 400;
+
+type ContextOption = NonNullable<ApiContextsResponse["contexts"]>[number];
+type BootstrapPhase = "contexts" | "context" | "namespaces" | "ready" | "no-context" | "error";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -83,6 +87,24 @@ function pickNamespace({
   return items[0] || "";
 }
 
+function startupSteps(phase: BootstrapPhase, detail: Partial<Record<BootstrapPhase, string>>): StartupStep[] {
+  const order: Array<{ id: BootstrapPhase; label: string }> = [
+    { id: "contexts", label: "Reading kube contexts" },
+    { id: "context", label: "Selecting active context" },
+    { id: "namespaces", label: "Loading namespaces and dataplane cache" },
+  ];
+  const phaseIndex = order.findIndex((step) => step.id === phase);
+  return order.map((step, index) => {
+    let status: StartupStepStatus = "pending";
+    if (phase === "ready") status = "done";
+    else if (phase === "error" && index === Math.max(0, phaseIndex)) status = "error";
+    else if (phase === "no-context" && step.id === "contexts") status = "error";
+    else if (phaseIndex >= 0 && index < phaseIndex) status = "done";
+    else if (step.id === phase) status = "active";
+    return { ...step, status, detail: detail[step.id] };
+  });
+}
+
 function AppInner() {
   const token = useMemo(() => getToken(), []);
   const { settings } = useUserSettings();
@@ -91,8 +113,13 @@ function AppInner() {
   const [criticalOpen, setCriticalOpen] = useState(false);
   const [lastCriticalSeenId, setLastCriticalSeenId] = useState<string | null>(null);
   const [lastRecoverySeenAt, setLastRecoverySeenAt] = useState<number | null>(null);
-  const [contexts, setContexts] = useState<Array<{ name: string }>>([]);
+  const [contexts, setContexts] = useState<ContextOption[]>([]);
   const [activeContext, setActiveContext] = useState<string>("");
+  const [bootstrapPhase, setBootstrapPhase] = useState<BootstrapPhase>("contexts");
+  const [bootstrapDetail, setBootstrapDetail] = useState<Partial<Record<BootstrapPhase, string>>>({});
+  const [bootstrapError, setBootstrapError] = useState<string>("");
+  const [kubeconfigInfo, setKubeconfigInfo] = useState<StartupKubeconfigInfo | null>(null);
+  const [bootstrapNonce, setBootstrapNonce] = useState(0);
 
   const [namespaces, setNamespaces] = useState<string[]>([]);
   const [nsLimited, setNsLimited] = useState<boolean>(false);
@@ -179,24 +206,57 @@ function AppInner() {
 
   // initial bootstrap
   useEffect(() => {
+    let cancelled = false;
     (async () => {
+      setBootstrapPhase("contexts");
+      setBootstrapError("");
+      setBootstrapDetail({ contexts: "Reading configured kubeconfig files" });
       // 1) contexts
       const ctxRes = await apiGet<ApiContextsResponse>("/api/contexts", token);
+      if (cancelled) return;
       const ctxs = ctxRes.contexts || [];
       setContexts(ctxs);
+      setKubeconfigInfo(ctxRes.kubeconfig || null);
+
+      if (ctxs.length === 0) {
+        setActiveContext("");
+        setNamespace("");
+        setNamespaces([]);
+        setBootstrapDetail({ contexts: "No contexts were found in the configured kubeconfig files" });
+        setBootstrapPhase("no-context");
+        return;
+      }
 
       const stateCtx = appState.activeContext;
       const ctxExists = stateCtx && ctxs.some((c) => c.name === stateCtx);
-      const chosenCtx = ctxExists ? stateCtx : (ctxs[0]?.name || "");
+      const activeFromBackend = ctxRes.active && ctxs.some((c) => c.name === ctxRes.active) ? ctxRes.active : "";
+      const chosen = ctxExists
+        ? ctxs.find((c) => c.name === stateCtx)
+        : ctxs.find((c) => c.name === activeFromBackend) || ctxs[0];
+      const chosenCtx = chosen?.name || ctxRes.active || "";
+      const optimisticNamespace = appState.activeNamespace || chosen?.namespace || "default";
 
       if (chosenCtx) {
+        setBootstrapPhase("context");
+        setBootstrapDetail((d) => ({ ...d, context: `Selecting ${chosenCtx}` }));
         await apiPost("/api/context/select", token, { name: chosenCtx });
       }
+      if (cancelled) return;
       setActiveContext(chosenCtx);
+      if (optimisticNamespace) {
+        setNamespace(optimisticNamespace);
+      }
+      setSection(appState.activeSection || "pods");
 
       // 2) namespaces
+      setBootstrapPhase("namespaces");
+      setBootstrapDetail((d) => ({
+        ...d,
+        namespaces: "Starting observers and asking the dataplane for the namespace snapshot",
+      }));
       const nsPath0 = namespacesListApiPath(appState, chosenCtx, appState.activeNamespace || "");
       const { limited, items: nsItems } = await fetchNamespacesWithWarmup(token, nsPath0, chosenCtx);
+      if (cancelled) return;
       setNsLimited(limited);
       setNamespaces(nsItems);
 
@@ -204,7 +264,7 @@ function AppInner() {
       const chosenNs = pickNamespace({
         limited,
         items: nsItems,
-        preferred: appState.activeNamespace || "",
+        preferred: optimisticNamespace || "",
       });
       setNamespace(chosenNs);
 
@@ -228,9 +288,20 @@ function AppInner() {
         }
         return next;
       });
-    })().catch(console.error);
+      setBootstrapDetail((d) => ({ ...d, namespaces: `${nsItems.length} namespaces available` }));
+      setBootstrapPhase("ready");
+    })().catch((err) => {
+      if (cancelled) return;
+      const message = String((err as Error | undefined)?.message || err || "Startup failed");
+      setBootstrapError(message);
+      setBootstrapPhase("error");
+      console.error(err);
+    });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [bootstrapNonce]);
 
   async function fetchNamespaces(
     currentToken: string,
@@ -268,31 +339,49 @@ function AppInner() {
   }
 
   async function onSelectContext(name: string) {
-    await apiPost("/api/context/select", token, { name });
-    setActiveContext(name);
-
-    const nsPath = namespacesListApiPath(appState, name, appState.activeNamespace || "");
-    const { limited, items: nsItems } = await fetchNamespacesWithWarmup(token, nsPath, name);
-    setNsLimited(limited);
-    setNamespaces(nsItems);
-
-    // pick namespace from state if possible
-    const chosenNs = pickNamespace({
-      limited,
-      items: nsItems,
-      preferred: appState.activeNamespace || "",
+    const selected = contexts.find((c) => c.name === name);
+    const optimisticNamespace = selected?.namespace || appState.activeNamespace || "default";
+    setBootstrapPhase("context");
+    setBootstrapError("");
+    setBootstrapDetail({
+      context: `Selecting ${name}`,
+      namespaces: "Waiting for namespace snapshot",
     });
-    setNamespace(chosenNs);
+    try {
+      await apiPost("/api/context/select", token, { name });
+      setActiveContext(name);
+      if (optimisticNamespace) setNamespace(optimisticNamespace);
 
-    // load favourites for this context
-    const fav = (appState.favouriteNamespacesByContext[name] || []).slice();
-    setFavourites(fav);
+      setBootstrapPhase("namespaces");
+      const nsPath = namespacesListApiPath(appState, name, appState.activeNamespace || "");
+      const { limited, items: nsItems } = await fetchNamespacesWithWarmup(token, nsPath, name);
+      setNsLimited(limited);
+      setNamespaces(nsItems);
 
-    setAppState((s) => {
-      let next: AppStateV1 = { ...s, activeContext: name, activeNamespace: chosenNs };
-      if (name && chosenNs) next = recordRecentNamespace(next, name, chosenNs);
-      return next;
-    });
+      // pick namespace from state if possible
+      const chosenNs = pickNamespace({
+        limited,
+        items: nsItems,
+        preferred: optimisticNamespace || "",
+      });
+      setNamespace(chosenNs);
+
+      // load favourites for this context
+      const fav = (appState.favouriteNamespacesByContext[name] || []).slice();
+      setFavourites(fav);
+
+      setAppState((s) => {
+        let next: AppStateV1 = { ...s, activeContext: name, activeNamespace: chosenNs };
+        if (name && chosenNs) next = recordRecentNamespace(next, name, chosenNs);
+        return next;
+      });
+      setBootstrapDetail((d) => ({ ...d, namespaces: `${nsItems.length} namespaces available` }));
+      setBootstrapPhase("ready");
+    } catch (err) {
+      const message = String((err as Error | undefined)?.message || err || "Context switch failed");
+      setBootstrapError(message);
+      setBootstrapPhase("error");
+    }
   }
 
   function onSelectNamespace(ns: string) {
@@ -328,6 +417,14 @@ function AppInner() {
     setSearchDrawerItem(item);
   }
 
+  const startupMode = bootstrapPhase === "no-context" ? "no-context" : bootstrapPhase === "error" ? "error" : "loading";
+  const startupMessage =
+    bootstrapPhase === "no-context"
+      ? "kview is running, but it did not find any Kubernetes context to select."
+      : bootstrapPhase === "error"
+        ? bootstrapError || "Startup did not complete."
+        : "Preparing the active cluster view. Cached data may appear first while live snapshots refresh.";
+
   return (
     <ActiveContextProvider value={activeContext}>
         <MutationProvider>
@@ -344,6 +441,14 @@ function AppInner() {
           }}
         >
           <CssBaseline />
+          <StartupDialog
+            open={!settingsOpen && bootstrapPhase !== "ready"}
+            mode={startupMode}
+            message={startupMessage}
+            steps={startupSteps(bootstrapPhase, bootstrapDetail)}
+            kubeconfig={kubeconfigInfo}
+            onRetry={() => setBootstrapNonce((n) => n + 1)}
+          />
           <AppBar position="fixed" sx={{ zIndex: 1201 }}>
             <Toolbar sx={{ position: "relative" }}>
               <Box

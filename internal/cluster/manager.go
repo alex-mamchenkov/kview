@@ -30,6 +30,12 @@ type ContextInfo struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
+type KubeconfigInfo struct {
+	Files         []string `json:"files"`
+	ExplicitlySet bool     `json:"explicitlySet"`
+	DefaultPath   string   `json:"defaultPath"`
+}
+
 type Manager struct {
 	mu sync.RWMutex
 
@@ -233,6 +239,18 @@ func (m *Manager) ListContexts() []ContextInfo {
 		})
 	}
 	return out
+}
+
+func (m *Manager) KubeconfigInfo() KubeconfigInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	files := append([]string(nil), m.kubeconfigFiles...)
+	return KubeconfigInfo{
+		Files:         files,
+		ExplicitlySet: m.kubeconfigSet,
+		DefaultPath:   defaultKubeconfigPath(),
+	}
 }
 
 func (m *Manager) ContextInfo(name string) (ContextInfo, bool) {
