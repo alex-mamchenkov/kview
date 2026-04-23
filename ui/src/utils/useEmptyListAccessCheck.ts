@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiPost, toApiError, type ApiError } from "../api";
+import { useConnectionState } from "../connectionState";
 import type { AccessReviewResource } from "./k8sResources";
 
 type CanIResponse = {
@@ -70,9 +71,10 @@ export default function useEmptyListAccessCheck({
   verb?: string;
 }) {
   const [accessDenied, setAccessDenied] = useState(false);
+  const { health } = useConnectionState();
   const nsValue = namespace ?? null;
 
-  const shouldCheck = !loading && !error && itemsLength === 0;
+  const shouldCheck = health === "healthy" && !loading && !error && itemsLength === 0;
   const key = useMemo(() => buildKey(token, verb, resource, nsValue), [token, verb, resource, nsValue]);
 
   useEffect(() => {

@@ -23,6 +23,7 @@ const HEADER_HEIGHT = 28;
 
 export default function ActivityPanel({ token, covered = false }: Props) {
   const { backendHealth, clusterHealth, cluster } = useConnectionState();
+  const effectiveClusterHealth = backendHealth === "healthy" && clusterHealth === "healthy" ? "healthy" : "unhealthy";
   const { settings } = useUserSettings();
   const [open, setOpen] = useState(() => settings.appearance.activityPanelInitiallyOpen);
   const [tab, setTab] = useState(0);
@@ -159,7 +160,7 @@ export default function ActivityPanel({ token, covered = false }: Props) {
         </Tabs>
         <Box sx={{ flexGrow: 1 }} />
         <Tooltip
-          title={`Backend: ${backendHealth}. Cluster: ${clusterHealth}${cluster?.message ? ` (${cluster.message})` : ""}`}
+          title={`Backend: ${backendHealth}. Cluster: ${effectiveClusterHealth}${cluster?.message ? ` (${cluster.message})` : ""}`}
         >
           <Box
             sx={{
@@ -190,7 +191,7 @@ export default function ActivityPanel({ token, covered = false }: Props) {
             </Typography>
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexShrink: 0 }}>
               <StatusDot ok={backendHealth === "healthy"} label="Backend" />
-              <StatusDot ok={clusterHealth === "healthy"} label="Cluster" />
+              <StatusDot ok={effectiveClusterHealth === "healthy"} label="Cluster" />
             </Box>
           </Box>
         </Tooltip>

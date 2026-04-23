@@ -22,6 +22,7 @@ import { apiGet, toApiError } from "../../api";
 import TerminalSessionView from "./TerminalSessionView";
 import { apiDelete } from "../../sessionsApi";
 import { emitFocusLogsTab, emitOpenTerminalSession } from "../../activityEvents";
+import { useConnectionState } from "../../connectionState";
 import {
   chipSxForValue,
   compactCellSx,
@@ -106,6 +107,8 @@ export default function ActivityTabs({
   requestedTerminalRequestKey,
   onCountsChange,
 }: Props) {
+  const { health } = useConnectionState();
+  const offline = health === "unhealthy";
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -169,6 +172,7 @@ export default function ActivityTabs({
   );
 
   const reloadActivities = useCallback(() => {
+    if (offline) return;
     setLoading(true);
     setErr(null);
     apiGet<{ items: Activity[] }>("/api/activity", token)
@@ -176,36 +180,40 @@ export default function ActivityTabs({
         setActivities(res.items || []);
       })
       .catch((e) => {
-        // Keep error handling simple; Activity Panel is additive.
-        setErr(String(e));
+        // Keep stale activity rows visible while retrying in background.
+        if (activities.length === 0) setErr(String(e));
       })
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [activities.length, offline, token]);
 
   useEffect(() => {
+    if (offline) return;
     reloadActivities();
     const id = window.setInterval(reloadActivities, 5000);
     return () => window.clearInterval(id);
-  }, [reloadActivities]);
+  }, [offline, reloadActivities]);
 
   const reloadLiveWork = useCallback(() => {
+    if (offline) return;
     setLiveWorkErr(null);
     apiGet<LiveWork>("/api/dataplane/work/live", token)
       .then((res) => {
         setLiveWork(res);
       })
       .catch((e) => {
-        setLiveWorkErr(String(e));
+        if (!liveWork) setLiveWorkErr(String(e));
       });
-  }, [token]);
+  }, [liveWork, offline, token]);
 
   useEffect(() => {
+    if (offline) return;
     reloadLiveWork();
     const id = window.setInterval(reloadLiveWork, 3000);
     return () => window.clearInterval(id);
-  }, [reloadLiveWork]);
+  }, [offline, reloadLiveWork]);
 
   const reloadSessions = useCallback(() => {
+    if (offline) return;
     setSessionsLoading(true);
     setSessionsErr(null);
     apiGet<{ items: Session[] }>("/api/sessions", token)
@@ -213,16 +221,17 @@ export default function ActivityTabs({
         setSessions(res.items || []);
       })
       .catch((e) => {
-        setSessionsErr(String(e));
+        if (sessions.length === 0) setSessionsErr(String(e));
       })
       .finally(() => setSessionsLoading(false));
-  }, [token]);
+  }, [offline, sessions.length, token]);
 
   useEffect(() => {
+    if (offline) return;
     reloadSessions();
     const id = window.setInterval(reloadSessions, 5000);
     return () => window.clearInterval(id);
-  }, [reloadSessions]);
+  }, [offline, reloadSessions]);
 
   useEffect(() => {
     if (!requestedTerminalId) return;
@@ -285,6 +294,7 @@ export default function ActivityTabs({
 
   useEffect(() => {
     if (tab !== 4) return;
+    if (offline) return;
 
     const loadOnce = () => {
       const node = logsScrollRef.current;
@@ -299,7 +309,7 @@ export default function ActivityTabs({
           setLogs((prev) => mergeRuntimeLogs(prev, res.items || []));
         })
         .catch((e) => {
-          setLogsErr(String(e));
+          if (logs.length === 0) setLogsErr(String(e));
         })
         .finally(() => setLogsLoading(false));
     };
@@ -307,7 +317,7 @@ export default function ActivityTabs({
     loadOnce();
     const id = window.setInterval(loadOnce, 5000);
     return () => window.clearInterval(id);
-  }, [tab, token, mergeRuntimeLogs]);
+  }, [tab, offline, token, mergeRuntimeLogs, logs.length]);
 
   useEffect(() => {
     terminalSessions.forEach((s) => {

@@ -811,7 +811,7 @@ export default function PodDrawer(props: {
 
   // Load pod details + events when opened
   useEffect(() => {
-    if (!props.open || !name) return;
+    if (!props.open || !name || offline) return;
 
     setTab(0);
     setErr("");
@@ -888,9 +888,11 @@ export default function PodDrawer(props: {
       );
       setEvents(ev?.items || []);
     })()
-      .catch((e) => setErr(String(e)))
+      .catch((e) => {
+        if (!details) setErr(String(e));
+      })
       .finally(() => setLoading(false));
-  }, [props.open, name, ns, props.token, retryNonce]);
+  }, [props.open, name, ns, props.token, retryNonce, offline]);
 
   // Snapshot-level per-resource signals from the dataplane cache
   // (pod_restarts, pod_oomkilled, etc.). Detail-level signals
@@ -908,7 +910,7 @@ export default function PodDrawer(props: {
   });
 
   useEffect(() => {
-    if (!props.open || !name || tab !== 3) return;
+    if (!props.open || !name || tab !== 3 || offline) return;
     if (networkingServicesLoading || networkingServicesLoaded) return;
 
     setNetworkingServicesLoading(true);
@@ -924,10 +926,10 @@ export default function PodDrawer(props: {
         setNetworkingServicesLoading(false);
         setNetworkingServicesLoaded(true);
       });
-  }, [props.open, name, ns, props.token, tab, networkingServicesLoading, networkingServicesLoaded]);
+  }, [props.open, name, ns, props.token, tab, networkingServicesLoading, networkingServicesLoaded, offline]);
 
   useEffect(() => {
-    if (!props.open || !name || tab !== 3) return;
+    if (!props.open || !name || tab !== 3 || offline) return;
     if (!networkingServicesLoaded) return;
     if (networkingServicesErr) {
       setNetworkingIngressesErr(networkingServicesErr);
@@ -1006,6 +1008,7 @@ export default function PodDrawer(props: {
     networkingServicesErr,
     networkingIngressesLoaded,
     networkingIngressesLoading,
+    offline,
   ]);
 
   const renderedLogs = useMemo(() => {

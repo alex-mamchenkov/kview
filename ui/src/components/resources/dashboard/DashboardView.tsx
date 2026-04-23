@@ -21,6 +21,7 @@ import {
   GAUGE_COLOR_ERROR,
 } from "../../../theme/sxTokens";
 import { useActiveContext } from "../../../activeContext";
+import { useConnectionState } from "../../../connectionState";
 import { useUserSettings } from "../../../settingsContext";
 import InfoHint from "../../shared/InfoHint";
 import MetricCard from "../../shared/MetricCard";
@@ -218,13 +219,13 @@ function DashboardInspectDrawers({
 export default function DashboardView(props: Props) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ApiDashboardClusterResponse | null>(null);
-  const [err, setErr] = useState<string | null>(null);
   const [signalFilter, setSignalFilter] = useState("top");
   const [signalsQuery, setSignalsQuery] = useState("");
   const [signalsPage, setSignalsPage] = useState(0);
   const [signalsRowsPerPage, setSignalsRowsPerPage] = useState(10);
   const [inspectTarget, setInspectTarget] = useState<InspectTarget | null>(null);
   const activeContext = useActiveContext();
+  const { health } = useConnectionState();
   const { settings } = useUserSettings();
   const metricsStatus = useMetricsStatus(props.token);
   const metricsUsable = isMetricsUsable(metricsStatus);
@@ -233,6 +234,7 @@ export default function DashboardView(props: Props) {
   const lastLoadScopeRef = useRef("");
 
   useEffect(() => {
+    if (health === "unhealthy") return;
     let cancelled = false;
     const loadScope = `${activeContext || ""}:${props.token}`;
     const load = async (initial: boolean) => {
@@ -241,7 +243,6 @@ export default function DashboardView(props: Props) {
         setLoading(true);
         setData(null);
       }
-      setErr(null);
       try {
         const params = new URLSearchParams({
           signalsFilter: signalFilter,
@@ -258,7 +259,7 @@ export default function DashboardView(props: Props) {
           setData(res);
         }
       } catch {
-        if (!cancelled) setErr("Failed to load cluster overview");
+        // Keep stale dashboard data visible while retries continue.
       } finally {
         if (!cancelled && resetView) setLoading(false);
       }
@@ -278,6 +279,7 @@ export default function DashboardView(props: Props) {
     activeContext,
     dashboardRefreshSec,
     deferredSignalsQuery,
+    health,
     signalFilter,
     signalsPage,
     signalsRowsPerPage,
@@ -334,13 +336,7 @@ export default function DashboardView(props: Props) {
         </Box>
       )}
 
-      {err && (
-        <Typography color="error" sx={{ px: 2 }}>
-          {err}
-        </Typography>
-      )}
-
-      {!loading && !err && data?.item && (
+      {!loading && data?.item && (
         <Box sx={{ px: 2, display: "flex", flexDirection: "column", gap: 2 }}>
           {(() => {
             const { plane, visibility, coverage, resources, signals, derived, dataplane, usage } = data.item;

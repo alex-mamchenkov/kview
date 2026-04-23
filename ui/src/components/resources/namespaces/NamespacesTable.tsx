@@ -14,6 +14,7 @@ import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResource
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
 import { useActiveContext } from "../../../activeContext";
+import { useConnectionState } from "../../../connectionState";
 import { useUserSettings } from "../../../settingsContext";
 
 type Namespace = NonNullable<ApiNamespacesListResponse["items"]>[number];
@@ -225,6 +226,7 @@ export default function NamespacesTable({
     () => new Map(),
   );
   const activeContext = useActiveContext();
+  const { health } = useConnectionState();
   const { settings } = useUserSettings();
   const namespaceRowDetailsPollMs = settings.dataplane.namespaceEnrichment.pollMs;
 
@@ -269,6 +271,7 @@ export default function NamespacesTable({
   const revision = rowProjection?.revision ?? 0;
 
   useEffect(() => {
+    if (health === "unhealthy") return;
     if (!revision || !token) return;
 
     let cancelled = false;
@@ -312,7 +315,7 @@ export default function NamespacesTable({
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [activeContext, namespaceRowDetailsPollMs, revision, token]);
+  }, [activeContext, health, namespaceRowDetailsPollMs, revision, token]);
 
   const filterPredicate = useCallback((row: Row, q: string) => {
     const lc = q.toLowerCase();

@@ -166,7 +166,8 @@ export default function JobDrawer(props: {
   namespace: string;
   jobName: string | null;
 }) {
-  const { retryNonce } = useConnectionState();
+  const { health, retryNonce } = useConnectionState();
+  const offline = health === "unhealthy";
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<JobDetails | null>(null);
@@ -183,7 +184,7 @@ export default function JobDrawer(props: {
   const name = props.jobName;
 
   useEffect(() => {
-    if (!props.open || !name) return;
+    if (!props.open || !name || offline) return;
 
     setTab(0);
     setErr("");
@@ -212,9 +213,11 @@ export default function JobDrawer(props: {
       );
       setEvents(ev?.items || []);
     })()
-      .catch((e) => setErr(String(e)))
+      .catch((e) => {
+        if (!details) setErr(String(e));
+      })
       .finally(() => setLoading(false));
-  }, [props.open, name, ns, props.token, retryNonce]);
+  }, [props.open, name, ns, props.token, retryNonce, offline]);
 
   const summary = details?.summary;
   const linkedPods = details?.linkedPods;

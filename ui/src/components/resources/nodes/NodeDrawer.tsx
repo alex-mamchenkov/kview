@@ -101,7 +101,8 @@ export default function NodeDrawer(props: {
   nodeName: string | null;
 }) {
   const activeContext = useActiveContext();
-  const { retryNonce } = useConnectionState();
+  const { health, retryNonce } = useConnectionState();
+  const offline = health === "unhealthy";
   const metricsStatus = useMetricsStatus(props.token);
   const metricsUsable = isMetricsUsable(metricsStatus);
   const [tab, setTab] = useState(0);
@@ -114,7 +115,7 @@ export default function NodeDrawer(props: {
   const name = props.nodeName;
 
   useEffect(() => {
-    if (!props.open || !name) return;
+    if (!props.open || !name || offline) return;
 
     setTab(0);
     setErr("");
@@ -128,9 +129,11 @@ export default function NodeDrawer(props: {
       const item: NodeDetails | null = det?.item ?? null;
       setDetails(item);
     })()
-      .catch((e) => setErr(String(e)))
+      .catch((e) => {
+        if (!details) setErr(String(e));
+      })
       .finally(() => setLoading(false));
-  }, [props.open, name, props.token, activeContext, retryNonce]);
+  }, [props.open, name, props.token, activeContext, retryNonce, offline]);
 
   const summary = details?.summary;
   const conditions = details?.conditions || [];

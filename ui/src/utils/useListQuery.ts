@@ -53,7 +53,7 @@ export default function useListQuery<T>({
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-  const { health, retryNonce } = useConnectionState();
+  const { health } = useConnectionState();
 
   const onInitialResultRef = useRef(onInitialResult);
 
@@ -99,10 +99,7 @@ export default function useListQuery<T>({
       }
     } catch (err) {
       if (generation !== generationRef.current) return;
-      setFetchedRows([]);
-      setDataplaneMeta(null);
       onInitialResultRef.current?.();
-      lastRevisionRef.current = null;
       setError(toApiError(err));
     } finally {
       if (generation === generationRef.current) {
@@ -133,7 +130,7 @@ export default function useListQuery<T>({
     lastRevisionRef.current = null;
     void loadInitial();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- queryKey is the caller-provided list identity
-  }, [enabled, loadInitial, retryNonce, ...(queryKey ?? [])]);
+  }, [enabled, loadInitial, ...(queryKey ?? [])]);
 
   useEffect(() => {
     if (!enabled || health === "unhealthy" || refreshSec <= 0) return;

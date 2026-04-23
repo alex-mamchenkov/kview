@@ -108,10 +108,8 @@ function startupSteps(phase: BootstrapPhase, detail: Partial<Record<BootstrapPha
 function AppInner() {
   const token = useMemo(() => getToken(), []);
   const { settings } = useUserSettings();
-  const { activeIssue, backendVersion, lastRecoveryShownAt, retryNonce } = useConnectionState();
+  const { health, backendVersion, lastRecoveryShownAt, retryNonce } = useConnectionState();
   const [recoveryOpen, setRecoveryOpen] = useState(false);
-  const [criticalOpen, setCriticalOpen] = useState(false);
-  const [lastCriticalSeenId, setLastCriticalSeenId] = useState<string | null>(null);
   const [lastRecoverySeenAt, setLastRecoverySeenAt] = useState<number | null>(null);
   const [contexts, setContexts] = useState<ContextOption[]>([]);
   const [activeContext, setActiveContext] = useState<string>("");
@@ -163,13 +161,6 @@ function AppInner() {
     setLastRecoverySeenAt(lastRecoveryShownAt);
     setRecoveryOpen(true);
   }, [lastRecoverySeenAt, lastRecoveryShownAt]);
-
-  useEffect(() => {
-    if (!activeIssue) return;
-    if (activeIssue.id === lastCriticalSeenId) return;
-    setLastCriticalSeenId(activeIssue.id);
-    setCriticalOpen(true);
-  }, [activeIssue, lastCriticalSeenId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -474,6 +465,7 @@ function AppInner() {
                   <DataplaneQuickSearch
                     token={token}
                     activeContext={activeContext}
+                    disabled={health === "unhealthy"}
                     onOpenResult={onOpenSearchResult}
                   />
                 </Box>
@@ -600,20 +592,6 @@ function AppInner() {
           >
             <Alert severity="success" variant="filled" onClose={() => setRecoveryOpen(false)}>
               Connection restored
-            </Alert>
-          </Snackbar>
-          <Snackbar
-            open={criticalOpen && !!activeIssue}
-            autoHideDuration={6000}
-            onClose={() => setCriticalOpen(false)}
-            anchorOrigin={{ vertical: "top", horizontal: "center" }}
-          >
-            <Alert severity="error" variant="filled" onClose={() => setCriticalOpen(false)}>
-              {activeIssue?.kind === "cluster"
-                ? `Cluster connection failed${activeIssue.message ? `: ${activeIssue.message}` : ""}`
-                : activeIssue?.kind === "backend"
-                  ? `Backend connection failed${activeIssue.message ? `: ${activeIssue.message}` : ""}`
-                  : activeIssue?.message || "Request failed"}
             </Alert>
           </Snackbar>
           <ActivityPanel token={token} covered={settingsOpen} />

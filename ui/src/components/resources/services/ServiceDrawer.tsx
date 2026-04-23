@@ -203,7 +203,7 @@ export default function ServiceDrawer(props: {
   const name = props.serviceName;
 
   useEffect(() => {
-    if (!props.open || !name) return;
+    if (!props.open || !name || offline) return;
 
     setTab(0);
     setErr("");
@@ -233,12 +233,14 @@ export default function ServiceDrawer(props: {
       );
       setEvents(ev?.items || []);
     })()
-      .catch((e) => setErr(String(e)))
+      .catch((e) => {
+        if (!details) setErr(String(e));
+      })
       .finally(() => setLoading(false));
-  }, [props.open, name, ns, props.token, retryNonce]);
+  }, [props.open, name, ns, props.token, retryNonce, offline]);
 
   useEffect(() => {
-    if (!props.open || !name || tab !== 1) return;
+    if (!props.open || !name || tab !== 1 || offline) return;
     if (ingressesLoading || ingressesLoaded) return;
 
     setIngressesLoading(true);
@@ -257,7 +259,7 @@ export default function ServiceDrawer(props: {
         setIngressesLoading(false);
         setIngressesLoaded(true);
       });
-  }, [props.open, name, ns, props.token, tab, ingressesLoading, ingressesLoaded]);
+  }, [props.open, name, ns, props.token, tab, ingressesLoading, ingressesLoaded, offline]);
 
   const summary = details?.summary;
   const resourceSignals = useResourceSignals({

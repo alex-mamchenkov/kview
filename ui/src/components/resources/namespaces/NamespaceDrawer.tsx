@@ -197,7 +197,8 @@ export default function NamespaceDrawer(props: {
   namespaceName: string | null;
   onNavigate?: (section: string, namespace: string) => void;
 }) {
-  const { retryNonce } = useConnectionState();
+  const { health, retryNonce } = useConnectionState();
+  const offline = health === "unhealthy";
   const metricsStatus = useMetricsStatus(props.token);
   const metricsUsable = isMetricsUsable(metricsStatus);
   const [tab, setTab] = useState(0);
@@ -224,7 +225,7 @@ export default function NamespaceDrawer(props: {
   const name = props.namespaceName;
 
   useEffect(() => {
-    if (!props.open || !name) return;
+    if (!props.open || !name || offline) return;
 
     setTab(0);
     const cachedInsights = insightsCacheRef.current[name] || null;
@@ -255,12 +256,14 @@ export default function NamespaceDrawer(props: {
         insightsCacheRef.current[name] = item;
       }
     })()
-      .catch((e) => setInsightsErr(String(e)))
+      .catch((e) => {
+        if (!insightsCacheRef.current[name]) setInsightsErr(String(e));
+      })
       .finally(() => setInsightsLoading(false));
-  }, [props.open, name, props.token, retryNonce]);
+  }, [props.open, name, props.token, retryNonce, offline]);
 
   useEffect(() => {
-    if (!props.open || !name) return;
+    if (!props.open || !name || offline) return;
     if (tab < metadataTabIndex) return;
     if (detailsRequested || detailsLoading || details) return;
 
@@ -277,12 +280,14 @@ export default function NamespaceDrawer(props: {
         detailsCacheRef.current[name] = item;
       }
     })()
-      .catch((e) => setDetailsErr(String(e)))
+      .catch((e) => {
+        if (!detailsCacheRef.current[name]) setDetailsErr(String(e));
+      })
       .finally(() => setDetailsLoading(false));
-  }, [props.open, name, props.token, tab, detailsRequested, detailsLoading, details]);
+  }, [props.open, name, props.token, tab, detailsRequested, detailsLoading, details, offline]);
 
   useEffect(() => {
-    if (!props.open || !name) return;
+    if (!props.open || !name || offline) return;
     if (tab !== eventsTabIndex) return;
     if (eventsRequested || eventsLoading) return;
 
@@ -297,9 +302,11 @@ export default function NamespaceDrawer(props: {
       setEvents(items);
       eventsCacheRef.current[name] = items;
     })()
-      .catch((e) => setEventsErr(String(e)))
+      .catch((e) => {
+        if (!eventsCacheRef.current[name]) setEventsErr(String(e));
+      })
       .finally(() => setEventsLoading(false));
-  }, [props.open, name, props.token, tab, eventsRequested, eventsLoading]);
+  }, [props.open, name, props.token, tab, eventsRequested, eventsLoading, offline]);
 
   const summary = details?.summary;
   const metadata = details?.metadata;
