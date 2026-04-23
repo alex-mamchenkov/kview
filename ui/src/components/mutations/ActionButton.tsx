@@ -20,6 +20,8 @@ export type ActionButtonProps = {
   disabledReason?: string;
   /** Pre-populated values for paramSpecs fields. */
   initialParams?: Record<string, string | boolean>;
+  /** Optional click handler for callers that still want ActionButton chrome but custom dialog wiring. */
+  onClickOverride?: () => void;
 };
 
 /**
@@ -39,6 +41,7 @@ export default function ActionButton({
   disabled = false,
   disabledReason,
   initialParams,
+  onClickOverride,
 }: ActionButtonProps) {
   const { open } = useMutationDialog();
   const { health } = useConnectionState();
@@ -50,6 +53,10 @@ export default function ActionButton({
 
   function handleClick() {
     if (effectiveDisabled) return;
+    if (onClickOverride) {
+      onClickOverride();
+      return;
+    }
     open({ descriptor, targetRef, token, onSuccess, initialParams });
   }
 

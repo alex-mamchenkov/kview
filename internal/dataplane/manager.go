@@ -140,6 +140,8 @@ type DataPlaneManager interface {
 	DerivedHelmChartsSnapshot(ctx context.Context, clusterName string) (Snapshot[dto.HelmChartDTO], error)
 	// InvalidateHelmReleasesSnapshot drops the cached Helm release list for a namespace after a Helm mutation.
 	InvalidateHelmReleasesSnapshot(ctx context.Context, clusterName, namespace string) error
+	// InvalidateJobsSnapshot drops the cached Job list for a namespace after a Job mutation.
+	InvalidateJobsSnapshot(ctx context.Context, clusterName, namespace string) error
 	// DaemonSetsSnapshot returns a raw snapshot for daemonsets in the given namespace.
 	DaemonSetsSnapshot(ctx context.Context, clusterName, namespace string) (DaemonSetsSnapshot, error)
 	// StatefulSetsSnapshot returns a raw snapshot for statefulsets in the given namespace.
@@ -1218,6 +1220,19 @@ func (m *manager) InvalidateHelmReleasesSnapshot(ctx context.Context, clusterNam
 	clearNamespacedSnapshot(&plane.helmReleasesStore, namespace)
 	if sp := plane.currentPersistence(); sp != nil {
 		_ = sp.Delete(clusterName, ResourceKindHelmReleases, namespace)
+	}
+	return nil
+}
+
+func (m *manager) InvalidateJobsSnapshot(ctx context.Context, clusterName, namespace string) error {
+	planeAny, err := m.PlaneForCluster(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	plane := planeAny.(*clusterPlane)
+	clearNamespacedSnapshot(&plane.jobsStore, namespace)
+	if sp := plane.currentPersistence(); sp != nil {
+		_ = sp.Delete(clusterName, ResourceKindJobs, namespace)
 	}
 	return nil
 }

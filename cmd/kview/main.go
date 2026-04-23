@@ -9,8 +9,8 @@ import (
 	"net/http"
 
 	"github.com/korex-labs/kview/internal/cluster"
-	kubehelm "github.com/korex-labs/kview/internal/kube/resource/helm"
 	kubeactions "github.com/korex-labs/kview/internal/kube/actions"
+	kubehelm "github.com/korex-labs/kview/internal/kube/resource/helm"
 	"github.com/korex-labs/kview/internal/launcher"
 	"github.com/korex-labs/kview/internal/runtime"
 	"github.com/korex-labs/kview/internal/server"
@@ -65,8 +65,10 @@ func main() {
 	srv.Actions().Register("replicaset.delete", kubeactions.HandleReplicaSetDelete)
 
 	srv.Actions().Register("job.delete", kubeactions.HandleJobDelete)
+	srv.Actions().Register("job.rerun", kubeactions.HandleJobRerun)
 
 	srv.Actions().Register("cronjob.delete", kubeactions.HandleCronJobDelete)
+	srv.Actions().Register("cronjob.run", kubeactions.HandleCronJobRun)
 
 	srv.Actions().Register("service.delete", kubeactions.HandleServiceDelete)
 

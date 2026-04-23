@@ -1,5 +1,14 @@
-import React from "react";
+import React, { useState } from "react";
+import { Box } from "@mui/material";
 import { DeleteOnlyActions } from "../../mutations/ResourceActions";
+import ActionButton from "../../mutations/ActionButton";
+import { useActiveContext } from "../../../activeContext";
+import { useResourceCapabilities, RBAC_DISABLED_REASON } from "../../mutations/useResourceCapabilities";
+import type { ExecuteActionResult, MutationActionDescriptor } from "../../../lib/actions/types";
+import JobRunDebugDialog, { type DebugSession } from "../jobs/JobRunDebugDialog";
+import { useMutationDialog } from "../../mutations/useMutationDialog";
+import { executeAction } from "../../../lib/actions/executeAction";
+import { apiPostWithContext } from "../../../api";
 
 type Props = {
   token: string;
@@ -9,21 +18,122 @@ type Props = {
 };
 
 export default function CronJobActions({ token, namespace, cronJobName, onDeleted }: Props) {
+  const activeContext = useActiveContext();
+  const { open } = useMutationDialog();
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugSession, setDebugSession] = useState<DebugSession | null>(null);
+  const jobCaps = useResourceCapabilities({
+    token,
+    group: "batch",
+    resource: "jobs",
+    namespace,
+    name: cronJobName,
+  });
+  const canCreateJob = jobCaps ? jobCaps.create : false;
+  const targetRef = {
+    context: activeContext,
+    kind: "CronJob",
+    name: cronJobName,
+    namespace,
+    apiVersion: "batch/v1",
+  };
+  const runDescriptor: MutationActionDescriptor = {
+    id: "cronjob.run",
+    title: "Run CronJob",
+    description: "Creates a one-off Job from this CronJob's job template.",
+    risk: "low",
+    confirmSpec: { mode: "simple" },
+    group: "batch",
+    resource: "cronjobs",
+    apiVersion: "batch/v1",
+    paramSpecs: [
+      {
+        kind: "boolean",
+        key: "debug",
+        label: "Open debug run",
+        helperText: "Streams this run's events and container logs until the dialog is closed.",
+        defaultValue: false,
+      },
+    ],
+  };
+
+  async function runCronJob(params?: Record<string, unknown>): Promise<ExecuteActionResult> {
+    if (params?.debug === true) {
+      const started = await apiPostWithContext<DebugSession>(
+        `/api/namespaces/${encodeURIComponent(namespace)}/job-runs/debug`,
+        token,
+        activeContext,
+        { kind: "CronJob", name: cronJobName },
+      );
+      return {
+        success: true,
+        message: `Started debug job ${started.namespace}/${started.jobName || ""}`,
+        details: started,
+      };
+    }
+    return executeAction(token, activeContext, {
+      actionId: runDescriptor.id,
+      targetRef,
+      group: runDescriptor.group,
+      resource: runDescriptor.resource,
+      apiVersion: runDescriptor.apiVersion,
+    });
+  }
+
+  function openRunDialog() {
+    open({
+      token,
+      targetRef,
+      descriptor: runDescriptor,
+      execute: runCronJob,
+      closeOnSuccess: true,
+      onSuccess: (result) => {
+        const details = result.details as DebugSession | undefined;
+        if (details?.id) {
+          setDebugSession(details);
+          setDebugOpen(true);
+        }
+      },
+    });
+  }
+
   return (
-    <DeleteOnlyActions
-      token={token}
-      namespace={namespace}
-      name={cronJobName}
-      onDeleted={onDeleted}
-      config={{
-        group: "batch",
-        resource: "cronjobs",
-        kind: "CronJob",
-        apiVersion: "batch/v1",
-        deleteId: "cronjob.delete",
-        deleteTitle: "Delete CronJob",
-        deleteDescription: "Permanently removes the cronjob and its active jobs.",
-      }}
-    />
+    <>
+      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+        <ActionButton
+          label="Run now"
+          descriptor={runDescriptor}
+          targetRef={targetRef}
+          token={token}
+          disabled={!canCreateJob}
+          disabledReason={!canCreateJob && jobCaps ? RBAC_DISABLED_REASON : ""}
+          onClickOverride={openRunDialog}
+        />
+        <DeleteOnlyActions
+          token={token}
+          namespace={namespace}
+          name={cronJobName}
+          onDeleted={onDeleted}
+          config={{
+            group: "batch",
+            resource: "cronjobs",
+            kind: "CronJob",
+            apiVersion: "batch/v1",
+            deleteId: "cronjob.delete",
+            deleteTitle: "Delete CronJob",
+            deleteDescription: "Permanently removes the cronjob and its active jobs.",
+          }}
+        />
+      </Box>
+      <JobRunDebugDialog
+        open={debugOpen}
+        onClose={() => setDebugOpen(false)}
+        token={token}
+        namespace={namespace}
+        sourceKind="CronJob"
+        sourceName={cronJobName}
+        session={debugSession}
+      />
+    </>
   );
 }

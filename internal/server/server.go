@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+	"github.com/gorilla/websocket"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/korex-labs/kview/internal/dataplane"
 	"github.com/korex-labs/kview/internal/kube"
 	"github.com/korex-labs/kview/internal/kube/dto"
+	"github.com/korex-labs/kview/internal/kube/jobdebug"
 	crbindings "github.com/korex-labs/kview/internal/kube/resource/clusterrolebindings"
 	clusterroles "github.com/korex-labs/kview/internal/kube/resource/clusterroles"
 	configmaps "github.com/korex-labs/kview/internal/kube/resource/configmaps"
@@ -76,6 +78,7 @@ type Server struct {
 	rt             runtime.RuntimeManager
 	dp             dataplane.DataPlaneManager
 	sessions       session.Manager
+	jobRuns        *jobdebug.Manager
 	deniedLogMu    sync.Mutex
 	deniedLogUntil map[string]time.Time
 	statusLogMu    sync.Mutex
@@ -157,6 +160,7 @@ func New(mgr *cluster.Manager, rt runtime.RuntimeManager, token string) *Server 
 		rt:             rt,
 		dp:             dpMgr,
 		sessions:       session.NewInMemoryManager(rt.Registry()),
+		jobRuns:        jobdebug.NewManager(),
 		deniedLogUntil: map[string]time.Time{},
 		clusterOnline:  map[string]bool{},
 	}
@@ -1811,6 +1815,95 @@ func (s *Server) Router() http.Handler {
 		api.Get("/namespaces/{ns}/pods/{name}/logs/ws", (&stream.LogsWS{Mgr: s.mgr}).ServeHTTP)
 		api.Get("/sessions/{id}/terminal/ws", (&stream.TerminalWS{Mgr: s.mgr, Sessions: s.sessions}).ServeHTTP)
 
+		api.Post("/namespaces/{ns}/job-runs/debug", func(w http.ResponseWriter, r *http.Request) {
+			ctxName := r.Header.Get("X-Kview-Context")
+			if ctxName == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{
+					"error": &APIError{Code: ErrCodeValidation, Message: "missing X-Kview-Context header"},
+				})
+				return
+			}
+			ns := chi.URLParam(r, "ns")
+			var body struct {
+				Kind string `json:"kind"`
+				Name string `json:"name"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Kind) == "" || strings.TrimSpace(body.Name) == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": validationError("invalid body")})
+				return
+			}
+			if body.Kind != string(jobdebug.SourceJob) && body.Kind != string(jobdebug.SourceCronJob) {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": validationError("kind must be Job or CronJob")})
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), ctxTimeoutHelmMutate)
+			defer cancel()
+			clients, _, err := s.mgr.GetClientsForContext(ctx, ctxName)
+			if err != nil {
+				if errors.Is(err, cluster.ErrUnknownContext) {
+					writeJSON(w, http.StatusNotFound, map[string]any{
+						"error": &APIError{Code: ErrCodeNotFound, Message: err.Error()},
+					})
+					return
+				}
+				writeJSON(w, http.StatusInternalServerError, map[string]any{
+					"error": &APIError{Code: ErrCodeInternal, Message: err.Error()},
+				})
+				return
+			}
+
+			resp, err := s.jobRuns.Start(ctx, clients, jobdebug.StartRequest{
+				Context:   ctxName,
+				Kind:      jobdebug.SourceKind(body.Kind),
+				Namespace: ns,
+				Name:      body.Name,
+			})
+			if err != nil {
+				status, apiErr := mapKubeError(err)
+				writeJSON(w, status, map[string]any{"context": ctxName, "error": apiErr})
+				return
+			}
+			_ = s.dp.InvalidateJobsSnapshot(ctx, ctxName, ns)
+			writeJSON(w, http.StatusOK, resp)
+		})
+		api.Get("/job-runs/{id}/ws", func(w http.ResponseWriter, r *http.Request) {
+			session, ok := s.jobRuns.Get(chi.URLParam(r, "id"))
+			if !ok {
+				writeJSON(w, http.StatusNotFound, map[string]any{"error": &APIError{Code: ErrCodeNotFound, Message: "debug run not found"}})
+				return
+			}
+			conn, err := (&websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}).Upgrade(w, r, nil)
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+			session.Stream(r.Context(), conn)
+		})
+		api.Post("/job-runs/{id}/stop", func(w http.ResponseWriter, r *http.Request) {
+			ctxName := r.Header.Get("X-Kview-Context")
+			if ctxName == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{
+					"error": &APIError{Code: ErrCodeValidation, Message: "missing X-Kview-Context header"},
+				})
+				return
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), ctxTimeoutDetail)
+			defer cancel()
+			resp, err := s.jobRuns.Stop(ctx, chi.URLParam(r, "id"))
+			if err != nil {
+				status, apiErr := mapKubeError(err)
+				writeJSON(w, status, map[string]any{"context": ctxName, "error": apiErr})
+				return
+			}
+			_ = s.dp.InvalidateJobsSnapshot(ctx, ctxName, resp.Namespace)
+			writeJSON(w, http.StatusOK, resp)
+		})
+		api.Delete("/job-runs/{id}", func(w http.ResponseWriter, r *http.Request) {
+			s.jobRuns.Close(chi.URLParam(r, "id"))
+			writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+		})
+
 		api.Get("/namespaces/{ns}/deployments", dataplaneNamespacedListHandler(s, s.dp.DeploymentsSnapshot, func(items []dto.DeploymentListItemDTO) any {
 			return dataplane.EnrichDeploymentListItemsForAPI(items)
 		}))
@@ -3227,6 +3320,12 @@ func (s *Server) Router() http.Handler {
 
 			if body.Resource == "helmreleases" && body.Namespace != "" {
 				_ = s.dp.InvalidateHelmReleasesSnapshot(ctx, ctxName, body.Namespace)
+			}
+			if body.Resource == "jobs" && body.Namespace != "" {
+				_ = s.dp.InvalidateJobsSnapshot(ctx, ctxName, body.Namespace)
+			}
+			if body.Action == "cronjob.run" && body.Namespace != "" {
+				_ = s.dp.InvalidateJobsSnapshot(ctx, ctxName, body.Namespace)
 			}
 
 			writeJSON(w, http.StatusOK, map[string]any{"context": ctxName, "result": result})
