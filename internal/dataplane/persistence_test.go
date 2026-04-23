@@ -103,6 +103,58 @@ func TestBoltSnapshotPersistenceSearchPrioritizesKindsAndOffsets(t *testing.T) {
 	}
 }
 
+func TestBoltSnapshotPersistencePrunesOlderSnapshotsAndSearchIndex(t *testing.T) {
+	store, err := openBoltSnapshotPersistence(t.TempDir() + "/cache.bbolt")
+	if err != nil {
+		t.Fatalf("open persistence: %v", err)
+	}
+	defer store.Close()
+
+	oldMeta := SnapshotMetadata{ObservedAt: time.Now().UTC().Add(-48 * time.Hour)}
+	freshMeta := SnapshotMetadata{ObservedAt: time.Now().UTC().Add(-time.Hour)}
+	if err := store.Save("ctx", ResourceKindPods, "old", PodsSnapshot{
+		Items: []dto.PodListItemDTO{{Name: "old-pod", Namespace: "old"}},
+		Meta:  oldMeta,
+	}); err != nil {
+		t.Fatalf("save old snapshot: %v", err)
+	}
+	if err := store.Save("ctx", ResourceKindPods, "fresh", PodsSnapshot{
+		Items: []dto.PodListItemDTO{{Name: "fresh-pod", Namespace: "fresh"}},
+		Meta:  freshMeta,
+	}); err != nil {
+		t.Fatalf("save fresh snapshot: %v", err)
+	}
+
+	if err := store.PruneOlderThan("ctx", 24*time.Hour); err != nil {
+		t.Fatalf("prune old snapshots: %v", err)
+	}
+
+	var old PodsSnapshot
+	ok, err := store.Load("ctx", ResourceKindPods, "old", &old)
+	if err != nil {
+		t.Fatalf("load old snapshot: %v", err)
+	}
+	if ok {
+		t.Fatalf("old snapshot was not pruned")
+	}
+	var fresh PodsSnapshot
+	ok, err = store.Load("ctx", ResourceKindPods, "fresh", &fresh)
+	if err != nil {
+		t.Fatalf("load fresh snapshot: %v", err)
+	}
+	if !ok || len(fresh.Items) != 1 || fresh.Items[0].Name != "fresh-pod" {
+		t.Fatalf("fresh snapshot after prune ok=%v snap=%+v", ok, fresh)
+	}
+
+	rows, err := store.SearchName("ctx", "pod", 10, 0)
+	if err != nil {
+		t.Fatalf("search after prune: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Name != "fresh-pod" {
+		t.Fatalf("search rows after prune = %+v", rows)
+	}
+}
+
 func TestExecuteNamespacedSnapshotUsesPersistedFallbackOnLiveFailure(t *testing.T) {
 	store, err := openBoltSnapshotPersistence(t.TempDir() + "/cache.bbolt")
 	if err != nil {

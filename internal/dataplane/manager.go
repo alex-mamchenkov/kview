@@ -377,6 +377,7 @@ func (m *manager) hydratePersistedPlanes(policy DataplanePolicy) {
 		return
 	}
 	maxAge := policy.PersistenceMaxAge()
+	_ = sp.PruneOlderThan("", maxAge)
 	m.mu.RLock()
 	planes := make([]*clusterPlane, 0, len(m.planes))
 	for _, plane := range m.planes {
@@ -588,6 +589,9 @@ func (p *clusterPlane) hydratePersistedSnapshots(maxAge time.Duration) error {
 	sp := p.currentPersistence()
 	if sp == nil {
 		return nil
+	}
+	if err := sp.PruneOlderThan(p.name, maxAge); err != nil {
+		return err
 	}
 	cells, err := sp.ListSnapshots(p.name)
 	if err != nil {

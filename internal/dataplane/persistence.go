@@ -28,6 +28,7 @@ type snapshotPersistence interface {
 	Load(cluster string, kind ResourceKind, namespace string, into any) (bool, error)
 	Save(cluster string, kind ResourceKind, namespace string, snap any) error
 	Delete(cluster string, kind ResourceKind, namespace string) error
+	PruneOlderThan(cluster string, maxAge time.Duration) error
 	ListSnapshots(cluster string) ([]persistedSnapshotCell, error)
 	SearchName(cluster string, query string, limit int, offset int) ([]dataplaneSearchRow, error)
 	Close() error
@@ -169,6 +170,47 @@ func (p *boltSnapshotPersistence) Delete(cluster string, kind ResourceKind, name
 		}
 		if search != nil && cells != nil {
 			return deleteCellIndex(search, cells, cellKey)
+		}
+		return nil
+	})
+}
+
+func (p *boltSnapshotPersistence) PruneOlderThan(cluster string, maxAge time.Duration) error {
+	if p == nil || p.db == nil || maxAge <= 0 {
+		return nil
+	}
+	cutoff := time.Now().UTC().Add(-maxAge)
+	return p.db.Update(func(tx *bolt.Tx) error {
+		snapshots := tx.Bucket(dataplaneSnapshotBucket)
+		search := tx.Bucket(dataplaneSearchBucket)
+		cells := tx.Bucket(dataplaneCellIndexBucket)
+		if snapshots == nil {
+			return nil
+		}
+		var deleteKeys [][]byte
+		if err := snapshots.ForEach(func(key, value []byte) error {
+			keyCluster, _, _, ok := decodeSnapshotKey(key)
+			if !ok || (cluster != "" && keyCluster != cluster) {
+				return nil
+			}
+			observed, ok := persistedSnapshotObservedAt(value)
+			if !ok || observed.IsZero() || !observed.Before(cutoff) {
+				return nil
+			}
+			deleteKeys = append(deleteKeys, append([]byte(nil), key...))
+			return nil
+		}); err != nil {
+			return err
+		}
+		for _, key := range deleteKeys {
+			if err := snapshots.Delete(key); err != nil {
+				return err
+			}
+			if search != nil && cells != nil {
+				if err := deleteCellIndex(search, cells, key); err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	})
@@ -381,6 +423,21 @@ func searchRowsFromSnapshot(cluster string, kind ResourceKind, namespace string,
 		})
 	}
 	return rows
+}
+
+func persistedSnapshotObservedAt(payload []byte) (time.Time, bool) {
+	var envelope struct {
+		Meta struct {
+			ObservedAt time.Time
+		}
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		return time.Time{}, false
+	}
+	if envelope.Meta.ObservedAt.IsZero() {
+		return time.Time{}, false
+	}
+	return envelope.Meta.ObservedAt.UTC(), true
 }
 
 func stringField(v reflect.Value, name string) string {
