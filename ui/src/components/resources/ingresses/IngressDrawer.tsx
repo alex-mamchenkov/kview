@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
+  Button,
   Typography,
   Tabs,
   Tab,
@@ -28,8 +29,10 @@ import CodeBlock from "../../shared/CodeBlock";
 import IngressActions from "./IngressActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import YamlEditDialog from "../../shared/YamlEditDialog";
 import type { ApiItemResponse, ApiListResponse, DashboardSignalItem } from "../../../types/api";
 import useResourceSignals from "../../../utils/useResourceSignals";
+import { canPatchOrUpdate, RBAC_DISABLED_REASON, useResourceCapabilities } from "../../mutations/useResourceCapabilities";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -137,9 +140,19 @@ export default function IngressDrawer(props: {
   const [err, setErr] = useState("");
   const [drawerService, setDrawerService] = useState<string | null>(null);
   const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [yamlEditorOpen, setYamlEditorOpen] = useState(false);
 
   const ns = props.namespace;
   const name = props.ingressName;
+  const editCaps = useResourceCapabilities({
+    token: props.token,
+    group: "networking.k8s.io",
+    resource: "ingresses",
+    namespace: ns,
+    name: name || "",
+  });
+  const canEditYaml = canPatchOrUpdate(editCaps);
 
   useEffect(() => {
     if (!props.open || !name) return;
@@ -150,6 +163,7 @@ export default function IngressDrawer(props: {
     setEvents([]);
     setDrawerService(null);
     setDrawerNamespace(null);
+    setYamlEditorOpen(false);
     setLoading(true);
 
     (async () => {
@@ -168,7 +182,7 @@ export default function IngressDrawer(props: {
     })()
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false));
-  }, [props.open, name, ns, props.token, retryNonce]);
+  }, [props.open, name, ns, props.token, retryNonce, refreshNonce]);
 
   const summary = details?.summary;
   const backendWarnings = details?.warnings;
@@ -407,9 +421,39 @@ export default function IngressDrawer(props: {
 
               {/* YAML */}
               {tab === 5 && (
-                <CodeBlock code={details?.yaml || ""} language="yaml" />
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%" }}>
+                  <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={!canEditYaml}
+                      title={!canEditYaml && editCaps ? RBAC_DISABLED_REASON : "Edit live YAML"}
+                      onClick={() => setYamlEditorOpen(true)}
+                    >
+                      Edit
+                    </Button>
+                  </Box>
+                  <Box sx={{ minHeight: 0, flex: 1 }}>
+                    <CodeBlock code={details?.yaml || ""} language="yaml" />
+                  </Box>
+                </Box>
               )}
             </Box>
+            <YamlEditDialog
+              open={yamlEditorOpen}
+              onClose={() => setYamlEditorOpen(false)}
+              token={props.token}
+              target={{
+                kind: "Ingress",
+                group: "networking.k8s.io",
+                resource: "ingresses",
+                apiVersion: "networking.k8s.io/v1",
+                namespace: ns,
+                name: name || "",
+              }}
+              initialYaml={details?.yaml || ""}
+              onApplied={() => setRefreshNonce((v) => v + 1)}
+            />
             <ServiceDrawer
               open={!!drawerService}
               onClose={() => setDrawerService(null)}

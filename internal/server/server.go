@@ -3321,6 +3321,24 @@ func (s *Server) Router() http.Handler {
 			if body.Resource == "helmreleases" && body.Namespace != "" {
 				_ = s.dp.InvalidateHelmReleasesSnapshot(ctx, ctxName, body.Namespace)
 			}
+			if body.Action == "resource.yaml.apply" && body.Namespace != "" {
+				switch body.Resource {
+				case "deployments":
+					_ = s.dp.InvalidateDeploymentsSnapshot(ctx, ctxName, body.Namespace)
+				case "configmaps":
+					_ = s.dp.InvalidateConfigMapsSnapshot(ctx, ctxName, body.Namespace)
+				case "services":
+					_ = s.dp.InvalidateServicesSnapshot(ctx, ctxName, body.Namespace)
+				case "secrets":
+					_ = s.dp.InvalidateSecretsSnapshot(ctx, ctxName, body.Namespace)
+				case "ingresses":
+					_ = s.dp.InvalidateIngressesSnapshot(ctx, ctxName, body.Namespace)
+				case "statefulsets":
+					_ = s.dp.InvalidateStatefulSetsSnapshot(ctx, ctxName, body.Namespace)
+				case "daemonsets":
+					_ = s.dp.InvalidateDaemonSetsSnapshot(ctx, ctxName, body.Namespace)
+				}
+			}
 			if body.Resource == "jobs" && body.Namespace != "" {
 				_ = s.dp.InvalidateJobsSnapshot(ctx, ctxName, body.Namespace)
 			}

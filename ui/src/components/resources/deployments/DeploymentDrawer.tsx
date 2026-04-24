@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
+  Button,
   Typography,
   Tabs,
   Tab,
@@ -35,12 +36,14 @@ import ContainerImageLabel from "../../shared/ContainerImageLabel";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import YamlEditDialog from "../../shared/YamlEditDialog";
 import type {
   ApiItemResponse,
   ApiListResponse,
   DashboardSignalItem,
 } from "../../../types/api";
 import useResourceSignals from "../../../utils/useResourceSignals";
+import { canPatchOrUpdate, RBAC_DISABLED_REASON, useResourceCapabilities } from "../../mutations/useResourceCapabilities";
 import {
   panelBoxSx,
   drawerBodySx,
@@ -194,9 +197,18 @@ export default function DeploymentDrawer(props: {
   const [drawerSecret, setDrawerSecret] = useState<string | null>(null);
   const [drawerConfigMap, setDrawerConfigMap] = useState<string | null>(null);
   const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
+  const [yamlEditorOpen, setYamlEditorOpen] = useState(false);
 
   const ns = props.namespace;
   const name = props.deploymentName;
+  const editCaps = useResourceCapabilities({
+    token: props.token,
+    group: "apps",
+    resource: "deployments",
+    namespace: ns,
+    name: name || "",
+  });
+  const canEditYaml = canPatchOrUpdate(editCaps);
 
   // Load deployment details + events when opened
   useEffect(() => {
@@ -212,6 +224,7 @@ export default function DeploymentDrawer(props: {
     setDrawerSecret(null);
     setDrawerConfigMap(null);
     setDrawerNamespace(null);
+    setYamlEditorOpen(false);
     setLoading(true);
 
     (async () => {
@@ -825,9 +838,39 @@ export default function DeploymentDrawer(props: {
 
               {/* YAML */}
               {tab === 5 && (
-                <CodeBlock code={details?.yaml || ""} language="yaml" />
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%" }}>
+                  <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={!canEditYaml}
+                      title={!canEditYaml && editCaps ? RBAC_DISABLED_REASON : "Edit live YAML"}
+                      onClick={() => setYamlEditorOpen(true)}
+                    >
+                      Edit
+                    </Button>
+                  </Box>
+                  <Box sx={{ minHeight: 0, flex: 1 }}>
+                    <CodeBlock code={details?.yaml || ""} language="yaml" />
+                  </Box>
+                </Box>
               )}
             </Box>
+            <YamlEditDialog
+              open={yamlEditorOpen}
+              onClose={() => setYamlEditorOpen(false)}
+              token={props.token}
+              target={{
+                kind: "Deployment",
+                group: "apps",
+                resource: "deployments",
+                apiVersion: "apps/v1",
+                namespace: ns,
+                name: name || "",
+              }}
+              initialYaml={details?.yaml || ""}
+              onApplied={() => setRefreshNonce((v) => v + 1)}
+            />
             <PodDrawer
               open={!!drawerPod}
               onClose={() => setDrawerPod(null)}

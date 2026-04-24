@@ -2,21 +2,19 @@ package jobs
 
 import (
 	"context"
-	"encoding/json"
 	"sort"
 	"time"
 
-	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/yaml"
-
 	"github.com/korex-labs/kview/internal/cluster"
+	"github.com/korex-labs/kview/internal/kube"
 	"github.com/korex-labs/kview/internal/kube/dto"
 	deployments "github.com/korex-labs/kview/internal/kube/resource/deployments"
 	kubepods "github.com/korex-labs/kview/internal/kube/resource/pods"
 	svcs "github.com/korex-labs/kview/internal/kube/resource/services"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 func GetJobDetails(ctx context.Context, c *cluster.Clients, namespace, name string) (*dto.JobDetailsDTO, error) {
@@ -27,11 +25,7 @@ func GetJobDetails(ctx context.Context, c *cluster.Clients, namespace, name stri
 
 	jobCopy := job.DeepCopy()
 	jobCopy.ManagedFields = nil
-	b, err := json.Marshal(jobCopy)
-	if err != nil {
-		return nil, err
-	}
-	y, err := yaml.JSONToYAML(b)
+	y, err := kube.MarshalObjectYAML(jobCopy, "batch/v1", "Job")
 	if err != nil {
 		return nil, err
 	}

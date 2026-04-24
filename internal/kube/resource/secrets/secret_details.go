@@ -2,15 +2,13 @@ package secrets
 
 import (
 	"context"
-	"encoding/json"
 	"sort"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
-
 	"github.com/korex-labs/kview/internal/cluster"
+	"github.com/korex-labs/kview/internal/kube"
 	"github.com/korex-labs/kview/internal/kube/dto"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func GetSecretDetails(ctx context.Context, c *cluster.Clients, namespace, name string) (*dto.SecretDetailsDTO, error) {
@@ -46,11 +44,7 @@ func GetSecretDetails(ctx context.Context, c *cluster.Clients, namespace, name s
 	// Generate YAML
 	secCopy := sec.DeepCopy()
 	secCopy.ManagedFields = nil
-	b, err := json.Marshal(secCopy)
-	if err != nil {
-		return nil, err
-	}
-	y, err := yaml.JSONToYAML(b)
+	y, err := kube.MarshalObjectYAML(secCopy, "v1", "Secret")
 	if err != nil {
 		return nil, err
 	}

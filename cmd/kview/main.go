@@ -98,6 +98,8 @@ func main() {
 
 	srv.Actions().Register("customresourcedefinitions.delete", kubeactions.HandleCRDDelete)
 	srv.Actions().Register("custom.workload", kubeactions.HandleCustomWorkloadAction)
+	srv.Actions().Register("resource.yaml.validate", kubeactions.HandleResourceYAMLValidate)
+	srv.Actions().Register("resource.yaml.apply", kubeactions.HandleResourceYAMLApply)
 
 	url := fmt.Sprintf("http://%s/?token=%s", *addr, token)
 	log.Printf("kview listening on http://%s", *addr)

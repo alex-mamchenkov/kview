@@ -2,15 +2,13 @@ package configmaps
 
 import (
 	"context"
-	"encoding/json"
 	"sort"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
-
 	"github.com/korex-labs/kview/internal/cluster"
+	"github.com/korex-labs/kview/internal/kube"
 	"github.com/korex-labs/kview/internal/kube/dto"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func GetConfigMapDetails(ctx context.Context, c *cluster.Clients, namespace, name string) (*dto.ConfigMapDetailsDTO, error) {
@@ -21,11 +19,7 @@ func GetConfigMapDetails(ctx context.Context, c *cluster.Clients, namespace, nam
 
 	cmCopy := cm.DeepCopy()
 	cmCopy.ManagedFields = nil
-	b, err := json.Marshal(cmCopy)
-	if err != nil {
-		return nil, err
-	}
-	y, err := yaml.JSONToYAML(b)
+	y, err := kube.MarshalObjectYAML(cmCopy, "v1", "ConfigMap")
 	if err != nil {
 		return nil, err
 	}

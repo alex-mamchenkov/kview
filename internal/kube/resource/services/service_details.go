@@ -2,17 +2,15 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"sort"
 	"time"
 
+	"github.com/korex-labs/kview/internal/cluster"
+	"github.com/korex-labs/kview/internal/kube"
+	"github.com/korex-labs/kview/internal/kube/dto"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
-
-	"github.com/korex-labs/kview/internal/cluster"
-	"github.com/korex-labs/kview/internal/kube/dto"
 )
 
 func GetServiceDetails(ctx context.Context, c *cluster.Clients, namespace, name string) (*dto.ServiceDetailsDTO, error) {
@@ -24,11 +22,7 @@ func GetServiceDetails(ctx context.Context, c *cluster.Clients, namespace, name 
 	// YAML
 	svcCopy := svc.DeepCopy()
 	svcCopy.ManagedFields = nil
-	b, err := json.Marshal(svcCopy)
-	if err != nil {
-		return nil, err
-	}
-	y, err := yaml.JSONToYAML(b)
+	y, err := kube.MarshalObjectYAML(svcCopy, "v1", "Service")
 	if err != nil {
 		return nil, err
 	}

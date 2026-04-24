@@ -140,6 +140,20 @@ type DataPlaneManager interface {
 	DerivedHelmChartsSnapshot(ctx context.Context, clusterName string) (Snapshot[dto.HelmChartDTO], error)
 	// InvalidateHelmReleasesSnapshot drops the cached Helm release list for a namespace after a Helm mutation.
 	InvalidateHelmReleasesSnapshot(ctx context.Context, clusterName, namespace string) error
+	// InvalidateDeploymentsSnapshot drops the cached Deployment list for a namespace after a live edit or mutation.
+	InvalidateDeploymentsSnapshot(ctx context.Context, clusterName, namespace string) error
+	// InvalidateConfigMapsSnapshot drops the cached ConfigMap list for a namespace after a live edit or mutation.
+	InvalidateConfigMapsSnapshot(ctx context.Context, clusterName, namespace string) error
+	// InvalidateServicesSnapshot drops the cached Service list for a namespace after a live edit or mutation.
+	InvalidateServicesSnapshot(ctx context.Context, clusterName, namespace string) error
+	// InvalidateSecretsSnapshot drops the cached Secret list for a namespace after a live edit or mutation.
+	InvalidateSecretsSnapshot(ctx context.Context, clusterName, namespace string) error
+	// InvalidateIngressesSnapshot drops the cached Ingress list for a namespace after a live edit or mutation.
+	InvalidateIngressesSnapshot(ctx context.Context, clusterName, namespace string) error
+	// InvalidateStatefulSetsSnapshot drops the cached StatefulSet list for a namespace after a live edit or mutation.
+	InvalidateStatefulSetsSnapshot(ctx context.Context, clusterName, namespace string) error
+	// InvalidateDaemonSetsSnapshot drops the cached DaemonSet list for a namespace after a live edit or mutation.
+	InvalidateDaemonSetsSnapshot(ctx context.Context, clusterName, namespace string) error
 	// InvalidateJobsSnapshot drops the cached Job list for a namespace after a Job mutation.
 	InvalidateJobsSnapshot(ctx context.Context, clusterName, namespace string) error
 	// DaemonSetsSnapshot returns a raw snapshot for daemonsets in the given namespace.
@@ -1220,6 +1234,97 @@ func (m *manager) InvalidateHelmReleasesSnapshot(ctx context.Context, clusterNam
 	clearNamespacedSnapshot(&plane.helmReleasesStore, namespace)
 	if sp := plane.currentPersistence(); sp != nil {
 		_ = sp.Delete(clusterName, ResourceKindHelmReleases, namespace)
+	}
+	return nil
+}
+
+func (m *manager) InvalidateDeploymentsSnapshot(ctx context.Context, clusterName, namespace string) error {
+	planeAny, err := m.PlaneForCluster(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	plane := planeAny.(*clusterPlane)
+	clearNamespacedSnapshot(&plane.depsStore, namespace)
+	if sp := plane.currentPersistence(); sp != nil {
+		_ = sp.Delete(clusterName, ResourceKindDeployments, namespace)
+	}
+	return nil
+}
+
+func (m *manager) InvalidateConfigMapsSnapshot(ctx context.Context, clusterName, namespace string) error {
+	planeAny, err := m.PlaneForCluster(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	plane := planeAny.(*clusterPlane)
+	clearNamespacedSnapshot(&plane.cmsStore, namespace)
+	if sp := plane.currentPersistence(); sp != nil {
+		_ = sp.Delete(clusterName, ResourceKindConfigMaps, namespace)
+	}
+	return nil
+}
+
+func (m *manager) InvalidateServicesSnapshot(ctx context.Context, clusterName, namespace string) error {
+	planeAny, err := m.PlaneForCluster(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	plane := planeAny.(*clusterPlane)
+	clearNamespacedSnapshot(&plane.svcsStore, namespace)
+	if sp := plane.currentPersistence(); sp != nil {
+		_ = sp.Delete(clusterName, ResourceKindServices, namespace)
+	}
+	return nil
+}
+
+func (m *manager) InvalidateSecretsSnapshot(ctx context.Context, clusterName, namespace string) error {
+	planeAny, err := m.PlaneForCluster(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	plane := planeAny.(*clusterPlane)
+	clearNamespacedSnapshot(&plane.secsStore, namespace)
+	if sp := plane.currentPersistence(); sp != nil {
+		_ = sp.Delete(clusterName, ResourceKindSecrets, namespace)
+	}
+	return nil
+}
+
+func (m *manager) InvalidateIngressesSnapshot(ctx context.Context, clusterName, namespace string) error {
+	planeAny, err := m.PlaneForCluster(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	plane := planeAny.(*clusterPlane)
+	clearNamespacedSnapshot(&plane.ingStore, namespace)
+	if sp := plane.currentPersistence(); sp != nil {
+		_ = sp.Delete(clusterName, ResourceKindIngresses, namespace)
+	}
+	return nil
+}
+
+func (m *manager) InvalidateStatefulSetsSnapshot(ctx context.Context, clusterName, namespace string) error {
+	planeAny, err := m.PlaneForCluster(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	plane := planeAny.(*clusterPlane)
+	clearNamespacedSnapshot(&plane.stsStore, namespace)
+	if sp := plane.currentPersistence(); sp != nil {
+		_ = sp.Delete(clusterName, ResourceKindStatefulSets, namespace)
+	}
+	return nil
+}
+
+func (m *manager) InvalidateDaemonSetsSnapshot(ctx context.Context, clusterName, namespace string) error {
+	planeAny, err := m.PlaneForCluster(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	plane := planeAny.(*clusterPlane)
+	clearNamespacedSnapshot(&plane.dsStore, namespace)
+	if sp := plane.currentPersistence(); sp != nil {
+		_ = sp.Delete(clusterName, ResourceKindDaemonSets, namespace)
 	}
 	return nil
 }

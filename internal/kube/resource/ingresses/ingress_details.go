@@ -2,19 +2,17 @@ package ingresses
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
 
+	"github.com/korex-labs/kview/internal/cluster"
+	"github.com/korex-labs/kview/internal/kube"
+	"github.com/korex-labs/kview/internal/kube/dto"
+	svcs "github.com/korex-labs/kview/internal/kube/resource/services"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
-
-	"github.com/korex-labs/kview/internal/cluster"
-	"github.com/korex-labs/kview/internal/kube/dto"
-	svcs "github.com/korex-labs/kview/internal/kube/resource/services"
 )
 
 func GetIngressDetails(ctx context.Context, c *cluster.Clients, namespace, name string) (*dto.IngressDetailsDTO, error) {
@@ -25,11 +23,7 @@ func GetIngressDetails(ctx context.Context, c *cluster.Clients, namespace, name 
 
 	ingCopy := ing.DeepCopy()
 	ingCopy.ManagedFields = nil
-	b, err := json.Marshal(ingCopy)
-	if err != nil {
-		return nil, err
-	}
-	y, err := yaml.JSONToYAML(b)
+	y, err := kube.MarshalObjectYAML(ingCopy, "networking.k8s.io/v1", "Ingress")
 	if err != nil {
 		return nil, err
 	}

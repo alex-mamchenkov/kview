@@ -41,6 +41,8 @@ func mapKubeError(err error) (int, *APIError) {
 		return http.StatusForbidden, &APIError{Code: ErrCodeForbidden, Message: err.Error()}
 	case apierrors.IsNotFound(err):
 		return http.StatusNotFound, &APIError{Code: ErrCodeNotFound, Message: err.Error()}
+	case apierrors.IsInvalid(err):
+		return http.StatusBadRequest, &APIError{Code: ErrCodeValidation, Message: err.Error()}
 	case apierrors.IsConflict(err):
 		return http.StatusConflict, &APIError{Code: ErrCodeConflict, Message: err.Error()}
 	case apierrors.IsTimeout(err):

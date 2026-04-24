@@ -118,6 +118,7 @@ Docker builds bind-mount the repository and keep Go/npm build caches under `.cac
 
 - Dense resource tables with filtering and sorting across all standard Kubernetes resource kinds
 - Drawer-based detail inspection with YAML, events, related resources, and status-focused summaries
+- Guarded inline YAML editing on supported resources with validation, typed confirmation, and conflict-aware live apply
 - Nested drawers and cross-resource navigation
 - Capability-aware action buttons: delete, restart, scale, RBAC operations, Helm operations, and custom workload patches
 

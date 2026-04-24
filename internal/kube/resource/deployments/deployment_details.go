@@ -2,20 +2,18 @@ package deployments
 
 import (
 	"context"
-	"encoding/json"
 	"sort"
 	"strconv"
 	"time"
 
+	"github.com/korex-labs/kview/internal/cluster"
+	"github.com/korex-labs/kview/internal/kube"
+	"github.com/korex-labs/kview/internal/kube/dto"
+	kubepods "github.com/korex-labs/kview/internal/kube/resource/pods"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/yaml"
-
-	"github.com/korex-labs/kview/internal/cluster"
-	"github.com/korex-labs/kview/internal/kube/dto"
-	kubepods "github.com/korex-labs/kview/internal/kube/resource/pods"
 )
 
 func GetDeploymentDetails(ctx context.Context, c *cluster.Clients, namespace, name string) (*dto.DeploymentDetailsDTO, error) {
@@ -27,11 +25,7 @@ func GetDeploymentDetails(ctx context.Context, c *cluster.Clients, namespace, na
 	// YAML
 	depCopy := dep.DeepCopy()
 	depCopy.ManagedFields = nil
-	b, err := json.Marshal(depCopy)
-	if err != nil {
-		return nil, err
-	}
-	y, err := yaml.JSONToYAML(b)
+	y, err := kube.MarshalObjectYAML(depCopy, "apps/v1", "Deployment")
 	if err != nil {
 		return nil, err
 	}

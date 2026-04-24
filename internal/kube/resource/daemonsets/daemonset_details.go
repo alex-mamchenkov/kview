@@ -2,19 +2,17 @@ package daemonsets
 
 import (
 	"context"
-	"encoding/json"
 	"sort"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
-
 	"github.com/korex-labs/kview/internal/cluster"
+	"github.com/korex-labs/kview/internal/kube"
 	"github.com/korex-labs/kview/internal/kube/dto"
 	deployments "github.com/korex-labs/kview/internal/kube/resource/deployments"
 	kubepods "github.com/korex-labs/kview/internal/kube/resource/pods"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func GetDaemonSetDetails(ctx context.Context, c *cluster.Clients, namespace, name string) (*dto.DaemonSetDetailsDTO, error) {
@@ -196,9 +194,5 @@ func isPodOwnedByDaemonSetRef(pod *corev1.Pod, set *appsv1.DaemonSet) bool {
 func daemonSetYAML(set *appsv1.DaemonSet) ([]byte, error) {
 	setCopy := set.DeepCopy()
 	setCopy.ManagedFields = nil
-	b, err := json.Marshal(setCopy)
-	if err != nil {
-		return nil, err
-	}
-	return yaml.JSONToYAML(b)
+	return kube.MarshalObjectYAML(setCopy, "apps/v1", "DaemonSet")
 }
