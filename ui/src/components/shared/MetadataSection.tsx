@@ -1,9 +1,10 @@
 import React from "react";
-import { Box, Chip, Tooltip, Typography } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import Section from "./Section";
 import EmptyState from "./EmptyState";
 import type { SxProps, Theme } from "@mui/material/styles";
 import { actionRowSx } from "../../theme/sxTokens";
+import KeyValueChip from "./KeyValueChip";
 
 type MetadataSectionProps = {
   labels?: Record<string, string>;
@@ -15,24 +16,7 @@ type MetadataSectionProps = {
 function ChipsList({ entries }: { entries: [string, string][] }) {
   return (
     <Box sx={[actionRowSx, { mt: 0.5 }] as SxProps<Theme>}>
-      {entries.map(([k, v]) => {
-        const label = `${k}=${v}`;
-        const needsTooltip = label.length > 64;
-        const chip = (
-          <Chip
-            key={k}
-            size="small"
-            label={needsTooltip ? `${label.slice(0, 60)}...` : label}
-          />
-        );
-        return needsTooltip ? (
-          <Tooltip key={k} title={label} arrow>
-            {chip}
-          </Tooltip>
-        ) : (
-          chip
-        );
-      })}
+      {entries.map(([k, v]) => <KeyValueChip key={k} chipKey={k} value={v} />)}
     </Box>
   );
 }

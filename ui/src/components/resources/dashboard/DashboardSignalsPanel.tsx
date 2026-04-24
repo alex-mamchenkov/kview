@@ -20,6 +20,8 @@ import type {
 } from "../../../types/api";
 import SignalHintIcons from "../../shared/SignalHintIcons";
 import InfoHint from "../../shared/InfoHint";
+import ScopedCountChip from "../../shared/ScopedCountChip";
+import StatusChip from "../../shared/StatusChip";
 import type { InspectTarget } from "./dashboardTypes";
 
 type DerivedData = NonNullable<NonNullable<ApiDashboardClusterResponse["item"]>["derived"]>;
@@ -232,11 +234,12 @@ function FilterChip({
 }) {
   if (hideWhenZero && count <= 0 && !selected) return null;
   return (
-    <Chip
+    <ScopedCountChip
       size="small"
       color={color}
       variant={selected ? "filled" : "outlined"}
-      label={`${label || signalFilterLabel(filter)} ${count}`}
+      label={label || signalFilterLabel(filter)}
+      count={count}
       onClick={() => onSelect(filter)}
     />
   );
@@ -458,10 +461,11 @@ export default function DashboardSignalsPanel({
                     </TableCell>
                     <TableCell sx={{ py: 0.6, verticalAlign: "top", width: 140 }}>
                       {row.signals > 0 ? (
-                        <Chip
+                        <ScopedCountChip
                           size="small"
                           color={severityColor(row.severity)}
-                          label={`${row.signals} signal${row.signals === 1 ? "" : "s"}`}
+                          label="Signals"
+                          count={row.signals}
                         />
                       ) : (
                         <Typography variant="caption" color="text.secondary">
@@ -504,7 +508,7 @@ export default function DashboardSignalsPanel({
                     sx={target ? { cursor: "pointer" } : undefined}
                   >
                     <TableCell sx={{ py: 0.6, pl: 0, width: 104, verticalAlign: "top" }}>
-                      <Chip size="small" color={severityColor(f.severity)} label={f.severity} />
+                      <StatusChip size="small" color={severityColor(f.severity)} label={f.severity} />
                     </TableCell>
                     <TableCell sx={{ py: 0.6, width: 132, verticalAlign: "top" }}>
                       <Chip size="small" variant="outlined" label={f.resourceKind || f.kind} />

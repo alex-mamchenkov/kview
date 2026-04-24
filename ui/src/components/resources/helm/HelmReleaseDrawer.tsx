@@ -26,6 +26,7 @@ import ErrorState from "../../shared/ErrorState";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import CodeBlock from "../../shared/CodeBlock";
 import AutolinkText from "../../shared/AutolinkText";
+import StatusChip from "../../shared/StatusChip";
 import { HelmReleaseActions, HelmRollbackActionButton } from "./HelmActions";
 import DeploymentDrawer from "../deployments/DeploymentDrawer";
 import StatefulSetDrawer from "../statefulsets/StatefulSetDrawer";
@@ -207,11 +208,7 @@ export default function HelmReleaseDrawer(props: {
       {
         label: "Status",
         value: (
-          <Chip
-            size="small"
-            label={valueOrDash(summary?.status)}
-            color={helmStatusChipColor(summary?.status)}
-          />
+          <StatusChip size="small" label={valueOrDash(summary?.status)} color={helmStatusChipColor(summary?.status)} />
         ),
       },
       { label: "Revision", value: valueOrDash(summary?.revision) },
@@ -422,11 +419,7 @@ export default function HelmReleaseDrawer(props: {
                           <TableRow key={rev.revision}>
                             <TableCell>{rev.revision}</TableCell>
                             <TableCell>
-                              <Chip
-                                size="small"
-                                label={valueOrDash(rev.status)}
-                                color={helmStatusChipColor(rev.status)}
-                              />
+                              <StatusChip size="small" label={valueOrDash(rev.status)} color={helmStatusChipColor(rev.status)} />
                             </TableCell>
                             <TableCell>{valueOrDash(rev.chart)}</TableCell>
                             <TableCell>{valueOrDash(rev.appVersion)}</TableCell>

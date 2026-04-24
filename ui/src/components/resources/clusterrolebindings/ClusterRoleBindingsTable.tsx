@@ -8,7 +8,7 @@ import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResource
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneListMetaFromResponse, type ApiDataplaneListResponse } from "../../../types/api";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
-import { listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
+import ListSignalChip from "../../shared/ListSignalChip";
 
 type ClusterRoleBinding = {
   name: string;
@@ -35,7 +35,7 @@ const columns: GridColDef<Row>[] = [
     width: 130,
     renderCell: (p) => {
       const severity = p.row.listSignalSeverity;
-      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
+      return <ListSignalChip severity={severity} count={p.row.listSignalCount} />;
     },
   },
   {

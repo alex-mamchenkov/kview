@@ -3,12 +3,14 @@ import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
 import { apiGetWithContext } from "../../../api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
-import { listSignalLabel, listSignalSeverityColor, pvPhaseChipColor } from "../../../utils/k8sUi";
+import { pvPhaseChipColor } from "../../../utils/k8sUi";
 import PersistentVolumeDrawer from "./PersistentVolumeDrawer";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneListMetaFromResponse, type ApiDataplaneListResponse } from "../../../types/api";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
+import ListSignalChip from "../../shared/ListSignalChip";
+import StatusChip from "../../shared/StatusChip";
 
 type PersistentVolume = {
   name: string;
@@ -38,7 +40,7 @@ const columns: GridColDef<Row>[] = [
     width: 130,
     renderCell: (p) => {
       const severity = p.row.listSignalSeverity;
-      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
+      return <ListSignalChip severity={severity} count={p.row.listSignalCount} />;
     },
   },
   {
@@ -46,7 +48,7 @@ const columns: GridColDef<Row>[] = [
     headerName: "Status",
     width: 140,
     renderCell: (p) => (
-      <Chip
+      <StatusChip
         size="small"
         label={valueOrDash(String(p.row.listStatus || p.value || ""))}
         color={pvPhaseChipColor(String(p.row.listStatus || p.value || ""))}
@@ -76,7 +78,7 @@ const columns: GridColDef<Row>[] = [
     headerName: "Claim",
     width: 220,
     renderCell: (p) => (
-      <Chip
+      <StatusChip
         size="small"
         label={p.row.claimRef || p.row.bindingHint || "unbound"}
         color={p.row.bindingHint === "released" ? "warning" : p.row.claimRef ? "success" : "default"}

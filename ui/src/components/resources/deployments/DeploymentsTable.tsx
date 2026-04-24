@@ -5,9 +5,11 @@ import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import DeploymentDrawer from "./DeploymentDrawer";
 import { fmtAge, fmtTimeAgo } from "../../../utils/format";
-import { deploymentHealthBucketColor, listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
+import { deploymentHealthBucketColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
+import ListSignalChip from "../../shared/ListSignalChip";
+import StatusChip from "../../shared/StatusChip";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
 
 type Deployment = {
@@ -38,7 +40,7 @@ const columns: GridColDef<Row>[] = [
     width: 150,
     renderCell: (p) => {
       const status = String(p.row.listStatus || p.value || "");
-      return <Chip size="small" label={status || "-"} color={deploymentHealthBucketColor(status)} />;
+      return <StatusChip label={status || "-"} color={deploymentHealthBucketColor(status)} />;
     },
   },
   {
@@ -47,7 +49,7 @@ const columns: GridColDef<Row>[] = [
     width: 130,
     renderCell: (p) => {
       const severity = p.row.listSignalSeverity;
-      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
+      return <ListSignalChip severity={severity} count={p.row.listSignalCount} />;
     },
     sortable: false,
   },

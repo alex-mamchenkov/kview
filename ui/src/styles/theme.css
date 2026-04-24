@@ -29,6 +29,9 @@
   --chip-secondary-bg: #e8f9f7;
   --chip-secondary-fg: #0c5d57;
   --chip-secondary-border: #b7ece6;
+  --chip-scoped-count-bg: rgba(255, 255, 255, 0.92);
+  --chip-scoped-count-fg: #596274;
+  --chip-scoped-count-border: rgba(17, 24, 39, 0.12);
   --link-color: #0b5ed7;
   --link-color-hover: #094db3;
   --link-color-visited: #0b5ed7;
@@ -65,6 +68,9 @@
   --chip-secondary-bg: #1f3a3a;
   --chip-secondary-fg: #b8f0eb;
   --chip-secondary-border: #2f5e59;
+  --chip-scoped-count-bg: rgba(255, 255, 255, 0.08);
+  --chip-scoped-count-fg: #d7dce5;
+  --chip-scoped-count-border: rgba(255, 255, 255, 0.14);
   --link-color: #7cb3ff;
   --link-color-hover: #a7ccff;
   --link-color-visited: #b89cff;

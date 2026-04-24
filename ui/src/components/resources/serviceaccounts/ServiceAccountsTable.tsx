@@ -11,7 +11,8 @@ import {
   type ApiDataplaneListResponse,
 } from "../../../types/api";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
-import { listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
+import ListSignalChip from "../../shared/ListSignalChip";
+import StatusChip from "../../shared/StatusChip";
 
 type ServiceAccount = {
   name: string;
@@ -39,7 +40,7 @@ const columns: GridColDef<Row>[] = [
     width: 130,
     renderCell: (p) => {
       const severity = p.row.listSignalSeverity;
-      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
+      return <ListSignalChip severity={severity} count={p.row.listSignalCount} />;
     },
     sortable: false,
   },
@@ -49,7 +50,7 @@ const columns: GridColDef<Row>[] = [
     width: 130,
     renderCell: (p) => {
       const policy = p.row.tokenMountPolicy || "default";
-      return <Chip size="small" label={policy} color={policy === "disabled" ? "success" : policy === "enabled" ? "warning" : "default"} />;
+      return <StatusChip size="small" label={policy} color={policy === "disabled" ? "success" : policy === "enabled" ? "warning" : "default"} />;
     },
     sortable: false,
   },
@@ -59,7 +60,7 @@ const columns: GridColDef<Row>[] = [
     width: 130,
     renderCell: (p) => {
       const hint = p.row.pullSecretHint || "none";
-      return <Chip size="small" variant="outlined" label={hint} />;
+      return <StatusChip size="small" variant="outlined" label={hint} />;
     },
     sortable: false,
   },

@@ -1,5 +1,21 @@
 export type ChipColor = "success" | "warning" | "error" | "info" | "default";
 
+export function formatChipLabel(value?: string | number | null): string {
+  if (value === undefined || value === null || value === "") return "-";
+  const raw = String(value).trim();
+  if (!raw) return "-";
+  if (raw === "OK") return raw;
+  if (/[=/:]/.test(raw)) return raw;
+  if (raw.length <= 4 && raw === raw.toUpperCase()) return raw;
+  const normalized = raw
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : "-";
+}
+
 export function phaseChipColor(phase?: string | null): ChipColor {
   switch ((phase || "").toLowerCase()) {
     case "running":

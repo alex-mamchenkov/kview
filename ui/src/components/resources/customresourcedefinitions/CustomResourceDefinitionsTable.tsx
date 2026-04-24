@@ -3,12 +3,12 @@ import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
 import { apiGetWithContext } from "../../../api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
-import { listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
 import CustomResourceDefinitionDrawer from "./CustomResourceDefinitionDrawer";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneListMetaFromResponse, type ApiDataplaneListResponse } from "../../../types/api";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
+import ListSignalChip from "../../shared/ListSignalChip";
 
 type CRDItem = {
   name: string;
@@ -36,7 +36,7 @@ const columns: GridColDef<Row>[] = [
     width: 130,
     renderCell: (p) => {
       const severity = p.row.listSignalSeverity;
-      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
+      return <ListSignalChip severity={severity} count={p.row.listSignalCount} />;
     },
   },
   {

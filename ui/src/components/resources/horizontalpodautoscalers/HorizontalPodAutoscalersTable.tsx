@@ -4,9 +4,11 @@ import { GridColDef } from "@mui/x-data-grid";
 import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import { fmtAge } from "../../../utils/format";
-import { listSignalLabel, listSignalSeverityColor, statusChipColor } from "../../../utils/k8sUi";
+import { statusChipColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
+import ListSignalChip from "../../shared/ListSignalChip";
+import StatusChip from "../../shared/StatusChip";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
 import HorizontalPodAutoscalerDrawer from "./HorizontalPodAutoscalerDrawer";
 
@@ -51,7 +53,7 @@ const columns: GridColDef<Row>[] = [
     width: 140,
     renderCell: (p) => {
       const status = String(p.row.listStatus || "");
-      return <Chip size="small" label={status || "-"} color={statusChipColor(status)} />;
+      return <StatusChip label={status || "-"} color={statusChipColor(status)} />;
     },
   },
   {
@@ -60,7 +62,7 @@ const columns: GridColDef<Row>[] = [
     width: 130,
     renderCell: (p) => {
       const severity = p.row.listSignalSeverity;
-      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
+      return <ListSignalChip severity={severity} count={p.row.listSignalCount} />;
     },
     sortable: false,
   },

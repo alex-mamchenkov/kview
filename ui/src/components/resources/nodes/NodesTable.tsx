@@ -4,9 +4,11 @@ import { GridColDef } from "@mui/x-data-grid";
 import { apiGetWithContext } from "../../../api";
 import NodeDrawer from "./NodeDrawer";
 import { fmtAge, valueOrDash } from "../../../utils/format";
-import { deploymentHealthBucketColor, listSignalLabel, listSignalSeverityColor, nodeStatusChipColor } from "../../../utils/k8sUi";
+import { deploymentHealthBucketColor, nodeStatusChipColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
+import ListSignalChip from "../../shared/ListSignalChip";
+import StatusChip from "../../shared/StatusChip";
 import {
   dataplaneListMetaFromResponse,
   type ApiDataplaneListResponse,
@@ -77,7 +79,7 @@ const baseColumns: GridColDef<Row>[] = [
     field: "derived",
     headerName: "Source",
     width: 120,
-    renderCell: (p) => p.row.derived ? <Chip size="small" label="derived" color="warning" variant="outlined" /> : "direct",
+    renderCell: (p) => p.row.derived ? <StatusChip size="small" label="Derived" color="warning" variant="outlined" /> : "Direct",
     sortable: false,
   },
   {
@@ -86,7 +88,7 @@ const baseColumns: GridColDef<Row>[] = [
     width: 140,
     renderCell: (p) => {
       const status = String(p.row.listStatus || p.value || "");
-      return <Chip size="small" label={status || "-"} color={nodeStatusChipColor(status)} />;
+      return <StatusChip label={status || "-"} color={nodeStatusChipColor(status)} />;
     },
   },
   {
@@ -95,7 +97,7 @@ const baseColumns: GridColDef<Row>[] = [
     width: 130,
     renderCell: (p) => {
       const severity = p.row.listSignalSeverity;
-      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
+      return <ListSignalChip severity={severity} count={p.row.listSignalCount} />;
     },
     sortable: false,
   },
@@ -142,7 +144,7 @@ const baseColumns: GridColDef<Row>[] = [
       const bucket = p.row.podDensityBucket;
       if (!bucket || bucket === "unknown") return "-";
       const pct = p.row.podDensityRatio != null ? `${Math.round(p.row.podDensityRatio * 100)}%` : bucket;
-      return <Chip size="small" label={`${pct} ${bucket}`} color={deploymentHealthBucketColor(bucket)} />;
+      return <StatusChip size="small" label={`${pct} ${bucket}`} color={deploymentHealthBucketColor(bucket)} />;
     },
     sortable: false,
   },

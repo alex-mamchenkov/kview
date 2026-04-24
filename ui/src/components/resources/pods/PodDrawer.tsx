@@ -73,12 +73,14 @@ import KeyValueTable from "../../shared/KeyValueTable";
 import AccessDeniedState from "../../shared/AccessDeniedState";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
+import KeyValueChip from "../../shared/KeyValueChip";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import ContainerImageLabel from "../../shared/ContainerImageLabel";
 import AttentionSummary from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import GaugeBar, { type GaugeTone } from "../../shared/GaugeBar";
 import GaugeTableRow from "../../shared/GaugeTableRow";
+import StatusChip from "../../shared/StatusChip";
 import { formatCPUMilli, formatMemoryBytes, formatPct, severityForPct } from "../../metrics/format";
 import { useMetricsStatus, isMetricsUsable } from "../../metrics/useMetricsStatus";
 import PortForwardDialog, { type PortForwardOption } from "../../shared/PortForwardDialog";
@@ -1112,7 +1114,7 @@ export default function PodDrawer(props: {
       {
         label: "Phase",
         value: summary?.phase ? (
-          <Chip size="small" label={summary.phase} color={phaseChipColor(summary.phase)} />
+          <StatusChip label={summary.phase} color={phaseChipColor(summary.phase)} />
         ) : (
           "-"
         ),
@@ -1443,7 +1445,7 @@ export default function PodDrawer(props: {
                             <EmptyState message="None" />
                           ) : (
                             Object.entries(details?.lifecycle?.nodeSelector || {}).map(([k, v]) => (
-                              <Chip key={k} size="small" label={`${k}=${v}`} />
+                              <KeyValueChip key={k} chipKey={k} value={v} />
                             ))
                           )}
                         </Box>
@@ -2087,7 +2089,7 @@ export default function PodDrawer(props: {
                                     <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
                                       {Object.entries(svc.selector || {}).map(([k, v]) => (
                                         <Tooltip key={`${svc.name}-${k}`} title={`${k}=${v}`} arrow>
-                                          <Chip size="small" label={`${k}=${v}`} />
+                                          <KeyValueChip chipKey={k} value={v} />
                                         </Tooltip>
                                       ))}
                                     </Box>

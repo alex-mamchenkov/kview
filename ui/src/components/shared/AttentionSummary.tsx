@@ -5,6 +5,7 @@ import type { DashboardSignalItem } from "../../types/api";
 import type { ChipColor } from "../../utils/k8sUi";
 import Section from "./Section";
 import SignalHintIcons from "./SignalHintIcons";
+import StatusChip from "./StatusChip";
 
 export type AttentionHealth = {
   label: string;
@@ -95,12 +96,7 @@ export default function AttentionSummary(props: AttentionSummaryProps) {
                 variant="body2"
                 sx={{ color: "text.primary" }}
               >
-                <Chip
-                  size="small"
-                  color={severityColor(signal.severity)}
-                  label={signal.severity || "info"}
-                  sx={{ mr: 0.75 }}
-                />
+                <StatusChip size="small" color={severityColor(signal.severity)} label={signal.severity || "info"} sx={{ mr: 0.75 }} />
                 {signalText(signal)}
                 <SignalHintIcons
                   likelyCause={signal.likelyCause}

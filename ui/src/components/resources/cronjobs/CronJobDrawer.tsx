@@ -32,6 +32,7 @@ import AttentionSummary, {
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import WorkloadSpecPanels from "../../shared/WorkloadSpecPanels";
+import StatusChip from "../../shared/StatusChip";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 import type { ApiItemResponse, ApiListResponse, DashboardSignalItem } from "../../../types/api";
@@ -136,7 +137,7 @@ type ContainerSummary = {
 function formatSuspend(suspend?: boolean) {
   if (suspend == null) return "-";
   const suspended = Boolean(suspend);
-  return <Chip size="small" label={suspended ? "Yes" : "No"} color={suspended ? "warning" : "default"} />;
+  return <StatusChip size="small" label={suspended ? "Yes" : "No"} color={suspended ? "warning" : "default"} />;
 }
 
 function formatSchedule(schedule?: string, hint?: string) {
@@ -247,7 +248,7 @@ export default function CronJobDrawer(props: {
       {
         label: "Last Run Status",
         value: summary?.lastRunStatus ? (
-          <Chip size="small" label={summary.lastRunStatus} color={jobStatusChipColor(summary.lastRunStatus)} />
+          <StatusChip size="small" label={summary.lastRunStatus} color={jobStatusChipColor(summary.lastRunStatus)} />
         ) : (
           "-"
         ),
@@ -312,7 +313,7 @@ export default function CronJobDrawer(props: {
                     <Section
                       title="Key policy state"
                       dividerPlacement="content"
-                      actions={hasPolicy ? <Chip size="small" color="info" label="Configured" /> : null}
+                      actions={hasPolicy ? <StatusChip size="small" color="info" label="Configured" /> : null}
                     >
                       <KeyValueTable
                         columns={2}
@@ -371,7 +372,7 @@ export default function CronJobDrawer(props: {
                           >
                             <TableCell>{valueOrDash(j.name)}</TableCell>
                             <TableCell>
-                              <Chip size="small" label={valueOrDash(j.status)} color={jobStatusChipColor(j.status)} />
+                              <StatusChip size="small" label={valueOrDash(j.status)} color={jobStatusChipColor(j.status)} />
                             </TableCell>
                             <TableCell>{j.startTime ? fmtTimeAgo(j.startTime) : "-"}</TableCell>
                             <TableCell>{j.completionTime ? fmtTimeAgo(j.completionTime) : "-"}</TableCell>

@@ -16,6 +16,7 @@ import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils
 import { useActiveContext } from "../../../activeContext";
 import { useConnectionState } from "../../../connectionState";
 import { useUserSettings } from "../../../settingsContext";
+import StatusChip from "../../shared/StatusChip";
 
 type Namespace = NonNullable<ApiNamespacesListResponse["items"]>[number];
 type NamespaceProjectionUpdate = ApiNamespacesEnrichmentPoll["updates"][number];
@@ -56,10 +57,10 @@ const columns: GridColDef<Row>[] = [
       const phase = String(p.value || "");
       const row = p.row;
       return (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
-          <Chip size="small" label={phase || "-"} color={namespacePhaseChipColor(phase)} />
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", minHeight: "100%" }}>
+          <StatusChip size="small" label={phase || "-"} color={namespacePhaseChipColor(phase)} />
           {row.hasUnhealthyConditions && (
-            <Chip size="small" color="error" label="Unhealthy" />
+            <StatusChip size="small" color="error" label="Unhealthy" />
           )}
         </Box>
       );
@@ -80,12 +81,7 @@ const columns: GridColDef<Row>[] = [
         );
       }
       return (
-        <Chip
-          size="small"
-          label={row.summaryState}
-          color={dataplaneCoarseStateChipColor(row.summaryState)}
-          variant="outlined"
-        />
+        <StatusChip size="small" label={row.summaryState} color={dataplaneCoarseStateChipColor(row.summaryState)} variant="outlined" />
       );
     },
   },
@@ -151,11 +147,11 @@ const columns: GridColDef<Row>[] = [
         );
       }
       return (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minHeight: "100%" }}>
           <Typography variant="body2" sx={{ fontVariantNumeric: "tabular-nums" }}>
             {row.podsWithRestarts ?? 0}
           </Typography>
-          {row.restartSignal && <Chip size="small" label="Δ" color="warning" title="Elevated pod restarts (≥5)" />}
+          {row.restartSignal && <StatusChip size="small" label="Delta" color="warning" sx={{ height: 18, "& .MuiChip-label": { px: 0.75, fontSize: "0.68rem" } }} />}
         </Box>
       );
     },
@@ -168,7 +164,7 @@ const columns: GridColDef<Row>[] = [
     renderCell: (p) => {
       const row = p.row;
       return (
-        <Chip
+        <StatusChip
           size="small"
           label={quotaLabel(row)}
           color={row.quotaCritical ? "error" : row.quotaWarning ? "warning" : "default"}

@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Box, Chip, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
+import { Box, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
 import { panelBoxSx } from "../../theme/sxTokens";
 import { valueOrDash } from "../../utils/format";
 import Section from "./Section";
@@ -7,6 +7,7 @@ import EmptyState from "./EmptyState";
 import KeyValueTable from "./KeyValueTable";
 import ResourceLinkChip from "./ResourceLinkChip";
 import ContainerImageLabel from "./ContainerImageLabel";
+import KeyValueChip from "./KeyValueChip";
 
 type ContainerSummary = {
   name: string;
@@ -197,7 +198,7 @@ export default function WorkloadSpecPanels({
               {Object.entries(scheduling?.nodeSelector || {}).length === 0 ? (
                 <EmptyState message="None" />
               ) : (
-                Object.entries(scheduling?.nodeSelector || {}).map(([k, v]) => <Chip key={k} size="small" label={`${k}=${v}`} />)
+                Object.entries(scheduling?.nodeSelector || {}).map(([k, v]) => <KeyValueChip key={k} chipKey={k} value={v} />)
               )}
             </Box>
           </Box>

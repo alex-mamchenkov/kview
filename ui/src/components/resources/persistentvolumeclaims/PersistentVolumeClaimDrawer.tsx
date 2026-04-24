@@ -15,6 +15,7 @@ import Section from "../../shared/Section";
 import KeyValueTable from "../../shared/KeyValueTable";
 import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
+import KeyValueChip from "../../shared/KeyValueChip";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import AttentionSummary from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
@@ -26,6 +27,7 @@ import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import PVCActions from "./PVCActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import StatusChip from "../../shared/StatusChip";
 import type { ApiItemResponse, ApiListResponse, DashboardSignalItem } from "../../../types/api";
 import useResourceSignals from "../../../utils/useResourceSignals";
 import {
@@ -209,7 +211,7 @@ export default function PersistentVolumeClaimDrawer(props: {
       { label: "Namespace", value: valueOrDash(summary?.namespace) },
       {
         label: "Status",
-        value: <Chip size="small" label={valueOrDash(summary?.phase)} color={pvcPhaseChipColor(summary?.phase)} />,
+        value: <StatusChip label={valueOrDash(summary?.phase)} color={pvcPhaseChipColor(summary?.phase)} />,
       },
       { label: "Storage Class", value: valueOrDash(summary?.storageClassName) },
       { label: "Volume Mode", value: valueOrDash(summary?.volumeMode) },
@@ -339,14 +341,14 @@ export default function PersistentVolumeClaimDrawer(props: {
                         {selectorLabels.length > 0 && (
                           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
                             {selectorLabels.map(([k, v]) => (
-                              <Chip key={`${k}=${v}`} size="small" label={`${k}=${v}`} />
+                              <KeyValueChip key={`${k}=${v}`} chipKey={k} value={v} />
                             ))}
                           </Box>
                         )}
                         {selectorExpr.length > 0 && (
                           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
                             {selectorExpr.map((expr, idx) => (
-                              <Chip key={`${expr.key ?? "expr"}-${idx}`} size="small" label={formatExpression(expr)} />
+                              <StatusChip key={`${expr.key ?? "expr"}-${idx}`} size="small" label={formatExpression(expr)} variant="outlined" />
                             ))}
                           </Box>
                         )}

@@ -5,9 +5,11 @@ import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import CronJobDrawer from "./CronJobDrawer";
 import { fmtAge, fmtTimeAgo } from "../../../utils/format";
-import { listSignalLabel, listSignalSeverityColor, statusChipColor } from "../../../utils/k8sUi";
+import { statusChipColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
+import ListSignalChip from "../../shared/ListSignalChip";
+import StatusChip from "../../shared/StatusChip";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
 
 type CronJob = {
@@ -36,7 +38,7 @@ const columns: GridColDef<Row>[] = [
     width: 140,
     renderCell: (p) => {
       const status = String(p.row.listStatus || "");
-      return <Chip size="small" label={status || "-"} color={statusChipColor(status)} />;
+      return <StatusChip label={status || "-"} color={statusChipColor(status)} />;
     },
   },
   {
@@ -45,7 +47,7 @@ const columns: GridColDef<Row>[] = [
     width: 130,
     renderCell: (p) => {
       const severity = p.row.listSignalSeverity;
-      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
+      return <ListSignalChip severity={severity} count={p.row.listSignalCount} />;
     },
     sortable: false,
   },
@@ -59,11 +61,7 @@ const columns: GridColDef<Row>[] = [
       if (val === undefined || val === null) return "-";
       const suspended = Boolean(val);
       return (
-        <Chip
-          size="small"
-          label={suspended ? "Yes" : "No"}
-          color={suspended ? "warning" : "default"}
-        />
+        <StatusChip label={suspended ? "Yes" : "No"} color={suspended ? "warning" : "default"} />
       );
     },
   },

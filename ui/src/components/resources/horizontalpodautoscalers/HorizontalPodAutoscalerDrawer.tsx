@@ -28,6 +28,8 @@ import MetadataSection from "../../shared/MetadataSection";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
+import ScopedCountChip from "../../shared/ScopedCountChip";
+import StatusChip from "../../shared/StatusChip";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import AttentionSummary, {
 } from "../../shared/AttentionSummary";
@@ -217,9 +219,9 @@ export default function HorizontalPodAutoscalerDrawer(props: {
                         summary={`${details.summary.desiredReplicas} desired / min ${details.summary.minReplicas}`}
                       />
                       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
-                        <Chip size="small" variant="outlined" label={`Min ${details.summary.minReplicas}`} />
-                        <Chip size="small" variant="outlined" label={`Max ${details.summary.maxReplicas}`} />
-                        <Chip size="small" variant="outlined" label={`Last scale ${details.summary.lastScaleTime ? fmtTs(details.summary.lastScaleTime) : "-"}`} />
+                        <ScopedCountChip size="small" variant="outlined" label="Min" count={details.summary.minReplicas} />
+                        <ScopedCountChip size="small" variant="outlined" label="Max" count={details.summary.maxReplicas} />
+                        <ScopedCountChip size="small" variant="outlined" label="Last scale" count={details.summary.lastScaleTime ? fmtTs(details.summary.lastScaleTime) : "-"} />
                       </Box>
                     </Box>
                   </Section>
@@ -258,7 +260,7 @@ export default function HorizontalPodAutoscalerDrawer(props: {
                           {details.conditions.map((cond) => (
                             <TableRow key={cond.type}>
                               <TableCell sx={{ overflowWrap: "anywhere" }}>{cond.type}</TableCell>
-                              <TableCell><Chip size="small" label={cond.status} color={conditionStatusColor(cond.status)} /></TableCell>
+                              <TableCell><StatusChip label={cond.status} color={conditionStatusColor(cond.status)} /></TableCell>
                               <TableCell sx={{ overflowWrap: "anywhere" }}>
                                 <Typography variant="body2" sx={{ fontWeight: 600 }}>{valueOrDash(cond.reason)}</Typography>
                                 {cond.message ? (

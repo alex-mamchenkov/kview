@@ -5,10 +5,11 @@ import { apiGetWithContext } from "../../../api";
 import { type ApiDataplaneListResponse, dataplaneListMetaFromResponse } from "../../../types/api";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import ServiceDrawer from "./ServiceDrawer";
-import { listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
+import ListSignalChip from "../../shared/ListSignalChip";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
+import StatusChip from "../../shared/StatusChip";
 
 type Service = {
   name: string;
@@ -42,7 +43,7 @@ const columns: GridColDef<Row>[] = [
     field: "type",
     headerName: "Type",
     width: 150,
-    renderCell: (p) => <Chip size="small" label={valueOrDash(String(p.value || ""))} />,
+    renderCell: (p) => <StatusChip size="small" label={valueOrDash(String(p.value || ""))} />,
   },
   {
     field: "listSignalSeverity",
@@ -50,7 +51,7 @@ const columns: GridColDef<Row>[] = [
     width: 140,
     renderCell: (p) => {
       const severity = p.row.listSignalSeverity;
-      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
+      return <ListSignalChip severity={severity} count={p.row.listSignalCount} />;
     },
     sortable: false,
   },
@@ -58,7 +59,7 @@ const columns: GridColDef<Row>[] = [
     field: "exposureHint",
     headerName: "Exposure",
     width: 130,
-    renderCell: (p) => <Chip size="small" variant="outlined" label={valueOrDash(String(p.value || ""))} />,
+    renderCell: (p) => <StatusChip size="small" variant="outlined" label={valueOrDash(String(p.value || ""))} />,
     sortable: false,
   },
   {

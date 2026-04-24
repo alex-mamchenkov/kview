@@ -1,7 +1,9 @@
 import React from "react";
-import { Box, Chip, Typography } from "@mui/material";
+import { Box } from "@mui/material";
 import type { DataplaneListMeta } from "../../types/api";
-import { dataplaneCoarseStateChipColor } from "../../utils/k8sUi";
+import { fmtTimeAgo } from "../../utils/format";
+import { dataplaneCoarseStateChipColor, formatChipLabel } from "../../utils/k8sUi";
+import ScopedCountChip from "./ScopedCountChip";
 
 type Props = {
   meta: DataplaneListMeta | null;
@@ -15,18 +17,32 @@ export default function DataplaneListMetaStrip({ meta, prefix }: Props) {
     return null;
   }
 
+  const checkedValue = (() => {
+    const raw = meta.observed;
+    if (!raw) return null;
+    if (/^\d+$/.test(raw)) {
+      const num = Number(raw);
+      return fmtTimeAgo(num > 1e12 ? Math.floor(num / 1000) : num);
+    }
+    const parsed = Date.parse(raw);
+    if (!Number.isNaN(parsed)) {
+      return fmtTimeAgo(Math.floor(parsed / 1000));
+    }
+    return raw;
+  })();
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, mb: 1 }}>
       {prefix}
       <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.75 }}>
         {meta.state && (
-          <Chip size="small" label={`Sync: ${meta.state}`} color={dataplaneCoarseStateChipColor(meta.state)} />
+          <ScopedCountChip size="small" label="Sync" count={formatChipLabel(meta.state)} color={dataplaneCoarseStateChipColor(meta.state)} />
         )}
-        <Typography variant="caption" color="text.secondary" component="span">
-          Updated {meta.freshness ?? "—"} · Scope {meta.coverage ?? "—"} · Issues {meta.degradation ?? "—"} · Detail{" "}
-          {meta.completeness ?? "—"}
-          {meta.observed ? ` · Checked ${meta.observed}` : ""}
-        </Typography>
+        <ScopedCountChip size="small" variant="outlined" label="Updated" count={meta.freshness ?? "—"} />
+        <ScopedCountChip size="small" variant="outlined" label="Scope" count={meta.coverage ?? "—"} />
+        <ScopedCountChip size="small" variant="outlined" label="Issues" count={meta.degradation ?? "—"} />
+        <ScopedCountChip size="small" variant="outlined" label="Detail" count={meta.completeness ?? "—"} />
+        {checkedValue ? <ScopedCountChip size="small" variant="outlined" label="Checked" count={checkedValue} /> : null}
       </Box>
     </Box>
   );

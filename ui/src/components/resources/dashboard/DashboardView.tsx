@@ -27,6 +27,7 @@ import InfoHint from "../../shared/InfoHint";
 import MetricCard from "../../shared/MetricCard";
 import StackedMetricBar from "../../shared/StackedMetricBar";
 import GaugeTableRow from "../../shared/GaugeTableRow";
+import ScopedCountChip from "../../shared/ScopedCountChip";
 import { formatCPUMilli, formatMemoryBytes } from "../../metrics/format";
 import { useMetricsStatus, isMetricsUsable } from "../../metrics/useMetricsStatus";
 import DashboardSignalsPanel from "./DashboardSignalsPanel";
@@ -463,14 +464,10 @@ export default function DashboardView(props: Props) {
                       hint="Cluster-wide CPU and memory rolled up from cached metrics.k8s.io snapshots. Pod totals sum across known namespaces; node totals sum across sampled nodes."
                     />
                     <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mb: 1 }}>
-                      {usage.freshness ? (
-                        <Chip size="small" variant="outlined" label={`Freshness ${usage.freshness}`} />
-                      ) : null}
-                      <Chip size="small" variant="outlined" label={`Pods sampled ${usage.podsWithMetrics}`} />
-                      <Chip size="small" variant="outlined" label={`Namespaces ${usage.namespaces}`} />
-                      {usage.nodesSampled != null ? (
-                        <Chip size="small" variant="outlined" label={`Nodes sampled ${usage.nodesSampled}`} />
-                      ) : null}
+                      {usage.freshness ? <ScopedCountChip size="small" variant="outlined" label="Freshness" count={usage.freshness} /> : null}
+                      <ScopedCountChip size="small" variant="outlined" label="Pods sampled" count={usage.podsWithMetrics} />
+                      <ScopedCountChip size="small" variant="outlined" label="Namespaces" count={usage.namespaces} />
+                      {usage.nodesSampled != null ? <ScopedCountChip size="small" variant="outlined" label="Nodes sampled" count={usage.nodesSampled} /> : null}
                       {usage.note ? (
                         <Chip size="small" color="warning" variant="outlined" label={usage.note} />
                       ) : null}
@@ -505,11 +502,11 @@ export default function DashboardView(props: Props) {
                       hint="Observation metadata moved here so the attention panel stays focused."
                     />
                     <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mb: 1 }}>
-                      <Chip size="small" label={`Profile ${plane.profile}`} variant="outlined" />
-                      <Chip size="small" label={`Discovery ${plane.discoveryMode}`} variant="outlined" />
-                      <Chip size="small" label={`Activation ${plane.activationMode}`} variant="outlined" />
-                      <Chip size="small" label={`Refresh ${dashboardRefreshSec > 0 ? `${dashboardRefreshSec}s` : "manual"}`} variant="outlined" />
-                      <Chip size="small" label={`Totals ${cov.resourceTotalsCompleteness}`} color={cov.resourceTotalsCompleteness === "unknown" ? "warning" : "default"} variant="outlined" />
+                      <ScopedCountChip size="small" variant="outlined" label="Profile" count={plane.profile} />
+                      <ScopedCountChip size="small" variant="outlined" label="Discovery" count={plane.discoveryMode} />
+                      <ScopedCountChip size="small" variant="outlined" label="Activation" count={plane.activationMode} />
+                      <ScopedCountChip size="small" variant="outlined" label="Refresh" count={dashboardRefreshSec > 0 ? `${dashboardRefreshSec}s` : "Manual"} />
+                      <ScopedCountChip size="small" variant="outlined" label="Totals" count={cov.resourceTotalsCompleteness} color={cov.resourceTotalsCompleteness === "unknown" ? "warning" : "default"} />
                     </Box>
                     <Table size="small">
                       <TableBody>
@@ -529,8 +526,8 @@ export default function DashboardView(props: Props) {
                       hint="Row projection coverage comes from cached pod/deployment snapshots and active enrichment sessions."
                     />
                     <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mb: 1 }}>
-                      <Chip size="small" variant="outlined" label={`Known lists ${knownScope}`} />
-                      <Chip size="small" variant="outlined" label={`Row projections ${cov.rowProjectionCachedNamespaces}`} />
+                      <ScopedCountChip size="small" variant="outlined" label="Known lists" count={knownScope} />
+                      <ScopedCountChip size="small" variant="outlined" label="Row projections" count={cov.rowProjectionCachedNamespaces} />
                       {cov.hasActiveEnrichmentSession ? <Chip size="small" variant="outlined" label="Enrichment active" /> : null}
                     </Box>
                     <Table size="small">
@@ -554,10 +551,10 @@ export default function DashboardView(props: Props) {
                     hint="Session-lifetime dataplane metrics since app startup. This tracks dataplane snapshot traffic and cache state only, not direct kube reads outside dataplane."
                   />
                   <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mb: 1 }}>
-                    <Chip size="small" variant="outlined" label={`Uptime ${fmtAgeShort(dataplane.uptimeSec) || "0m"}`} />
-                    <Chip size="small" variant="outlined" label={`Requests ${fmtRate(dataplane.traffic.requestsPerMin)}`} />
-                    <Chip size="small" variant="outlined" label={`Traffic ${fmtByteRate(dataplane.traffic.liveBytesPerMin)}`} />
-                    <Chip size="small" variant="outlined" label={`Avg fetch ${fmtBytes(dataplane.traffic.avgBytesPerFetch)}`} />
+                    <ScopedCountChip size="small" variant="outlined" label="Uptime" count={fmtAgeShort(dataplane.uptimeSec) || "0m"} />
+                    <ScopedCountChip size="small" variant="outlined" label="Requests" count={fmtRate(dataplane.traffic.requestsPerMin)} />
+                    <ScopedCountChip size="small" variant="outlined" label="Traffic" count={fmtByteRate(dataplane.traffic.liveBytesPerMin)} />
+                    <ScopedCountChip size="small" variant="outlined" label="Avg fetch" count={fmtBytes(dataplane.traffic.avgBytesPerFetch)} />
                   </Box>
                   <Box sx={dashboardPanelSectionSx}>
                         <GaugeTableRow

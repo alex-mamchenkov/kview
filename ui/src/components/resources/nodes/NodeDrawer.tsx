@@ -33,6 +33,8 @@ import { useMetricsStatus, isMetricsUsable } from "../../metrics/useMetricsStatu
 import NodeActions from "./NodeActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import ScopedCountChip from "../../shared/ScopedCountChip";
+import StatusChip from "../../shared/StatusChip";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import type {
   ApiItemResponse,
@@ -161,7 +163,7 @@ export default function NodeDrawer(props: {
       {
         label: "Status",
         value: (
-          <Chip size="small" label={valueOrDash(summary?.status)} color={nodeStatusChipColor(summary?.status)} />
+          <StatusChip size="small" label={valueOrDash(summary?.status)} color={nodeStatusChipColor(summary?.status)} />
         ),
       },
       { label: "Roles", value: formatRoles(summary?.roles) },
@@ -205,10 +207,10 @@ export default function NodeDrawer(props: {
                     <Section title="Derived Projection" divider={false}>
                       <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
-                          <Chip size="small" color="warning" variant="outlined" label="Derived" />
-                          <Chip size="small" variant="outlined" label={`Source ${derived.source}`} />
-                          {derived.coverage ? <Chip size="small" variant="outlined" label={`Coverage ${derived.coverage}`} /> : null}
-                          {derived.completeness ? <Chip size="small" variant="outlined" label={`Completeness ${derived.completeness}`} /> : null}
+                          <StatusChip size="small" color="warning" variant="outlined" label="Derived" />
+                          <ScopedCountChip size="small" variant="outlined" label="Source" count={derived.source} />
+                          {derived.coverage ? <ScopedCountChip size="small" variant="outlined" label="Coverage" count={derived.coverage} /> : null}
+                          {derived.completeness ? <ScopedCountChip size="small" variant="outlined" label="Completeness" count={derived.completeness} /> : null}
                         </Box>
                         <Typography variant="body2" color="text.secondary">
                           {derived.note || "This node view is inferred from cached pod snapshots; direct node detail was not available."}

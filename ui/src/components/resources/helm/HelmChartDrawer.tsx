@@ -19,6 +19,8 @@ import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 import EmptyState from "../../shared/EmptyState";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
+import ScopedCountChip from "../../shared/ScopedCountChip";
+import StatusChip from "../../shared/StatusChip";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import { drawerBodySx, drawerTabContentSx, panelBoxSx } from "../../../theme/sxTokens";
 import type { DashboardSignalItem, HelmChart, HelmChartVersion } from "../../../types/api";
@@ -115,9 +117,9 @@ export default function HelmChartDrawer(props: {
                     <Section title="Derived Projection">
                       <Box sx={{ display: "flex", flexDirection: "column", gap: 1, mt: 0.5 }}>
                         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                          <Chip size="small" color="warning" variant="outlined" label="Derived" />
-                          {chart.derivedSource ? <Chip size="small" variant="outlined" label={`Source ${chart.derivedSource}`} /> : null}
-                          {chart.derivedCoverage ? <Chip size="small" variant="outlined" label={`Coverage ${chart.derivedCoverage}`} /> : null}
+                          <StatusChip size="small" color="warning" variant="outlined" label="Derived" />
+                          {chart.derivedSource ? <ScopedCountChip size="small" variant="outlined" label="Source" count={chart.derivedSource} /> : null}
+                          {chart.derivedCoverage ? <ScopedCountChip size="small" variant="outlined" label="Coverage" count={chart.derivedCoverage} /> : null}
                         </Box>
                         <Typography variant="body2" color="text.secondary">
                           {chart.derivedNote || "This chart row is inferred from cached Helm release snapshots."}
@@ -130,7 +132,7 @@ export default function HelmChartDrawer(props: {
                     <Section title="Statuses">
                       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 0.5 }}>
                         {statuses.map((status) => (
-                          <Chip key={status} size="small" label={status} variant="outlined" />
+                          <StatusChip key={status} size="small" label={status} variant="outlined" />
                         ))}
                       </Box>
                     </Section>
@@ -164,11 +166,7 @@ export default function HelmChartDrawer(props: {
                             <TableCell>{(version.statuses || []).join(", ") || "-"}</TableCell>
                             <TableCell>
                               {version.needsAttention ? (
-                                <Chip
-                                  size="small"
-                                  color="warning"
-                                  label={`${version.needsAttention} release${version.needsAttention === 1 ? "" : "s"}`}
-                                />
+                                <ScopedCountChip size="small" color="warning" label="Releases" count={version.needsAttention} />
                               ) : "-"}
                             </TableCell>
                           </TableRow>

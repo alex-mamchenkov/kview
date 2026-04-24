@@ -7,6 +7,8 @@ import HelmChartDrawer from "./HelmChartDrawer";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneListMetaFromResponse, type DataplaneListMeta } from "../../../types/api";
+import ScopedCountChip from "../../shared/ScopedCountChip";
+import StatusChip from "../../shared/StatusChip";
 
 type HelmChart = {
   chartName: string;
@@ -40,7 +42,7 @@ const columns: GridColDef<Row>[] = [
     field: "derived",
     headerName: "Source",
     width: 120,
-    renderCell: (p) => p.row.derived ? <Chip size="small" label="derived" color="warning" variant="outlined" /> : "direct",
+    renderCell: (p) => p.row.derived ? <StatusChip size="small" label="Derived" color="warning" variant="outlined" /> : "Direct",
     sortable: false,
   },
   {
@@ -77,7 +79,7 @@ const columns: GridColDef<Row>[] = [
     headerName: "Signals",
     width: 110,
     type: "number",
-    renderCell: (p) => p.row.needsAttention ? <Chip size="small" color="warning" label={p.row.needsAttention} /> : "-",
+    renderCell: (p) => p.row.needsAttention ? <ScopedCountChip size="small" color="warning" label="Signals" count={p.row.needsAttention} /> : "-",
   },
 ];
 

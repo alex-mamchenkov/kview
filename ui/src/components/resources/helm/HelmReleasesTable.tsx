@@ -3,11 +3,13 @@ import { Chip } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
 import { apiGetWithContext } from "../../../api";
 import { fmtTs, valueOrDash } from "../../../utils/format";
-import { helmStatusChipColor, listSignalLabel, listSignalSeverityColor } from "../../../utils/k8sUi";
+import { helmStatusChipColor } from "../../../utils/k8sUi";
 import HelmReleaseDrawer from "./HelmReleaseDrawer";
 import { HelmInstallButton } from "./HelmActions";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
+import ListSignalChip from "../../shared/ListSignalChip";
+import StatusChip from "../../shared/StatusChip";
 import {
   dataplaneListMetaFromResponse,
   type ApiDataplaneListResponse,
@@ -45,7 +47,7 @@ const columns: GridColDef<Row>[] = [
     width: 140,
     renderCell: (p) => {
       const severity = p.row.listSignalSeverity;
-      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
+      return <ListSignalChip severity={severity} count={p.row.listSignalCount} />;
     },
     sortable: false,
   },
@@ -54,7 +56,7 @@ const columns: GridColDef<Row>[] = [
     headerName: "Status",
     width: 140,
     renderCell: (p) => (
-      <Chip
+      <StatusChip
         size="small"
         label={valueOrDash((p.row.listStatus || p.row.status) as string | undefined)}
         color={helmStatusChipColor((p.row.listStatus || p.row.status) as string | undefined)}

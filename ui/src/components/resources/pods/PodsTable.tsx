@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { Box, Chip } from "@mui/material";
+import { Box } from "@mui/material";
 import { GridColDef } from "@mui/x-data-grid";
 import { apiGetWithContext } from "../../../api";
 import {
@@ -9,13 +9,15 @@ import {
 } from "../../../types/api";
 import PodDrawer from "./PodDrawer";
 import { fmtAge } from "../../../utils/format";
-import { listSignalLabel, listSignalSeverityColor, phaseChipColor } from "../../../utils/k8sUi";
+import { phaseChipColor } from "../../../utils/k8sUi";
 import { getResourceLabel, listResourceAccess } from "../../../utils/k8sResources";
 import ResourceListPage from "../../shared/ResourceListPage";
 import { dataplaneRevisionFetcher, defaultRevisionPollSec } from "../../../utils/dataplaneRevisionPoll";
 import GaugeBar, { type GaugeTone } from "../../shared/GaugeBar";
 import { formatCPUMilli, formatMemoryBytes, severityForPct } from "../../metrics/format";
 import { useMetricsStatus, isMetricsUsable } from "../../metrics/useMetricsStatus";
+import ListSignalChip from "../../shared/ListSignalChip";
+import StatusChip from "../../shared/StatusChip";
 
 type Pod = PodListItemUsage & {
   name: string;
@@ -74,7 +76,7 @@ const baseColumns: GridColDef<Row>[] = [
     width: 130,
     renderCell: (p) => {
       const phase = String(p.row.listStatus || p.value || "");
-      return <Chip size="small" label={phase || "-"} color={phaseChipColor(phase)} />;
+      return <StatusChip size="small" label={phase || "-"} color={phaseChipColor(phase)} />;
     },
   },
   { field: "ready", headerName: "Ready", width: 110 },
@@ -84,7 +86,7 @@ const baseColumns: GridColDef<Row>[] = [
     width: 120,
     renderCell: (p) => {
       const severity = p.row.listSignalSeverity;
-      return <Chip size="small" label={listSignalLabel(severity, p.row.listSignalCount)} color={listSignalSeverityColor(severity)} />;
+      return <ListSignalChip severity={severity} count={p.row.listSignalCount} />;
     },
     sortable: false,
   },

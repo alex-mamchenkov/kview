@@ -41,6 +41,7 @@ import { fmtAge, valueOrDash } from "../../../utils/format";
 import {
   helmStatusChipColor,
   namespacePhaseChipColor,
+  formatChipLabel,
 } from "../../../utils/k8sUi";
 import KeyValueTable from "../../shared/KeyValueTable";
 import ConditionsTable from "../../shared/ConditionsTable";
@@ -54,6 +55,8 @@ import { formatCPUMilli, formatMemoryBytes } from "../../metrics/format";
 import { useMetricsStatus, isMetricsUsable } from "../../metrics/useMetricsStatus";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
+import ScopedCountChip from "../../shared/ScopedCountChip";
+import StatusChip from "../../shared/StatusChip";
 import RightDrawer from "../../layout/RightDrawer";
 import Section from "../../shared/Section";
 import EventsList from "../../shared/EventsList";
@@ -167,10 +170,10 @@ function worstSignalSeverity(signals: DashboardSignalItem[]): string {
 function ResourceSignalsChip({ signals, label }: { signals: DashboardSignalItem[]; label?: string }) {
   if (signals.length === 0) return null;
   const severity = worstSignalSeverity(signals);
-  const chipLabel = label || `${signals.length} signal${signals.length === 1 ? "" : "s"}`;
+  const chipLabel = label || (severity ? formatChipLabel(severity) : "Signals");
   return (
     <Tooltip title={signals.map(signalNote).join(" ")}>
-      <Chip size="small" color={signalSeverityColor(severity)} label={chipLabel} />
+      <ScopedCountChip size="small" color={signalSeverityColor(severity)} label={chipLabel} count={signals.length} />
     </Tooltip>
   );
 }
@@ -187,7 +190,14 @@ function mapCountChip(
   onSelect: (sectionKey: string) => void
 ) {
   if (!count) return null;
-  return <ResourceLinkChip label={`${label}: ${count}`} onClick={enabled ? () => onSelect(sectionKey) : undefined} />;
+  return (
+    <ResourceLinkChip
+      label={label}
+      count={count}
+      color={enabled ? "primary" : "default"}
+      onClick={enabled ? () => onSelect(sectionKey) : undefined}
+    />
+  );
 }
 
 export default function NamespaceDrawer(props: {
@@ -330,11 +340,7 @@ export default function NamespaceDrawer(props: {
       {
         label: "Phase",
         value: (
-          <Chip
-            size="small"
-            label={valueOrDash(summary?.phase)}
-            color={namespacePhaseChipColor(summary?.phase)}
-          />
+          <StatusChip label={valueOrDash(summary?.phase)} color={namespacePhaseChipColor(summary?.phase)} />
         ),
       },
       { label: "Age", value: fmtAge(summary?.ageSec) },
@@ -461,7 +467,7 @@ export default function NamespaceDrawer(props: {
                               >
                                 <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>{release.name}</TableCell>
                                 <TableCell>
-                                  <Chip size="small" label={release.status} color={helmStatusChipColor(release.status)} />
+                                  <StatusChip size="small" label={release.status} color={helmStatusChipColor(release.status)} />
                                 </TableCell>
                                 <TableCell>{release.revision}</TableCell>
                                 <TableCell>
@@ -482,7 +488,7 @@ export default function NamespaceDrawer(props: {
                   {metricsUsable && resourceUsage ? (
                     <Section title="Resource usage">
                       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
-                        <Chip size="small" variant="outlined" label={`Pods sampled ${resourceUsage.pods}`} />
+                        <ScopedCountChip size="small" variant="outlined" label="Pods sampled" count={resourceUsage.pods} />
                         {resourceUsage.observedAt ? (
                           <Chip size="small" variant="outlined" label={`Observed ${fmtAge(Math.max(0, Math.round((Date.now() - resourceUsage.observedAt) / 1000)))} ago`} />
                         ) : null}
@@ -501,12 +507,12 @@ export default function NamespaceDrawer(props: {
 
                   <Section title="Capacity signals">
                     <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1 }}>
-                      <Chip size="small" label={`ResourceQuotas: ${quotas.length}`} color={quotas.length > 0 ? "primary" : "default"} />
-                      <Chip size="small" label={`LimitRanges: ${limitRanges.length}`} color={limitRanges.length > 0 ? "primary" : "default"} />
+                      <ScopedCountChip size="small" label="ResourceQuotas" count={quotas.length} color={quotas.length > 0 ? "primary" : "default"} />
+                      <ScopedCountChip size="small" label="LimitRanges" count={limitRanges.length} color={limitRanges.length > 0 ? "primary" : "default"} />
                       {(quotaPressure.critical > 0 || quotaPressure.warning > 0) && (
                         <>
-                          <Chip size="small" color="error" label={`Critical quota entries: ${quotaPressure.critical}`} />
-                          <Chip size="small" color="warning" label={`Warning quota entries: ${quotaPressure.warning}`} />
+                          <ScopedCountChip size="small" color="error" label="Critical quota entries" count={quotaPressure.critical} />
+                          <ScopedCountChip size="small" color="warning" label="Warning quota entries" count={quotaPressure.warning} />
                         </>
                       )}
                     </Box>
@@ -516,12 +522,10 @@ export default function NamespaceDrawer(props: {
                     <EmptyState message="No ResourceQuotas in this namespace." />
                   ) : (
                     quotas.map((quota) => {
-                      const quotaSignals = resourceSignalsFor(resourceSignalMap, "ResourceQuota", quota.name, name || "");
                       return (
                         <Section
                           key={quota.name}
                           title={`ResourceQuota: ${quota.name}`}
-                          actions={<ResourceSignalsChip signals={quotaSignals} />}
                         >
                           <KeyValueTable
                             rows={[

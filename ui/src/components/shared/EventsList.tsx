@@ -1,9 +1,10 @@
 import React from "react";
-import { Box, Chip, Typography } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import { fmtTimeAgo, valueOrDash } from "../../utils/format";
 import { eventChipColor } from "../../utils/k8sUi";
 import { panelBoxCompactSx } from "../../theme/sxTokens";
 import EmptyState from "./EmptyState";
+import StatusChip from "./StatusChip";
 
 type EventDTO = {
   type: string;
@@ -44,20 +45,12 @@ export default function EventsList({
             }}
           >
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-              <Chip
-                size="small"
-                label={e.type || "Unknown"}
-                color={eventChipColor(e.type)}
-              />
+              <StatusChip size="small" label={e.type || "Unknown"} color={eventChipColor(e.type)} />
               <Typography variant="subtitle2">
                 {valueOrDash(e.reason)} (x{valueOrDash(e.count)})
               </Typography>
               {showTarget && (e.involvedKind || e.involvedName) ? (
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={`${valueOrDash(e.involvedKind)} ${valueOrDash(e.involvedName)}`}
-                />
+                <StatusChip size="small" variant="outlined" label={`${valueOrDash(e.involvedKind)} ${valueOrDash(e.involvedName)}`} />
               ) : null}
             </Box>
             <Typography variant="caption" color="text.secondary">

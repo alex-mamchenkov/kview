@@ -27,6 +27,7 @@ import NamespaceDrawer from "../namespaces/NamespaceDrawer";
 import { fmtAge, valueOrDash } from "../../../utils/format";
 import Section from "../../shared/Section";
 import KeyValueTable from "../../shared/KeyValueTable";
+import KeyValueChip from "../../shared/KeyValueChip";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import AccessDeniedState from "../../shared/AccessDeniedState";
 import EmptyState from "../../shared/EmptyState";
@@ -374,7 +375,7 @@ export default function ServiceDrawer(props: {
             <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
               {Object.entries(summary?.selector || {}).map(([k, v]) => (
                 <Tooltip key={k} title={`${k}=${v}`} arrow>
-                  <Chip size="small" label={`${k}=${v}`} />
+                  <KeyValueChip chipKey={k} value={v} />
                 </Tooltip>
               ))}
             </Box>

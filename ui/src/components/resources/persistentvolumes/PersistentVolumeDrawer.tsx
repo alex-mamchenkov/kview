@@ -25,6 +25,7 @@ import PersistentVolumeClaimDrawer from "../persistentvolumeclaims/PersistentVol
 import PVActions from "./PVActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import StatusChip from "../../shared/StatusChip";
 import type { ApiItemResponse, ApiListResponse, DashboardSignalItem } from "../../../types/api";
 import useResourceSignals from "../../../utils/useResourceSignals";
 import {
@@ -194,7 +195,7 @@ export default function PersistentVolumeDrawer(props: {
       { label: "Name", value: valueOrDash(summary?.name), monospace: true },
       {
         label: "Phase",
-        value: <Chip size="small" label={valueOrDash(summary?.phase)} color={pvPhaseChipColor(summary?.phase)} />,
+        value: <StatusChip label={valueOrDash(summary?.phase)} color={pvPhaseChipColor(summary?.phase)} />,
       },
       { label: "Capacity", value: valueOrDash(summary?.capacity) },
       { label: "Access Modes", value: formatAccessModes(summary?.accessModes) },

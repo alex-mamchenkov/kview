@@ -21,6 +21,8 @@ import EmptyState from "../../shared/EmptyState";
 import Section from "../../shared/Section";
 import StackedMetricBar from "../../shared/StackedMetricBar";
 import GaugeTableRow from "../../shared/GaugeTableRow";
+import ScopedCountChip from "../../shared/ScopedCountChip";
+import StatusChip from "../../shared/StatusChip";
 import {
   GAUGE_COLOR_HEALTHY,
   GAUGE_COLOR_WARNING,
@@ -267,7 +269,7 @@ export default function NamespaceSignalsTab({
                   </TableCell>
                   <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>{resource.name}</TableCell>
                   <TableCell>
-                    <Chip size="small" color={problematicSignalColor(resource.reason)} label="attention" />
+                    <StatusChip size="small" color={problematicSignalColor(resource.reason)} label="Attention" />
                   </TableCell>
                   <TableCell>{resource.reason}</TableCell>
                 </TableRow>
@@ -304,7 +306,7 @@ export default function NamespaceSignalsTab({
                   </TableCell>
                   <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>{signalTarget(signal)}</TableCell>
                   <TableCell>
-                    <Chip size="small" color={signalSeverityColor(signal.severity)} label={signal.severity} />
+                    <StatusChip size="small" color={signalSeverityColor(signal.severity)} label={signal.severity} />
                   </TableCell>
                   <TableCell>{signalNote(signal)}</TableCell>
                 </TableRow>
@@ -317,15 +319,11 @@ export default function NamespaceSignalsTab({
       {summaryMeta && (
         <Section title="Dataplane status">
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-            <Chip
-              size="small"
-              label={`state: ${summaryMeta.state || "unknown"}`}
-              color={dataplaneCoarseStateChipColor(summaryMeta.state)}
-            />
-            <Chip size="small" variant="outlined" label={`freshness: ${summaryMeta.freshness || "?"}`} />
-            <Chip size="small" variant="outlined" label={`coverage: ${summaryMeta.coverage || "?"}`} />
-            <Chip size="small" variant="outlined" label={`degradation: ${summaryMeta.degradation || "?"}`} />
-            <Chip size="small" variant="outlined" label={`completeness: ${summaryMeta.completeness || "?"}`} />
+            <ScopedCountChip size="small" label="State" count={summaryMeta.state || "unknown"} color={dataplaneCoarseStateChipColor(summaryMeta.state)} />
+            <ScopedCountChip size="small" variant="outlined" label="Freshness" count={summaryMeta.freshness || "?"} />
+            <ScopedCountChip size="small" variant="outlined" label="Coverage" count={summaryMeta.coverage || "?"} />
+            <ScopedCountChip size="small" variant="outlined" label="Degradation" count={summaryMeta.degradation || "?"} />
+            <ScopedCountChip size="small" variant="outlined" label="Completeness" count={summaryMeta.completeness || "?"} />
           </Box>
         </Section>
       )}

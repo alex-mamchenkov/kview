@@ -31,6 +31,7 @@ import MetadataSection from "../../shared/MetadataSection";
 import HealthConditionsPanel from "../../shared/HealthConditionsPanel";
 import EventsList from "../../shared/EventsList";
 import CodeBlock from "../../shared/CodeBlock";
+import KeyValueChip from "../../shared/KeyValueChip";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import ContainerImageLabel from "../../shared/ContainerImageLabel";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
@@ -316,7 +317,7 @@ export default function DeploymentDrawer(props: {
           return (
             <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
               {parts.map((part) => (
-                <Chip key={part} size="small" label={part} />
+                <KeyValueChip key={part} chipKey={part.split("=")[0] || part} value={part.includes("=") ? part.slice(part.indexOf("=") + 1) : ""} />
               ))}
             </Box>
           );
@@ -689,7 +690,7 @@ export default function DeploymentDrawer(props: {
                             <EmptyState message="None" />
                           ) : (
                             Object.entries(details?.spec?.scheduling?.nodeSelector || {}).map(([k, v]) => (
-                              <Chip key={k} size="small" label={`${k}=${v}`} />
+                              <KeyValueChip key={k} chipKey={k} value={v} />
                             ))
                           )}
                         </Box>

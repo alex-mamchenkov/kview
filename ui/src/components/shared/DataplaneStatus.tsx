@@ -3,6 +3,7 @@ import { Box, Chip, CircularProgress, Typography } from "@mui/material";
 import { apiGet } from "../../api";
 import type { ApiDashboardClusterResponse } from "../../types/api";
 import { dataplaneCoarseStateChipColor } from "../../utils/k8sUi";
+import ScopedCountChip from "./ScopedCountChip";
 
 type Props = {
   token: string;
@@ -68,38 +69,23 @@ export default function DataplaneStatus(props: Props) {
       </Typography>
 
       {coverage.namespacesInResourceTotals > 0 && (
-        <Chip
+        <ScopedCountChip
           size="small"
           variant="outlined"
           color={(signals?.high || 0) > 0 ? "warning" : "default"}
-          label={`Signal scope: ${coverage.namespacesInResourceTotals}/${coverage.visibleNamespaces} ns · signals: ${signals?.total ?? 0}`}
+          label="Signal scope"
+          count={`${coverage.namespacesInResourceTotals}/${coverage.visibleNamespaces} ns · ${signals?.total ?? 0} signals`}
         />
       )}
 
-      <Chip
-        size="small"
-        label={`Namespaces: ${ns.state} · ${ns.freshness} · scope ${ns.coverage}`}
-        color={dataplaneCoarseStateChipColor(ns.state)}
-      />
-      <Chip
-        size="small"
-        label={`Nodes: ${nodes.state} · ${nodes.freshness} · scope ${nodes.coverage}`}
-        color={dataplaneCoarseStateChipColor(nodes.state)}
-      />
-      <Chip
-        size="small"
-        label={`Namespace list: ${ns.observerState || "—"}`}
-        variant="outlined"
-      />
-      <Chip
-        size="small"
-        label={`Node list: ${nodes.observerState || "—"}`}
-        variant="outlined"
-      />
-      <Chip size="small" label={`Profile: ${plane.profile || "unknown"}`} variant="outlined" />
-      <Chip size="small" label={`Discovery: ${plane.discoveryMode || "unknown"}`} variant="outlined" />
-      <Chip size="small" label={`Activation: ${plane.activationMode || "unknown"}`} variant="outlined" />
-      <Chip size="small" label={`Scope: ${plane.scope.namespaces} / ${plane.scope.resourceKinds}`} variant="outlined" />
+      <ScopedCountChip size="small" label="Namespaces" count={`${ns.state} · ${ns.freshness} · scope ${ns.coverage}`} color={dataplaneCoarseStateChipColor(ns.state)} />
+      <ScopedCountChip size="small" label="Nodes" count={`${nodes.state} · ${nodes.freshness} · scope ${nodes.coverage}`} color={dataplaneCoarseStateChipColor(nodes.state)} />
+      <ScopedCountChip size="small" variant="outlined" label="Namespace list" count={ns.observerState || "—"} />
+      <ScopedCountChip size="small" variant="outlined" label="Node list" count={nodes.observerState || "—"} />
+      <ScopedCountChip size="small" variant="outlined" label="Profile" count={plane.profile || "unknown"} />
+      <ScopedCountChip size="small" variant="outlined" label="Discovery" count={plane.discoveryMode || "unknown"} />
+      <ScopedCountChip size="small" variant="outlined" label="Activation" count={plane.activationMode || "unknown"} />
+      <ScopedCountChip size="small" variant="outlined" label="Scope" count={`${plane.scope.namespaces} / ${plane.scope.resourceKinds}`} />
     </Box>
   );
 }
