@@ -4,7 +4,7 @@ import type { ChipProps } from "@mui/material/Chip";
 import type { SxProps, Theme } from "@mui/material/styles";
 import { CHIP_BORDER_RADIUS } from "../../theme/sxTokens";
 
-type ScopedCountChipColor = "default" | "primary" | "secondary" | "success" | "warning" | "error" | "info";
+export type ScopedCountChipColor = "default" | "primary" | "secondary" | "success" | "warning" | "error" | "info";
 
 type ScopedCountChipSize = NonNullable<ChipProps["size"]>;
 type ScopedCountChipDensity = "default" | "compact" | "toolbar";
@@ -22,6 +22,15 @@ export type ScopedCountChipProps = {
   sx?: SxProps<Theme>;
   title?: string;
 };
+
+export function activeChipSx(color: ScopedCountChipColor): SxProps<Theme> {
+  return {
+    "--scoped-chip-bg": `var(--chip-${color}-active-bg)`,
+    "--scoped-chip-fg": `var(--chip-${color}-active-fg)`,
+    "--scoped-chip-border": `var(--chip-${color}-active-border)`,
+    border: "2px solid var(--scoped-chip-border)",
+  } as SxProps<Theme>;
+}
 
 export function scopedCountToneVars(color: ScopedCountChipColor) {
   const tone = color || "default";

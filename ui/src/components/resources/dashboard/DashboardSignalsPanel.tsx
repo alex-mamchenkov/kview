@@ -21,7 +21,7 @@ import type {
 } from "../../../types/api";
 import SignalHintIcons from "../../shared/SignalHintIcons";
 import InfoHint from "../../shared/InfoHint";
-import ScopedCountChip from "../../shared/ScopedCountChip";
+import ScopedCountChip, { activeChipSx } from "../../shared/ScopedCountChip";
 import StatusChip from "../../shared/StatusChip";
 import type { InspectTarget } from "./dashboardTypes";
 import { fmtTimeAgo } from "../../../utils/format";
@@ -254,6 +254,7 @@ function FilterChip({
       label={label || signalFilterLabel(filter)}
       count={count}
       onClick={() => onSelect(filter)}
+      sx={selected ? activeChipSx(color) : undefined}
     />
   );
 }

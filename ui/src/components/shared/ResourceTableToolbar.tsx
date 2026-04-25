@@ -15,7 +15,7 @@ import { GridToolbarContainer } from "@mui/x-data-grid";
 import type { QuickFilter } from "../../utils/listFilters";
 import { refreshOptions } from "../../utils/listFilters";
 import { actionRowSx } from "../../theme/sxTokens";
-import ScopedCountChip from "./ScopedCountChip";
+import ScopedCountChip, { activeChipSx } from "./ScopedCountChip";
 
 export type ResourceTableToolbarProps = {
   filterLabel: string;
@@ -105,6 +105,7 @@ export default function ResourceTableToolbar({
                 onClick={() => onQuickFilterToggle(q.value)}
                 clickable
                 disabled={disabled}
+                sx={selected ? activeChipSx("primary") : undefined}
               />
             );
           })}
