@@ -31,6 +31,12 @@ import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import ScopedCountChip from "../../shared/ScopedCountChip";
 import StatusChip from "../../shared/StatusChip";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
+import DeploymentDrawer from "../deployments/DeploymentDrawer";
+import StatefulSetDrawer from "../statefulsets/StatefulSetDrawer";
+import ReplicaSetDrawer from "../replicasets/ReplicaSetDrawer";
+import DaemonSetDrawer from "../daemonsets/DaemonSetDrawer";
+import JobDrawer from "../jobs/JobDrawer";
+import CronJobDrawer from "../cronjobs/CronJobDrawer";
 import AttentionSummary, {
 } from "../../shared/AttentionSummary";
 import GaugeBar, { type GaugeTone } from "../../shared/GaugeBar";
@@ -102,10 +108,46 @@ type HPACondition = {
   lastTransitionTime?: number;
 };
 
-function targetRefText(ref?: { kind?: string; name?: string; apiVersion?: string }) {
+type LinkableTargetKind =
+  | "Deployment"
+  | "StatefulSet"
+  | "ReplicaSet"
+  | "DaemonSet"
+  | "Job"
+  | "CronJob";
+
+type LinkedTarget = {
+  kind: LinkableTargetKind;
+  name: string;
+  namespace: string;
+};
+
+function normalizeLinkableTargetKind(kind?: string): LinkableTargetKind | null {
+  const normalized = String(kind || "").trim().toLowerCase();
+  if (normalized === "deployment" || normalized === "deployments") return "Deployment";
+  if (normalized === "statefulset" || normalized === "statefulsets") return "StatefulSet";
+  if (normalized === "replicaset" || normalized === "replicasets") return "ReplicaSet";
+  if (normalized === "daemonset" || normalized === "daemonsets") return "DaemonSet";
+  if (normalized === "job" || normalized === "jobs") return "Job";
+  if (normalized === "cronjob" || normalized === "cronjobs") return "CronJob";
+  return null;
+}
+
+function formatTargetRefLabel(ref?: { kind?: string; name?: string }) {
   if (!ref?.kind && !ref?.name) return "-";
-  const base = [ref.kind, ref.name].filter(Boolean).join("/");
-  return ref.apiVersion ? `${base} (${ref.apiVersion})` : base;
+  return [ref.kind, ref.name].filter(Boolean).join("/");
+}
+
+function parseObjectMetricTarget(name?: string): { kind: string; targetName: string; metricName?: string } | null {
+  const raw = String(name || "").trim();
+  if (!raw) return null;
+  const [refPart, metricName] = raw.split(":", 2);
+  const slashIdx = refPart.indexOf("/");
+  if (slashIdx <= 0 || slashIdx >= refPart.length - 1) return null;
+  const kind = refPart.slice(0, slashIdx).trim();
+  const targetName = refPart.slice(slashIdx + 1).trim();
+  if (!kind || !targetName) return null;
+  return { kind, targetName, metricName: metricName?.trim() || undefined };
 }
 
 
@@ -124,6 +166,7 @@ export default function HorizontalPodAutoscalerDrawer(props: {
   const [denied, setDenied] = useState(false);
   const [tab, setTab] = useState(0);
   const [drawerNamespace, setDrawerNamespace] = useState<string | null>(null);
+  const [linkedTarget, setLinkedTarget] = useState<LinkedTarget | null>(null);
 
   const ns = props.namespace;
   const name = props.hpaName;
@@ -145,6 +188,7 @@ export default function HorizontalPodAutoscalerDrawer(props: {
     setDenied(false);
     setTab(0);
     setDrawerNamespace(null);
+    setLinkedTarget(null);
     setDetails(null);
     setEvents([]);
 
@@ -168,6 +212,43 @@ export default function HorizontalPodAutoscalerDrawer(props: {
       .finally(() => setLoading(false));
   }, [props.open, name, ns, props.token, retryNonce]);
 
+  function openLinkedTarget(kind?: string, targetName?: string) {
+    const normalizedKind = normalizeLinkableTargetKind(kind);
+    const cleanName = String(targetName || "").trim();
+    if (!normalizedKind || !cleanName) return;
+    setLinkedTarget({ kind: normalizedKind, name: cleanName, namespace: ns });
+  }
+
+  function renderTargetRefValue(ref?: { kind?: string; name?: string; apiVersion?: string }) {
+    const label = formatTargetRefLabel(ref);
+    const canOpen = !!normalizeLinkableTargetKind(ref?.kind) && !!String(ref?.name || "").trim();
+    return (
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+        {canOpen ? (
+          <ResourceLinkChip label={label} onClick={() => openLinkedTarget(ref?.kind, ref?.name)} />
+        ) : (
+          <Typography variant="body2" component="span">{label}</Typography>
+        )}
+        {ref?.apiVersion ? (
+          <Typography variant="caption" color="text.secondary" component="span">
+            ({ref.apiVersion})
+          </Typography>
+        ) : null}
+      </Box>
+    );
+  }
+
+  const objectMetricTargets = (details?.metrics || []).flatMap((metric) => {
+    if (String(metric.type || "").toLowerCase() !== "object") return [];
+    const parsed = parseObjectMetricTarget(metric.name);
+    if (!parsed) return [];
+    return [{
+      kind: parsed.kind,
+      targetName: parsed.targetName,
+      metricName: parsed.metricName,
+    }];
+  });
+
   return (
     <>
       <RightDrawer open={props.open} onClose={props.onClose}>
@@ -183,7 +264,7 @@ export default function HorizontalPodAutoscalerDrawer(props: {
         {loading ? (
           <Box sx={loadingCenterSx}><CircularProgress size={24} /></Box>
         ) : denied ? (
-          <AccessDeniedState title="Access denied" message="You do not have permission to read this HorizontalPodAutoscaler." />
+          <AccessDeniedState message="You do not have permission to read this HorizontalPodAutoscaler." />
         ) : err ? (
           <ErrorState message={err} />
         ) : !details ? (
@@ -300,8 +381,18 @@ export default function HorizontalPodAutoscalerDrawer(props: {
                       <KeyValueTable
                         rows={[
                           { label: "Name", value: details.summary.name, monospace: true },
-                          { label: "Namespace", value: details.summary.namespace, monospace: true },
-                          { label: "Target", value: targetRefText(details.summary.scaleTargetRef) },
+                          {
+                            label: "Namespace",
+                            value: details.summary.namespace ? (
+                              <ResourceLinkChip
+                                label={details.summary.namespace}
+                                onClick={() => setDrawerNamespace(details.summary.namespace)}
+                              />
+                            ) : (
+                              "-"
+                            ),
+                          },
+                          { label: "Target", value: renderTargetRefValue(details.summary.scaleTargetRef) },
                           { label: "Replicas", value: `${details.summary.currentReplicas}/${details.summary.desiredReplicas}` },
                           { label: "Min / Max", value: `${details.summary.minReplicas} / ${details.summary.maxReplicas}` },
                           { label: "Last Scale", value: details.summary.lastScaleTime ? fmtTs(details.summary.lastScaleTime) : "-" },
@@ -316,10 +407,35 @@ export default function HorizontalPodAutoscalerDrawer(props: {
                     <Box sx={panelBoxSx}>
                       <KeyValueTable
                         rows={[
-                          { label: "Scale Target", value: targetRefText(details.spec.scaleTargetRef) },
+                          { label: "Scale Target", value: renderTargetRefValue(details.spec.scaleTargetRef) },
                           { label: "Min Replicas", value: details.spec.minReplicas },
                           { label: "Max Replicas", value: details.spec.maxReplicas },
                           { label: "Behavior", value: valueOrDash(details.spec.behavior) },
+                          {
+                            label: "Targets",
+                            value: objectMetricTargets.length ? (
+                              <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
+                                {objectMetricTargets.map((target, idx) => {
+                                  const chipLabel = `${target.kind}/${target.targetName}`;
+                                  const normalizedKind = normalizeLinkableTargetKind(target.kind);
+                                  return (
+                                    <ResourceLinkChip
+                                      key={`${chipLabel}-${target.metricName || idx}`}
+                                      label={chipLabel}
+                                      count={target.metricName || "metric"}
+                                      onClick={
+                                        normalizedKind
+                                          ? () => openLinkedTarget(target.kind, target.targetName)
+                                          : undefined
+                                      }
+                                    />
+                                  );
+                                })}
+                              </Box>
+                            ) : (
+                              "-"
+                            ),
+                          },
                         ]}
                         columns={2}
                       />
@@ -358,6 +474,48 @@ export default function HorizontalPodAutoscalerDrawer(props: {
         onClose={() => setDrawerNamespace(null)}
         token={props.token}
         namespaceName={drawerNamespace}
+      />
+      <DeploymentDrawer
+        open={linkedTarget?.kind === "Deployment"}
+        onClose={() => setLinkedTarget(null)}
+        token={props.token}
+        namespace={linkedTarget?.namespace || ns}
+        deploymentName={linkedTarget?.kind === "Deployment" ? linkedTarget.name : null}
+      />
+      <StatefulSetDrawer
+        open={linkedTarget?.kind === "StatefulSet"}
+        onClose={() => setLinkedTarget(null)}
+        token={props.token}
+        namespace={linkedTarget?.namespace || ns}
+        statefulSetName={linkedTarget?.kind === "StatefulSet" ? linkedTarget.name : null}
+      />
+      <ReplicaSetDrawer
+        open={linkedTarget?.kind === "ReplicaSet"}
+        onClose={() => setLinkedTarget(null)}
+        token={props.token}
+        namespace={linkedTarget?.namespace || ns}
+        replicaSetName={linkedTarget?.kind === "ReplicaSet" ? linkedTarget.name : null}
+      />
+      <DaemonSetDrawer
+        open={linkedTarget?.kind === "DaemonSet"}
+        onClose={() => setLinkedTarget(null)}
+        token={props.token}
+        namespace={linkedTarget?.namespace || ns}
+        daemonSetName={linkedTarget?.kind === "DaemonSet" ? linkedTarget.name : null}
+      />
+      <JobDrawer
+        open={linkedTarget?.kind === "Job"}
+        onClose={() => setLinkedTarget(null)}
+        token={props.token}
+        namespace={linkedTarget?.namespace || ns}
+        jobName={linkedTarget?.kind === "Job" ? linkedTarget.name : null}
+      />
+      <CronJobDrawer
+        open={linkedTarget?.kind === "CronJob"}
+        onClose={() => setLinkedTarget(null)}
+        token={props.token}
+        namespace={linkedTarget?.namespace || ns}
+        cronJobName={linkedTarget?.kind === "CronJob" ? linkedTarget.name : null}
       />
     </>
   );
