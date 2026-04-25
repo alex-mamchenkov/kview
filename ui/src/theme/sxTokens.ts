@@ -67,9 +67,9 @@ export const monospaceSx: SxProps<Theme> = {
 /** Height in px for gauge and stacked bar components. */
 export const GAUGE_HEIGHT = 20;
 /** Border-radius for gauge and bar components (slightly rounded, squared look). */
-export const GAUGE_BORDER_RADIUS = 2;
+export const GAUGE_BORDER_RADIUS = "4px";
 /** Background color for empty gauge track. */
-export const GAUGE_TRACK_BG = "rgba(0,0,0,0.05)";
+export const GAUGE_TRACK_BG = "var(--gauge-track-bg)";
 /** Min-width for MetricCard components in a flex row. */
 export const METRIC_CARD_MIN_WIDTH = 160;
 /** Label column width in two-column stat tables (e.g. DashboardView StatCell). */
@@ -77,15 +77,15 @@ export const STAT_CELL_LABEL_WIDTH = 240;
 
 // ---- Gauge / health segment colors ----
 /** Healthy, running, cache hit, nominal state. */
-export const GAUGE_COLOR_HEALTHY = "#2e7d32";
+export const GAUGE_COLOR_HEALTHY = "var(--gauge-success-fill)";
 /** Progressing, pending, cache miss, degraded-but-not-failed. */
-export const GAUGE_COLOR_WARNING = "#ed6c02";
+export const GAUGE_COLOR_WARNING = "var(--gauge-warning-fill)";
 /** Failed, degraded, error. */
-export const GAUGE_COLOR_ERROR = "#d32f2f";
+export const GAUGE_COLOR_ERROR = "var(--gauge-error-fill)";
 /** Completed / succeeded (terminal-ok) state. */
-export const GAUGE_COLOR_NEUTRAL = "#607d8b";
+export const GAUGE_COLOR_NEUTRAL = "var(--gauge-neutral-fill)";
 /** Unknown state. */
-export const GAUGE_COLOR_UNKNOWN = "#8e24aa";
+export const GAUGE_COLOR_UNKNOWN = "var(--gauge-unknown-fill)";
 
 // ---- Toolbar / action row ----
 /** Horizontal action row: flex, wrap, gap 1. */

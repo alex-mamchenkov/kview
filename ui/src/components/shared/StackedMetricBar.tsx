@@ -16,7 +16,7 @@ export default function StackedMetricBar({ segments }: { segments: BarSegment[] 
         sx={{
           height: GAUGE_HEIGHT,
           borderRadius: GAUGE_BORDER_RADIUS,
-          border: "1px solid var(--panel-border)",
+          border: "1px solid var(--gauge-track-border)",
           backgroundColor: GAUGE_TRACK_BG,
         }}
       />
@@ -30,7 +30,7 @@ export default function StackedMetricBar({ segments }: { segments: BarSegment[] 
         height: GAUGE_HEIGHT,
         overflow: "hidden",
         borderRadius: GAUGE_BORDER_RADIUS,
-        border: "1px solid var(--panel-border)",
+        border: "1px solid var(--gauge-track-border)",
         backgroundColor: GAUGE_TRACK_BG,
       }}
     >

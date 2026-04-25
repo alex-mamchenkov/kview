@@ -1,26 +1,28 @@
 import React from "react";
 import { Box, LinearProgress, Typography } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
-import type { Theme } from "@mui/material/styles";
 import { GAUGE_BORDER_RADIUS, GAUGE_HEIGHT, GAUGE_TRACK_BG } from "../../theme/sxTokens";
 
 export type GaugeTone = "success" | "warning" | "error" | "info" | "primary" | "default";
 
-function gaugeColor(theme: Theme, tone: GaugeTone): string {
+function gaugeColor(tone: GaugeTone): string {
   switch (tone) {
     case "success":
-      return theme.palette.success.main;
+      return "var(--gauge-success-fill)";
     case "warning":
-      return theme.palette.warning.main;
+      return "var(--gauge-warning-fill)";
     case "error":
-      return theme.palette.error.main;
+      return "var(--gauge-error-fill)";
     case "info":
-      return theme.palette.info.main;
+      return "var(--gauge-info-fill)";
     case "primary":
-      return theme.palette.primary.main;
+      return "var(--gauge-primary-fill)";
     default:
-      return theme.palette.text.secondary;
+      return "var(--gauge-default-fill)";
   }
+}
+
+function labelColorOnFill(tone: GaugeTone): string {
+  return tone === "warning" ? "var(--gauge-warning-label-on-fill)" : "var(--gauge-label-on-fill)";
 }
 
 export default function GaugeBar({
@@ -34,9 +36,8 @@ export default function GaugeBar({
   label?: React.ReactNode;
   height?: number;
 }) {
-  const theme = useTheme();
   const clamped = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
-  const color = gaugeColor(theme, tone);
+  const color = gaugeColor(tone);
 
   return (
     <Box sx={{ position: "relative", display: "flex", alignItems: "center" }}>
@@ -47,7 +48,7 @@ export default function GaugeBar({
           width: "100%",
           height,
           borderRadius: GAUGE_BORDER_RADIUS,
-          border: "1px solid var(--panel-border)",
+          border: "1px solid var(--gauge-track-border)",
           backgroundColor: GAUGE_TRACK_BG,
           "& .MuiLinearProgress-bar": {
             backgroundColor: color,
@@ -64,7 +65,7 @@ export default function GaugeBar({
             textAlign: "center",
             fontSize: 12,
             fontWeight: 600,
-            color: clamped >= 50 ? theme.palette.getContrastText(color) : "text.primary",
+            color: clamped >= 50 ? labelColorOnFill(tone) : "text.primary",
             lineHeight: `${height}px`,
           }}
         >
