@@ -559,6 +559,20 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
           }
           label="Check for kview updates"
         />
+        <FormControlLabel
+          control={
+            <Switch
+              checked={settings.appearance.yamlSmartCollapse}
+              onChange={(e) =>
+                setSettings((prev) =>
+                  updateAppearance(prev, { yamlSmartCollapse: e.target.checked }),
+                )
+              }
+            />
+          }
+          label="Smart YAML collapse"
+          title="Auto-collapses noisy sections (e.g. managedFields) in resource YAML panels and enables per-block fold toggles"
+        />
         <TextField
           select
           size="small"

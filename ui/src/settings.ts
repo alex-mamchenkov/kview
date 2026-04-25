@@ -37,6 +37,7 @@ export type KviewUserSettingsV1 = {
     activityPanelInitiallyOpen: boolean;
     releaseChecksEnabled: boolean;
     resourceDrawerWidthPx: number;
+    yamlSmartCollapse: boolean;
   };
   smartFilters: {
     minCount: number;
@@ -233,6 +234,7 @@ export function defaultUserSettings(): KviewUserSettingsV1 {
       activityPanelInitiallyOpen: true,
       releaseChecksEnabled: false,
       resourceDrawerWidthPx: 820,
+      yamlSmartCollapse: true,
     },
     smartFilters: {
       minCount: 3,
@@ -1010,6 +1012,10 @@ export function validateUserSettings(input: unknown): KviewUserSettingsV1 | null
         1400,
         defaults.appearance.resourceDrawerWidthPx,
       ),
+      yamlSmartCollapse:
+        typeof rawAppearance.yamlSmartCollapse === "boolean"
+          ? rawAppearance.yamlSmartCollapse
+          : defaults.appearance.yamlSmartCollapse,
     },
     smartFilters: {
       minCount: validMinCount(rawSmartFilters.minCount, defaults.smartFilters.minCount),

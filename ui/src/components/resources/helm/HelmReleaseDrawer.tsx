@@ -25,6 +25,7 @@ import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import CodeBlock from "../../shared/CodeBlock";
+import { useUserSettings } from "../../../settingsContext";
 import AutolinkText from "../../shared/AutolinkText";
 import StatusChip from "../../shared/StatusChip";
 import { HelmReleaseActions, HelmRollbackActionButton } from "./HelmActions";
@@ -113,6 +114,8 @@ export default function HelmReleaseDrawer(props: {
   onRefresh?: () => void;
 }) {
   const { retryNonce } = useConnectionState();
+  const { settings } = useUserSettings();
+  const smartCollapse = settings.appearance.yamlSmartCollapse;
   const [tab, setTab] = useState(0);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -337,12 +340,12 @@ export default function HelmReleaseDrawer(props: {
 
               {/* VALUES */}
               {activeTabId === "values" && (
-                <CodeBlock code={values} language="yaml" />
+                <CodeBlock code={values} language="yaml" smartCollapse={smartCollapse} />
               )}
 
               {/* MANIFEST */}
               {activeTabId === "manifest" && (
-                <CodeBlock code={manifest} language="yaml" />
+                <CodeBlock code={manifest} language="yaml" smartCollapse={smartCollapse} />
               )}
 
               {/* HOOKS */}
@@ -491,7 +494,7 @@ export default function HelmReleaseDrawer(props: {
 
               {/* YAML */}
               {activeTabId === "yaml" && (
-                <CodeBlock code={yaml} language="yaml" />
+                <CodeBlock code={yaml} language="yaml" smartCollapse={smartCollapse} />
               )}
             </Box>
 

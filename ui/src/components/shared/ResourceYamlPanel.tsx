@@ -5,6 +5,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import CodeBlock from "./CodeBlock";
 import YamlEditDialog from "./YamlEditDialog";
 import { canPatchOrUpdate, RBAC_DISABLED_REASON, useResourceCapabilities } from "../mutations/useResourceCapabilities";
+import { useUserSettings } from "../../settingsContext";
 
 type EditTarget = {
   kind: string;
@@ -23,6 +24,7 @@ type Props = {
 };
 
 export default function ResourceYamlPanel({ code, token, target, onApplied }: Props) {
+  const { settings } = useUserSettings();
   const [copied, setCopied] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const caps = useResourceCapabilities({
@@ -60,7 +62,7 @@ export default function ResourceYamlPanel({ code, token, target, onApplied }: Pr
         )}
       </Stack>
       <Box sx={{ minHeight: 0, flex: 1 }}>
-        <CodeBlock code={code} language="yaml" showCopy={false} />
+        <CodeBlock code={code} language="yaml" showCopy={false} smartCollapse={settings.appearance.yamlSmartCollapse} />
       </Box>
       {target && (
         <YamlEditDialog
