@@ -60,6 +60,7 @@ import StatusChip from "../../shared/StatusChip";
 import RightDrawer from "../../layout/RightDrawer";
 import Section from "../../shared/Section";
 import EventsList from "../../shared/EventsList";
+import ResourceYamlPanel from "../../shared/ResourceYamlPanel";
 import NamespaceSignalsTab from "./NamespaceSignalsTab";
 import PodDrawer from "../pods/PodDrawer";
 import DeploymentDrawer from "../deployments/DeploymentDrawer";

@@ -52,6 +52,7 @@ import SecretDrawer from "../secrets/SecretDrawer";
 import PodActions from "./PodActions";
 import RightDrawer from "../../layout/RightDrawer";
 import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
+import ResourceYamlPanel from "../../shared/ResourceYamlPanel";
 import type {
   ApiItemResponse,
   ApiListResponse,
