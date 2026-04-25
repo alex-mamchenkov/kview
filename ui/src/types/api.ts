@@ -185,6 +185,8 @@ export type DashboardSignalItem = {
   scopeLocation?: string;
   actualData?: string;
   calculatedData?: string;
+  firstSeenAt?: number;
+  lastSeenAt?: number;
 };
 
 export type SignalOverride = {
@@ -255,6 +257,7 @@ export type DashboardSignalsPanel = {
   itemsLimit: number;
   itemsFilter?: string;
   itemsQuery?: string;
+  itemsSort?: string;
   itemsHasMore?: boolean;
   note?: string;
   aggregateFreshness?: string;

@@ -155,6 +155,55 @@ func TestBoltSnapshotPersistencePrunesOlderSnapshotsAndSearchIndex(t *testing.T)
 	}
 }
 
+func TestBoltSnapshotPersistenceSignalHistoryRoundTripAndPrune(t *testing.T) {
+	store, err := openBoltSnapshotPersistence(t.TempDir() + "/cache.bbolt")
+	if err != nil {
+		t.Fatalf("open persistence: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Now().UTC().Unix()
+	if err := store.UpsertSignalHistory("ctx", map[string]signalHistoryRecord{
+		"pod_restarts|namespace|team-a|Pod|api-0": {
+			FirstSeenAt: now - 7200,
+			LastSeenAt:  now - 60,
+			SeenCount:   3,
+		},
+		"empty_secret|namespace|team-a|Secret|token": {
+			FirstSeenAt: now - int64((48 * time.Hour).Seconds()),
+			LastSeenAt:  now - int64((48 * time.Hour).Seconds()),
+			SeenCount:   1,
+		},
+	}); err != nil {
+		t.Fatalf("upsert signal history: %v", err)
+	}
+
+	history, err := store.LoadSignalHistory("ctx")
+	if err != nil {
+		t.Fatalf("load signal history: %v", err)
+	}
+	if len(history) != 2 {
+		t.Fatalf("history len = %d, want 2", len(history))
+	}
+	if got := history["pod_restarts|namespace|team-a|Pod|api-0"]; got.FirstSeenAt != now-7200 || got.LastSeenAt != now-60 || got.SeenCount != 3 {
+		t.Fatalf("pod signal history = %+v", got)
+	}
+
+	if err := store.PruneSignalHistoryOlderThan("ctx", 24*time.Hour); err != nil {
+		t.Fatalf("prune signal history: %v", err)
+	}
+	history, err = store.LoadSignalHistory("ctx")
+	if err != nil {
+		t.Fatalf("reload signal history: %v", err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("history len after prune = %d, want 1", len(history))
+	}
+	if _, ok := history["empty_secret|namespace|team-a|Secret|token"]; ok {
+		t.Fatalf("stale signal history was not pruned: %+v", history)
+	}
+}
+
 func TestExecuteNamespacedSnapshotUsesPersistedFallbackOnLiveFailure(t *testing.T) {
 	store, err := openBoltSnapshotPersistence(t.TempDir() + "/cache.bbolt")
 	if err != nil {

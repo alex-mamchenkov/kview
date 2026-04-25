@@ -222,6 +222,7 @@ export default function DashboardView(props: Props) {
   const [data, setData] = useState<ApiDashboardClusterResponse | null>(null);
   const [signalFilter, setSignalFilter] = useState("top");
   const [signalsQuery, setSignalsQuery] = useState("");
+  const [signalsSort, setSignalsSort] = useState("priority");
   const [signalsPage, setSignalsPage] = useState(0);
   const [signalsRowsPerPage, setSignalsRowsPerPage] = useState(10);
   const [inspectTarget, setInspectTarget] = useState<InspectTarget | null>(null);
@@ -248,6 +249,7 @@ export default function DashboardView(props: Props) {
         const params = new URLSearchParams({
           signalsFilter: signalFilter,
           signalsQ: deferredSignalsQuery,
+          signalsSort,
           signalsOffset: String(signalsPage * signalsRowsPerPage),
           signalsLimit: String(signalsRowsPerPage),
         });
@@ -282,6 +284,7 @@ export default function DashboardView(props: Props) {
     deferredSignalsQuery,
     health,
     signalFilter,
+    signalsSort,
     signalsPage,
     signalsRowsPerPage,
     props.token,
@@ -405,6 +408,8 @@ export default function DashboardView(props: Props) {
                     onSignalFilterChange={selectSignalFilter}
                     signalsQuery={signalsQuery}
                     onSignalsQueryChange={setSignalsQuery}
+                    signalsSort={signalsSort}
+                    onSignalsSortChange={setSignalsSort}
                     signalsPage={signalsPage}
                     onSignalsPageChange={setSignalsPage}
                     signalsRowsPerPage={signalsRowsPerPage}

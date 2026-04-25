@@ -1,7 +1,10 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import {
   Box,
   Chip,
+  IconButton,
+  Menu,
+  MenuItem,
   Table,
   TableBody,
   TableCell,
@@ -9,6 +12,7 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import type {
   DashboardSignalItem,
   NamespacePodHealth,
@@ -32,6 +36,7 @@ import {
 } from "../../../theme/sxTokens";
 import NamespaceActions from "./NamespaceActions";
 import { dataplaneCoarseStateChipColor } from "../../../utils/k8sUi";
+import { fmtTimeAgo } from "../../../utils/format";
 
 function signalSeverityColor(severity?: string): "error" | "warning" | "info" | "default" {
   if (severity === "high") return "error";
@@ -51,6 +56,8 @@ function signalNote(signal: DashboardSignalItem): string {
   if (signal.calculatedData && signal.calculatedData !== actual) parts.push(`Calculated: ${signal.calculatedData}`);
   if (signal.likelyCause) parts.push(`Likely cause: ${signal.likelyCause}`);
   if (signal.suggestedAction) parts.push(`Next step: ${signal.suggestedAction}`);
+  if (signal.firstSeenAt) parts.push(`First seen: ${fmtTimeAgo(signal.firstSeenAt)}`);
+  if (signal.lastSeenAt) parts.push(`Last verified: ${fmtTimeAgo(signal.lastSeenAt)}`);
   return parts.join(" ");
 }
 
@@ -93,6 +100,13 @@ type Props = {
   onJumpToConditions?: () => void;
 };
 
+type SeenSortMode =
+  | "priority"
+  | "first_seen_desc"
+  | "first_seen_asc"
+  | "last_seen_desc"
+  | "last_seen_asc";
+
 /**
  * Namespace signals tab renders only backend-provided per-resource signals in
  * the shared AttentionSummary.
@@ -116,6 +130,9 @@ export default function NamespaceSignalsTab({
   onJumpToEvents,
   onJumpToConditions,
 }: Props) {
+  const [seenSortMode, setSeenSortMode] = useState<SeenSortMode>("priority");
+  const [seenSortAnchor, setSeenSortAnchor] = useState<null | HTMLElement>(null);
+
   function handleProblematic(resource: NamespaceProblematicResource) {
     switch (resource.kind) {
       case "Pod": onOpenPod(resource.name); return;
@@ -144,6 +161,46 @@ export default function NamespaceSignalsTab({
       case "ServiceAccount": onNavigate("serviceAccounts"); return;
       case "CronJob": onNavigate("cronJobs"); return;
       case "HorizontalPodAutoscaler": onNavigate("horizontalPodAutoscalers"); return;
+    }
+  }
+
+  const sortedSignals = useMemo(() => {
+    const items = [...signals];
+    switch (seenSortMode) {
+      case "first_seen_desc":
+        items.sort((a, b) => (b.firstSeenAt || 0) - (a.firstSeenAt || 0));
+        break;
+      case "first_seen_asc":
+        items.sort((a, b) => {
+          const av = a.firstSeenAt || Number.MAX_SAFE_INTEGER;
+          const bv = b.firstSeenAt || Number.MAX_SAFE_INTEGER;
+          return av - bv;
+        });
+        break;
+      case "last_seen_desc":
+        items.sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0));
+        break;
+      case "last_seen_asc":
+        items.sort((a, b) => {
+          const av = a.lastSeenAt || Number.MAX_SAFE_INTEGER;
+          const bv = b.lastSeenAt || Number.MAX_SAFE_INTEGER;
+          return av - bv;
+        });
+        break;
+      case "priority":
+      default:
+        break;
+    }
+    return items;
+  }, [seenSortMode, signals]);
+
+  function seenSortLabel(mode: SeenSortMode): string {
+    switch (mode) {
+      case "first_seen_desc": return "First: newest";
+      case "first_seen_asc": return "First: oldest";
+      case "last_seen_desc": return "Last: newest";
+      case "last_seen_asc": return "Last: oldest";
+      default: return "Priority";
     }
   }
 
@@ -283,17 +340,30 @@ export default function NamespaceSignalsTab({
         {signals.length === 0 ? (
           <EmptyState message="No namespace signals from cached dataplane scope." />
         ) : (
-          <Table size="small" sx={{ mt: 1 }}>
+          <Table size="small" sx={{ mt: 1, width: "100%", tableLayout: "fixed" }}>
             <TableHead>
               <TableRow>
-                <TableCell>Kind</TableCell>
-                <TableCell>Target</TableCell>
-                <TableCell>Signal</TableCell>
-                <TableCell>Reason</TableCell>
+                <TableCell sx={{ width: 96 }}>Kind</TableCell>
+                <TableCell sx={{ width: 168 }}>Target</TableCell>
+                <TableCell sx={{ width: 96 }}>Signal</TableCell>
+                <TableCell sx={{ width: 84, whiteSpace: "nowrap" }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
+                    <span>Seen</span>
+                    <IconButton
+                      size="small"
+                      sx={{ p: 0.25 }}
+                      onClick={(e) => setSeenSortAnchor(e.currentTarget)}
+                      title={`Sort: ${seenSortLabel(seenSortMode)}`}
+                    >
+                      <ArrowDropDownIcon fontSize="inherit" />
+                    </IconButton>
+                  </Box>
+                </TableCell>
+                <TableCell sx={{ width: "auto" }}>Reason</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {signals.map((signal, index) => (
+              {sortedSignals.map((signal, index) => (
                 <TableRow
                   key={`${signal.kind}-${signal.name || signal.namespace || index}`}
                   hover
@@ -304,16 +374,60 @@ export default function NamespaceSignalsTab({
                   <TableCell>
                     <Chip size="small" label={signal.kind} />
                   </TableCell>
-                  <TableCell sx={{ fontFamily: "monospace", fontSize: 13 }}>{signalTarget(signal)}</TableCell>
+                  <TableCell sx={{ fontFamily: "monospace", fontSize: 13, overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {signalTarget(signal)}
+                  </TableCell>
                   <TableCell>
                     <StatusChip size="small" color={signalSeverityColor(signal.severity)} label={signal.severity} />
                   </TableCell>
-                  <TableCell>{signalNote(signal)}</TableCell>
+                  <TableCell sx={{ width: 84, whiteSpace: "nowrap" }}>
+                    {signal.firstSeenAt || signal.lastSeenAt ? (
+                      <Box sx={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          {signal.firstSeenAt ? `F ${fmtTimeAgo(signal.firstSeenAt)}` : "F -"}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {signal.lastSeenAt ? `L ${fmtTimeAgo(signal.lastSeenAt)}` : "L -"}
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Typography variant="caption" color="text.secondary">-</Typography>
+                    )}
+                  </TableCell>
+                  <TableCell sx={{ width: "auto" }}>
+                    <Typography variant="body2">{signal.actualData || signal.reason}</Typography>
+                    {signal.calculatedData && signal.calculatedData !== (signal.actualData || signal.reason) ? (
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        {signal.calculatedData}
+                      </Typography>
+                    ) : null}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
+        <Menu
+          anchorEl={seenSortAnchor}
+          open={!!seenSortAnchor}
+          onClose={() => setSeenSortAnchor(null)}
+        >
+          <MenuItem selected={seenSortMode === "priority"} onClick={() => { setSeenSortMode("priority"); setSeenSortAnchor(null); }}>
+            Priority
+          </MenuItem>
+          <MenuItem selected={seenSortMode === "first_seen_desc"} onClick={() => { setSeenSortMode("first_seen_desc"); setSeenSortAnchor(null); }}>
+            First seen: newest first
+          </MenuItem>
+          <MenuItem selected={seenSortMode === "first_seen_asc"} onClick={() => { setSeenSortMode("first_seen_asc"); setSeenSortAnchor(null); }}>
+            First seen: oldest first
+          </MenuItem>
+          <MenuItem selected={seenSortMode === "last_seen_desc"} onClick={() => { setSeenSortMode("last_seen_desc"); setSeenSortAnchor(null); }}>
+            Last verified: newest first
+          </MenuItem>
+          <MenuItem selected={seenSortMode === "last_seen_asc"} onClick={() => { setSeenSortMode("last_seen_asc"); setSeenSortAnchor(null); }}>
+            Last verified: oldest first
+          </MenuItem>
+        </Menu>
       </Section>
 
       {summaryMeta && (

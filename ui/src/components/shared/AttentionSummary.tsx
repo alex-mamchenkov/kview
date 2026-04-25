@@ -3,6 +3,7 @@ import { Box, Chip, Typography } from "@mui/material";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import type { DashboardSignalItem } from "../../types/api";
 import type { ChipColor } from "../../utils/k8sUi";
+import { fmtTimeAgo } from "../../utils/format";
 import Section from "./Section";
 import SignalHintIcons from "./SignalHintIcons";
 import StatusChip from "./StatusChip";
@@ -45,6 +46,8 @@ function signalText(signal: DashboardSignalItem): string {
   const actual = signal.actualData || signal.reason;
   const parts = [actual];
   if (signal.calculatedData && signal.calculatedData !== actual) parts.push(`Calculated: ${signal.calculatedData}`);
+  if (signal.firstSeenAt) parts.push(`First seen ${fmtTimeAgo(signal.firstSeenAt)}`);
+  if (signal.lastSeenAt) parts.push(`Last verified ${fmtTimeAgo(signal.lastSeenAt)}`);
   return parts.join(" · ");
 }
 

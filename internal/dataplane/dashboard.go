@@ -158,6 +158,7 @@ type ClusterDashboardSignalsPanel struct {
 	ItemsLimit            int                            `json:"itemsLimit"`
 	ItemsFilter           string                         `json:"itemsFilter,omitempty"`
 	ItemsQuery            string                         `json:"itemsQuery,omitempty"`
+	ItemsSort             string                         `json:"itemsSort,omitempty"`
 	ItemsHasMore          bool                           `json:"itemsHasMore,omitempty"`
 	Note                  string                         `json:"note,omitempty"`
 	AggregateFreshness    string                         `json:"aggregateFreshness,omitempty"`
@@ -191,11 +192,15 @@ type ClusterDashboardSignal struct {
 	ScopeLocation   string `json:"scopeLocation,omitempty"` // namespace, node, or another scope-specific location
 	ActualData      string `json:"actualData,omitempty"`
 	CalculatedData  string `json:"calculatedData,omitempty"`
+	FirstSeenAt     int64  `json:"firstSeenAt,omitempty"`
+	LastSeenAt      int64  `json:"lastSeenAt,omitempty"`
+	HistoryKey      string `json:"-"`
 }
 
 type ClusterDashboardListOptions struct {
 	SignalsFilter string
 	SignalsQuery  string
+	SignalsSort   string
 	SignalsOffset int
 	SignalsLimit  int
 }

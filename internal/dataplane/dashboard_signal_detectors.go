@@ -293,6 +293,7 @@ func detectResourceQuotaPressureSignals(_ time.Time, ns string, s dashboardSnaps
 				score = 92
 			}
 			f := dashboardSignalItem("resource_quota_pressure", "ResourceQuota", ns, quota.Name, severity, score, "Resource quota "+entry.Key+" is nearing its hard limit.", "high", "namespaces")
+			f.HistoryKey = "resource_quota_pressure|" + ns + "|" + quota.Name + "|" + entry.Key
 			f.ActualData = fmt.Sprintf("%s: %s / %s", entry.Key, entry.Used, entry.Hard)
 			f.CalculatedData = fmt.Sprintf("%.0f%% of hard limit", ratio*100)
 			out = append(out, f)

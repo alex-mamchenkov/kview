@@ -295,6 +295,57 @@ func TestSummarizeDashboardSignalsFiltersAndPaginatesItems(t *testing.T) {
 	}
 }
 
+func TestSummarizeDashboardSignalsSortsItemsByDiscoveryAndFreshness(t *testing.T) {
+	signals := []ClusterDashboardSignal{
+		{
+			Kind:        "Job",
+			Severity:    "high",
+			Score:       95,
+			Namespace:   "team-a",
+			Name:        "older-job",
+			FirstSeenAt: 100,
+			LastSeenAt:  300,
+		},
+		{
+			Kind:        "Job",
+			Severity:    "high",
+			Score:       90,
+			Namespace:   "team-a",
+			Name:        "newer-job",
+			FirstSeenAt: 200,
+			LastSeenAt:  200,
+		},
+		{
+			Kind:        "Service",
+			Severity:    "medium",
+			Score:       70,
+			Namespace:   "team-a",
+			Name:        "fresh-service",
+			FirstSeenAt: 150,
+			LastSeenAt:  400,
+		},
+	}
+
+	discovered := summarizeDashboardSignals(signals, 10, ClusterDashboardListOptions{
+		SignalsSort:  "discovered_desc",
+		SignalsLimit: 10,
+	})
+	if len(discovered.Items) != 3 || discovered.Items[0].Name != "newer-job" || discovered.Items[1].Name != "fresh-service" || discovered.Items[2].Name != "older-job" {
+		t.Fatalf("unexpected discovered sort: %+v", discovered.Items)
+	}
+
+	freshness := summarizeDashboardSignals(signals, 10, ClusterDashboardListOptions{
+		SignalsSort:  "last_seen_desc",
+		SignalsLimit: 10,
+	})
+	if len(freshness.Items) != 3 || freshness.Items[0].Name != "fresh-service" || freshness.Items[1].Name != "older-job" || freshness.Items[2].Name != "newer-job" {
+		t.Fatalf("unexpected freshness sort: %+v", freshness.Items)
+	}
+	if freshness.Top[0].Kind != "Job" {
+		t.Fatalf("top priority ordering should stay severity/priority based, got %+v", freshness.Top)
+	}
+}
+
 func TestSummarizeDashboardSignalsFiltersBySignalType(t *testing.T) {
 	summary := summarizeDashboardSignals([]ClusterDashboardSignal{
 		dashboardSignalItem("empty_configmap", "ConfigMap", "team-a", "empty-cm", "low", 35, "ConfigMap has no data keys.", "high", "configmaps"),

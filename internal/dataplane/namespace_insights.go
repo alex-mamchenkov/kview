@@ -81,7 +81,8 @@ func (m *manager) NamespaceInsightsProjection(ctx context.Context, clusterName, 
 	}
 
 	signals := newDashboardSignalStore()
-	signals.Add(applySignalPolicy(detectDashboardSignals(time.Now(), namespace, dashboardSnapshotSet{
+	now := time.Now()
+	signals.Add(m.attachSignalHistory(clusterName, now, applySignalPolicy(detectDashboardSignals(now, namespace, dashboardSnapshotSet{
 		restartThreshold:       int32(policy.Dashboard.RestartElevatedThreshold),
 		pods:                   podsSnap,
 		podsOK:                 podsErr == nil,
@@ -127,7 +128,7 @@ func (m *manager) NamespaceInsightsProjection(ctx context.Context, clusterName, 
 		unusedResourceAge:      thresholds.UnusedResourceAge,
 		quotaWarnRatio:         thresholds.QuotaWarnRatio,
 		quotaCritRatio:         thresholds.QuotaCritRatio,
-	}), policy, clusterName)...)
+	}), policy, clusterName)...)...)
 	sorted := signals.Summary(signals.Len(), ClusterDashboardListOptions{SignalsLimit: signals.Len()})
 	out.Insights.Signals = namespaceInsightSignalsFromDashboard(sorted.Items)
 	out.Insights.ResourceSignals = namespaceInsightResourceSignalsFromDashboard(signals.ResourceSignals())
@@ -164,6 +165,8 @@ func namespaceInsightSignalsFromDashboard(items []ClusterDashboardSignal) []dto.
 			ScopeLocation:   item.ScopeLocation,
 			ActualData:      item.ActualData,
 			CalculatedData:  item.CalculatedData,
+			FirstSeenAt:     item.FirstSeenAt,
+			LastSeenAt:      item.LastSeenAt,
 		})
 	}
 	return out

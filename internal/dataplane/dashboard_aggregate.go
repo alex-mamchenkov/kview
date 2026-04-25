@@ -154,9 +154,9 @@ func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted [
 			res.LimitRanges += len(s.limitRanges.Items)
 			aggregateMetas = append(aggregateMetas, s.limitRanges.Meta)
 		}
-		signals.Add(applySignalPolicy(detectDashboardSignals(now, ns, s), p, plane.name)...)
+		signals.Add(m.attachSignalHistory(plane.name, now, applySignalPolicy(detectDashboardSignals(now, ns, s), p, plane.name)...)...)
 	}
-	signals.Add(applySignalPolicy(detectNodeResourcePressureSignals(now, plane, nodesSnap, p.Metrics.NodePressurePct), p, plane.name)...)
+	signals.Add(m.attachSignalHistory(plane.name, now, applySignalPolicy(detectNodeResourcePressureSignals(now, plane, nodesSnap, p.Metrics.NodePressurePct), p, plane.name)...)...)
 
 	if len(aggregateMetas) > 0 {
 		wf := string(WorstFreshnessFromSnapshots(aggregateMetas...))
@@ -442,25 +442,7 @@ func summarizeDashboardSignals(signals []ClusterDashboardSignal, limit int, opts
 		limit = 10
 	}
 	sort.Slice(signals, func(i, j int) bool {
-		if si, sj := dashboardSignalSeverityPriority(signals[i].Severity), dashboardSignalSeverityPriority(signals[j].Severity); si != sj {
-			return si < sj
-		}
-		if pi, pj := dashboardSignalPriority(signals[i]), dashboardSignalPriority(signals[j]); pi != pj {
-			return pi < pj
-		}
-		if pi, pj := dashboardSignalKindPriority(signals[i].Kind), dashboardSignalKindPriority(signals[j].Kind); pi != pj {
-			return pi < pj
-		}
-		if signals[i].Score != signals[j].Score {
-			return signals[i].Score > signals[j].Score
-		}
-		if signals[i].Namespace != signals[j].Namespace {
-			return signals[i].Namespace < signals[j].Namespace
-		}
-		if signals[i].Kind != signals[j].Kind {
-			return signals[i].Kind < signals[j].Kind
-		}
-		return signals[i].Name < signals[j].Name
+		return dashboardSignalLess(signals[i], signals[j])
 	})
 	out := ClusterDashboardSignalsPanel{Total: len(signals)}
 	for _, f := range signals {
@@ -491,6 +473,8 @@ func summarizeDashboardSignals(signals []ClusterDashboardSignal, limit int, opts
 	out.ItemsLimit = opts.SignalsLimit
 	out.ItemsFilter = opts.SignalsFilter
 	out.ItemsQuery = opts.SignalsQuery
+	out.ItemsSort = opts.SignalsSort
+	sortDashboardSignalsForItems(pageSource, opts.SignalsSort)
 	out.Items = append(out.Items, paginateDashboardSignals(pageSource, opts.SignalsOffset, opts.SignalsLimit)...)
 	out.ItemsHasMore = out.ItemsOffset+len(out.Items) < out.ItemsTotal
 	return out
@@ -689,6 +673,7 @@ func dashboardSignalTypeLabel(signalType string) string {
 func normalizeClusterDashboardListOptions(opts ClusterDashboardListOptions) ClusterDashboardListOptions {
 	opts.SignalsFilter = strings.TrimSpace(opts.SignalsFilter)
 	opts.SignalsQuery = strings.TrimSpace(opts.SignalsQuery)
+	opts.SignalsSort = strings.TrimSpace(opts.SignalsSort)
 	opts.SignalsOffset = normalizeDashboardOffset(opts.SignalsOffset)
 	opts.SignalsLimit = normalizeDashboardLimit(opts.SignalsLimit)
 	return opts

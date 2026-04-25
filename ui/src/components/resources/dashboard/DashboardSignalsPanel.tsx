@@ -9,6 +9,7 @@ import {
   TableHead,
   TablePagination,
   TableRow,
+  TableSortLabel,
   TextField,
   Typography,
 } from "@mui/material";
@@ -23,6 +24,7 @@ import InfoHint from "../../shared/InfoHint";
 import ScopedCountChip from "../../shared/ScopedCountChip";
 import StatusChip from "../../shared/StatusChip";
 import type { InspectTarget } from "./dashboardTypes";
+import { fmtTimeAgo } from "../../../utils/format";
 
 type DerivedData = NonNullable<NonNullable<ApiDashboardClusterResponse["item"]>["derived"]>;
 
@@ -64,6 +66,17 @@ function signalCalculatedText(f: DashboardSignalItem): string {
 
 function signalActualText(f: DashboardSignalItem): string {
   return f.actualData || f.reason;
+}
+
+function signalSortDirection(sort: string, descValue: string, ascValue: string): "asc" | "desc" | undefined {
+  if (sort === descValue) return "desc";
+  if (sort === ascValue) return "asc";
+  return undefined;
+}
+
+function signalSortNext(sort: string, descValue: string, ascValue: string): string {
+  if (sort === descValue) return ascValue;
+  return descValue;
 }
 
 export function inspectTargetFromSignal(f: DashboardSignalItem): InspectTarget | null {
@@ -253,6 +266,8 @@ type Props = {
   onSignalFilterChange: (filter: string) => void;
   signalsQuery: string;
   onSignalsQueryChange: (q: string) => void;
+  signalsSort: string;
+  onSignalsSortChange: (sort: string) => void;
   signalsPage: number;
   onSignalsPageChange: (page: number) => void;
   signalsRowsPerPage: number;
@@ -268,6 +283,8 @@ export default function DashboardSignalsPanel({
   onSignalFilterChange,
   signalsQuery,
   onSignalsQueryChange,
+  signalsSort,
+  onSignalsSortChange,
   signalsPage,
   onSignalsPageChange,
   signalsRowsPerPage,
@@ -486,16 +503,43 @@ export default function DashboardSignalsPanel({
             No cached-scope signals for this filter.
           </Typography>
         ) : (
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ pl: 0 }}>Severity</TableCell>
-                <TableCell>Kind</TableCell>
-                <TableCell>Resource</TableCell>
-                <TableCell>Signal</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ pl: 0 }}>Severity</TableCell>
+                  <TableCell>Kind</TableCell>
+                  <TableCell>Resource</TableCell>
+                  <TableCell>Signal</TableCell>
+                  <TableCell sortDirection={signalSortDirection(signalsSort, "discovered_desc", "discovered_asc")}>
+                    <TableSortLabel
+                      active={signalsSort === "discovered_desc" || signalsSort === "discovered_asc"}
+                      direction={signalSortDirection(signalsSort, "discovered_desc", "discovered_asc") || "desc"}
+                      onClick={() => {
+                        onSignalsSortChange(signalSortNext(signalsSort, "discovered_desc", "discovered_asc"));
+                        onSignalsPageChange(0);
+                      }}
+                    >
+                      First seen
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell
+                    sx={{ pr: 0 }}
+                    sortDirection={signalSortDirection(signalsSort, "last_seen_desc", "last_seen_asc")}
+                  >
+                    <TableSortLabel
+                      active={signalsSort === "last_seen_desc" || signalsSort === "last_seen_asc"}
+                      direction={signalSortDirection(signalsSort, "last_seen_desc", "last_seen_asc") || "desc"}
+                      onClick={() => {
+                        onSignalsSortChange(signalSortNext(signalsSort, "last_seen_desc", "last_seen_asc"));
+                        onSignalsPageChange(0);
+                      }}
+                    >
+                      Last verified
+                    </TableSortLabel>
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
               {visibleSignals.map((f) => {
                 const target = inspectTargetFromSignal(f);
                 return (
@@ -528,6 +572,16 @@ export default function DashboardSignalsPanel({
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {signalActualText(f)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ py: 0.6, verticalAlign: "top", whiteSpace: "nowrap" }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {f.firstSeenAt ? fmtTimeAgo(f.firstSeenAt) : "-"}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ py: 0.6, pr: 0, verticalAlign: "top", whiteSpace: "nowrap" }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {f.lastSeenAt ? fmtTimeAgo(f.lastSeenAt) : "-"}
                       </Typography>
                     </TableCell>
                   </TableRow>

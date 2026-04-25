@@ -4017,6 +4017,7 @@ func parseClusterDashboardListOptions(r *http.Request) dataplane.ClusterDashboar
 	return dataplane.ClusterDashboardListOptions{
 		SignalsFilter: q.Get("signalsFilter"),
 		SignalsQuery:  q.Get("signalsQ"),
+		SignalsSort:   q.Get("signalsSort"),
 		SignalsOffset: parseNonNegativeQueryInt(q.Get("signalsOffset")),
 		SignalsLimit:  parseNonNegativeQueryInt(q.Get("signalsLimit")),
 	}

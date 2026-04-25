@@ -196,6 +196,8 @@ type NamespaceInsightSignalDTO struct {
 	ScopeLocation   string `json:"scopeLocation,omitempty"`
 	ActualData      string `json:"actualData,omitempty"`
 	CalculatedData  string `json:"calculatedData,omitempty"`
+	FirstSeenAt     int64  `json:"firstSeenAt,omitempty"`
+	LastSeenAt      int64  `json:"lastSeenAt,omitempty"`
 }
 
 type NamespaceResourceSignalsDTO struct {

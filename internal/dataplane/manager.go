@@ -274,6 +274,9 @@ type manager struct {
 	persistenceMu sync.RWMutex
 	persistence   snapshotPersistence
 
+	signalHistoryMu sync.RWMutex
+	signalHistory   map[string]map[string]signalHistoryRecord
+
 	nsEnrich *nsEnrichmentCoordinator
 
 	nsSweepMu        sync.Mutex
@@ -318,6 +321,7 @@ func NewManager(cfg ManagerConfig) DataPlaneManager {
 		clients:              cp,
 		stats:                newDataplaneSessionStats(time.Now().UTC()),
 		policy:               policy,
+		signalHistory:        map[string]map[string]signalHistoryRecord{},
 		nsEnrich:             newNsEnrichmentCoordinator(),
 		nsSweepLast:          map[string]map[string]time.Time{},
 		nsSweepHourStart:     map[string]time.Time{},
@@ -394,6 +398,7 @@ func (m *manager) hydratePersistedPlanes(policy DataplanePolicy) {
 	}
 	maxAge := policy.PersistenceMaxAge()
 	_ = sp.PruneOlderThan("", maxAge)
+	_ = sp.PruneSignalHistoryOlderThan("", maxAge)
 	m.mu.RLock()
 	planes := make([]*clusterPlane, 0, len(m.planes))
 	for _, plane := range m.planes {
@@ -402,6 +407,7 @@ func (m *manager) hydratePersistedPlanes(policy DataplanePolicy) {
 	m.mu.RUnlock()
 	for _, plane := range planes {
 		_ = plane.hydratePersistedSnapshots(maxAge)
+		m.ensureSignalHistory(plane.name)
 	}
 }
 
@@ -437,6 +443,7 @@ func (m *manager) PlaneForCluster(_ context.Context, clusterName string) (Cluste
 	policy := m.Policy()
 	if policy.Persistence.Enabled {
 		_ = p.hydratePersistedSnapshots(policy.PersistenceMaxAge())
+		m.ensureSignalHistory(clusterName)
 	}
 	return p, nil
 }
