@@ -123,19 +123,18 @@ Before finishing a change:
 
 # 10. Tests
 
-Run tests and checks through the pinned Docker toolchain, not the host Go/Node/npm toolchain. Use local host commands only when explicitly requested or when Docker is unavailable and the exception is documented.
+Run tests and checks through Makefile targets that use the pinned Docker toolchain by default. Do not call host `go`, `npm`, `node`, or `local-*` Makefile targets unless explicitly requested or when Docker is unavailable and the exception is documented.
 
 Default full check sequence:
 
 ```bash
-make docker-image
-docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOCACHE=/workspace/.cache/go-build -e GOMODCACHE=/workspace/.cache/go-mod -e npm_config_cache=/workspace/.cache/npm -v "$PWD:/workspace" -w /workspace kview-build:go1.25.0-node22.20.0 make check
+make check
 ```
 
 Build verification should use:
 
 ```bash
-make build-docker
+make build
 ```
 
 Add tests when modifying critical logic.
@@ -161,6 +160,8 @@ Changes should produce:
 - minimal unrelated changes
 
 Avoid massive mixed refactors unless explicitly requested.
+
+AI coding agents must not commit, amend, tag, push, or mutate Git history/remotes unless the project owner specifically requests and confirms that exact action. If asked for a commit message suggestion, provide a conventional commit title plus a meaningful body and relevant verification notes.
 
 ---
 

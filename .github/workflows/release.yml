@@ -46,7 +46,7 @@ jobs:
             ${{ runner.os }}-kview-
 
       - name: Build release binary in Docker
-        run: make build-docker-release GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} OUTPUT=dist/kview-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+        run: make build-release GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} OUTPUT=dist/kview-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v7

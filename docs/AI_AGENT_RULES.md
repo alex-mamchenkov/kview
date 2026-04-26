@@ -102,21 +102,57 @@ If architecture changes, update:
 
 ---
 
+# Git Discipline
+
+AI coding agents must never create commits, amend commits, tag releases, push branches, or otherwise mutate Git repository history/remotes unless the project owner specifically requests and confirms that exact action.
+
+When the user asks for a commit message suggestion, provide a conventional commit message with:
+
+- a concise title using the `type(scope): summary` shape when a scope is useful
+- a meaningful body that explains what changed and why
+- verification notes when relevant
+
+Do not run `git commit`, `git push`, `git tag`, or release commands just because you suggested a message.
+
+---
+
+# Mandatory Pre-Read
+
+Before making code changes, AI coding agents must read:
+
+- README.md
+- docs/AI_AGENT_RULES.md
+- docs/AI_BOOTSTRAP_PROMPT.md
+- docs/DEV_CHECKLIST.md
+- docs/ARCHITECTURE.md
+- docs/DATAPLANE.md
+- docs/API_READ_OWNERSHIP.md
+- docs/UI_UX_GUIDE.md
+
+Use the focused architecture/read/UI docs according to the area being changed, but treat this list as the baseline context when starting from README.md.
+
+---
+
 # Quality Checks
 
-AI agents must run verification through the pinned Docker toolchain, not the host Go/Node/npm toolchain. Use host-local commands only when the project owner explicitly asks for them or when documenting why Docker is unavailable.
+AI agents must run verification through Makefile targets that use the pinned Docker toolchain by default. Do not call host `go`, `npm`, `node`, or `local-*` Makefile targets unless the project owner explicitly asks for a host-toolchain exception or Docker is unavailable and the exception is documented.
 
 Default full check sequence:
 
 ```bash
-make docker-image
-docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOCACHE=/workspace/.cache/go-build -e GOMODCACHE=/workspace/.cache/go-mod -e npm_config_cache=/workspace/.cache/npm -v "$PWD:/workspace" -w /workspace kview-build:go1.25.0-node22.20.0 make check
+make check
 ```
 
 For build verification:
 
 ```bash
-make build-docker
+make build
+```
+
+For release-style artifacts:
+
+```bash
+make build-release GOOS=linux GOARCH=amd64 OUTPUT=dist/kview-linux-amd64
 ```
 
 Tests should accompany important logic changes.

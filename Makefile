@@ -3,8 +3,8 @@ EMBED_DIR=internal/server/ui_dist
 BINARY_NAME=kview
 OUTPUT=$(BINARY_NAME)
 DIST_DIR=dist
-GOOS?=$(shell go env GOOS 2>/dev/null || echo linux)
-GOARCH?=$(shell go env GOARCH 2>/dev/null || echo amd64)
+GOOS?=linux
+GOARCH?=amd64
 DOCKER_IMAGE=kview-build:go1.25.0-node22.20.0
 VERSION?=$(shell sh -c 'tag=""; \
 	if [ "$$GITHUB_REF_TYPE" = "tag" ] && [ -n "$$GITHUB_REF_NAME" ]; then \
@@ -30,46 +30,59 @@ DOCKER_RUN=docker run --rm \
 	-w /workspace \
 	$(DOCKER_IMAGE)
 
-.PHONY: ui run build build-webview build-release docker-image build-docker build-docker-release clean check
+.DEFAULT_GOAL := all
 
-check:
-	cd $(UI_DIR) && npm run typecheck && npm run lint && npm run test
-	go vet ./...
-	go test ./...
+.PHONY: all check ui build build-webview build-release docker-image clean prepare-cache local-check local-ui local-build local-build-webview local-build-release
 
-ui:
+all: check build
+
+prepare-cache:
+	mkdir -p .cache/go-build .cache/go-mod .cache/npm
+
+check: docker-image prepare-cache
+	$(DOCKER_RUN) make local-check
+
+ui: docker-image prepare-cache
+	$(DOCKER_RUN) make local-ui
+
+build: docker-image prepare-cache
+	$(DOCKER_RUN) make local-build OUTPUT=$(OUTPUT) VERSION=$(VERSION)
+
+build-webview: docker-image prepare-cache
+	$(DOCKER_RUN) make local-build-webview OUTPUT=$(OUTPUT) VERSION=$(VERSION)
+
+build-release: docker-image prepare-cache
+	mkdir -p $(DIST_DIR)
+	$(DOCKER_RUN) make local-build-release GOOS=$(GOOS) GOARCH=$(GOARCH) OUTPUT=$(OUTPUT) VERSION=$(VERSION)
+
+local-check:
+	cd $(UI_DIR) && npm ci && npm run typecheck && npm run lint && npm run test
+	GO_PACKAGES=$$(go list ./... | grep -v '/$(UI_DIR)/node_modules/'); \
+		go vet $$GO_PACKAGES; \
+		go test $$GO_PACKAGES
+
+local-ui:
 	cd $(UI_DIR) && npm ci && npm run build
 	rm -rf $(EMBED_DIR)
 	mkdir -p $(EMBED_DIR)
 	cp -r $(UI_DIR)/dist/* $(EMBED_DIR)/
 	@echo "UI built and copied into $(EMBED_DIR)"
 
-run: ui
-	go run ./cmd/kview
-
-build: ui
+local-build: local-ui
 	go build -ldflags "$(GO_LDFLAGS)" -o $(OUTPUT) ./cmd/kview
 	@echo "Built $(OUTPUT) (browser/server modes; default: browser)"
 
-build-webview: ui
+local-build-webview: local-ui
 	go build -tags webview -ldflags "$(GO_LDFLAGS)" -o $(OUTPUT) ./cmd/kview
 	@echo "Built $(OUTPUT) with webview support (default: webview)"
 
-build-release: ui
+local-build-release: local-ui
 	mkdir -p $(dir $(OUTPUT))
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -ldflags "$(GO_LDFLAGS) -s -w" -o $(OUTPUT) ./cmd/kview
 	@echo "Built $(OUTPUT) ($(GOOS)/$(GOARCH); browser/server modes; default: browser)"
 
 docker-image:
 	docker build -t $(DOCKER_IMAGE) .
-
-build-docker: docker-image
-	mkdir -p .cache/go-build .cache/go-mod .cache/npm
-	$(DOCKER_RUN) make build OUTPUT=$(OUTPUT) VERSION=$(VERSION)
-
-build-docker-release: docker-image
-	mkdir -p .cache/go-build .cache/go-mod .cache/npm $(DIST_DIR)
-	$(DOCKER_RUN) make build-release GOOS=$(GOOS) GOARCH=$(GOARCH) OUTPUT=$(OUTPUT) VERSION=$(VERSION)
 
 clean:
 	rm -rf $(UI_DIR)/dist

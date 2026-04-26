@@ -44,13 +44,13 @@ Execution agents:
 Each executor prompt must include:
 
 1. Scope definition
-2. Mandatory pre-read files
+2. Mandatory pre-read files: `README.md`, `docs/AI_AGENT_RULES.md`, `docs/AI_BOOTSTRAP_PROMPT.md`, `docs/DEV_CHECKLIST.md`, `docs/ARCHITECTURE.md`, `docs/DATAPLANE.md`, `docs/API_READ_OWNERSHIP.md`, and `docs/UI_UX_GUIDE.md`
 3. Backend requirements (if applicable)
 4. Frontend requirements (if applicable)
 5. UX contract reminders
 6. Acceptance checklist
-7. Mandatory Docker-toolchain verification (`make build-docker` for builds, `make docker-image` then Docker-run `make check` for tests/checks)
-8. Post-implementation instructions (docs + commit suggestion)
+7. Mandatory Docker-toolchain verification through Makefile targets (`make build` for builds, `make check` for tests/checks)
+8. Post-implementation instructions, including no Git commit/push without explicit owner confirmation and conventional commit message suggestions when requested
 
 All prompts must be provided in markdown format as file download links.
 

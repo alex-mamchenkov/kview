@@ -21,10 +21,11 @@ Development constraints:
 - Always preserve drawer-based navigation and cross-resource links.
 - Prefer existing shared components and helpers over new patterns.
 - Update documentation when architecture, read ownership, or operator-visible behavior changes.
-- Run checks through the pinned Docker toolchain, not the host Go/Node/npm toolchain. Prefer `make docker-image` followed by the Docker-run `make check` command from `docs/AI_AGENT_RULES.md`; use `make build-docker` for build verification.
-- No auto-commits.
+- Run checks through Makefile targets that use the pinned Docker toolchain by default. Use `make check` for tests/lint/typecheck and `make build` for build verification. Do not call host `go`, `npm`, `node`, or `local-*` Makefile targets unless the project owner explicitly asks for a host-toolchain exception.
+- Never commit, amend, tag, push, or mutate Git history/remotes unless the project owner specifically requests and confirms that exact action.
+- When asked to suggest a commit message, use a conventional commit title and a meaningful body with verification notes when relevant.
 
 Before implementing:
-1. Read `README.md`, `docs/ARCHITECTURE.md`, `docs/DATAPLANE.md`, and `docs/API_READ_OWNERSHIP.md`.
+1. Read `README.md`, `docs/AI_AGENT_RULES.md`, `docs/AI_BOOTSTRAP_PROMPT.md`, `docs/DEV_CHECKLIST.md`, `docs/ARCHITECTURE.md`, `docs/DATAPLANE.md`, `docs/API_READ_OWNERSHIP.md`, and `docs/UI_UX_GUIDE.md`.
 2. State the scoped change you are making.
 3. Keep diffs narrow and verify with targeted tests/typechecks/lint as appropriate.

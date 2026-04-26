@@ -7,6 +7,14 @@ FROM ${GO_IMAGE}
 
 COPY --from=node /usr/local /usr/local
 
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends \
+		g++ \
+		pkg-config \
+		libgtk-3-dev \
+		libwebkit2gtk-4.1-dev \
+	&& rm -rf /var/lib/apt/lists/*
+
 WORKDIR /workspace
 
 ENV GOCACHE=/workspace/.cache/go-build \

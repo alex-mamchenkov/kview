@@ -64,7 +64,7 @@ The default Go install path builds browser/server modes. Desktop webview mode re
 
 Desktop webview mode is only available in binaries built with the `webview` build tag. Release binaries are built without it.
 
-To build kview locally with webview support:
+To build kview with Linux webview support through the pinned Docker toolchain:
 
 ```bash
 make build-webview
@@ -90,25 +90,21 @@ This runs the same embedded HTTP server and UI inside a native desktop webview w
 make build
 ```
 
-This produces a regular browser/server-mode binary. To include desktop webview support, use:
+This produces a regular browser/server-mode binary through the pinned Docker toolchain. To include Linux desktop webview support, use:
 
 ```bash
 make build-webview
 ```
 
-To build with the pinned Docker toolchain:
-
-```bash
-make build-docker
-```
-
 Release-style artifacts:
 
 ```bash
-make build-docker-release GOOS=linux GOARCH=amd64 OUTPUT=dist/kview-linux-amd64
+make build-release GOOS=linux GOARCH=amd64 OUTPUT=dist/kview-linux-amd64
 ```
 
-Docker builds bind-mount the repository and keep Go/npm build caches under `.cache/`, so local rebuilds reuse dependency artifacts without requiring a host Go or Node.js installation.
+`make`, `make check`, `make build`, `make build-webview`, and `make build-release` all run through the pinned Docker toolchain by default and keep Go/npm build caches under `.cache/`, so local rebuilds reuse dependency artifacts without requiring a host Go or Node.js installation.
+
+The `local-*` Makefile targets are implementation details for the Docker container or explicit maintainer debugging. AI coding agents must not call host `go`, `npm`, `node`, or `local-*` targets unless the project owner explicitly asks for a host-toolchain exception.
 
 ---
 
@@ -187,6 +183,16 @@ Built with React, Vite, TypeScript, and MUI. Uses shared resource list and drawe
 
 ## Documentation
 
+If you are an AI coding agent using this README as context, read these files before making changes:
+
+- [docs/AI_AGENT_RULES.md](docs/AI_AGENT_RULES.md)
+- [docs/AI_BOOTSTRAP_PROMPT.md](docs/AI_BOOTSTRAP_PROMPT.md)
+- [docs/DEV_CHECKLIST.md](docs/DEV_CHECKLIST.md)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/DATAPLANE.md](docs/DATAPLANE.md)
+- [docs/API_READ_OWNERSHIP.md](docs/API_READ_OWNERSHIP.md)
+- [docs/UI_UX_GUIDE.md](docs/UI_UX_GUIDE.md)
+
 | Document | Purpose |
 |----------|---------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Product architecture and boundaries |
@@ -194,6 +200,7 @@ Built with React, Vite, TypeScript, and MUI. Uses shared resource list and drawe
 | [docs/API_READ_OWNERSHIP.md](docs/API_READ_OWNERSHIP.md) | Route-by-route read ownership map |
 | [docs/UI_UX_GUIDE.md](docs/UI_UX_GUIDE.md) | UI architecture and UX contracts |
 | [docs/DEV_CHECKLIST.md](docs/DEV_CHECKLIST.md) | Review checklist for changes |
+| [docs/AI_BOOTSTRAP_PROMPT.md](docs/AI_BOOTSTRAP_PROMPT.md) | Bootstrap context for executor agents |
 | [docs/AI_AGENT_RULES.md](docs/AI_AGENT_RULES.md) | Execution rules for AI-assisted development |
 
 Documentation is a contract. Update it in the same change whenever architecture, read ownership, UI contracts, or operator-visible behavior changes.

@@ -17,9 +17,8 @@ Contributions are welcome, but the workflow is intentionally lightweight.
 
 ## Prerequisites
 
-- Docker, for the pinned build toolchain used by `make build-docker`
-- Go 1.25+ and Node.js 22+ only if building directly on the host
-- npm, only if building directly on the host
+- Docker, for the pinned build toolchain used by `make`, `make check`, `make build`, and `make build-release`
+- Go 1.25+, Node.js 22+, and npm only for explicit maintainer debugging with `local-*` Makefile targets
 
 ---
 
@@ -55,5 +54,9 @@ Rules for AI-generated changes:
 - Prefer full-file replacements for non-trivial edits
 - Avoid partial diffs that are hard to apply
 - Keep documentation up to date
+- Read `README.md`, `docs/AI_AGENT_RULES.md`, `docs/AI_BOOTSTRAP_PROMPT.md`, `docs/DEV_CHECKLIST.md`, `docs/ARCHITECTURE.md`, `docs/DATAPLANE.md`, `docs/API_READ_OWNERSHIP.md`, and `docs/UI_UX_GUIDE.md` before implementation
+- Run verification with `make check` and build verification with `make build`; do not call host `go`, `npm`, `node`, or `local-*` targets unless explicitly asked
+- Never commit, amend, tag, push, or mutate Git history/remotes unless specifically requested and confirmed by the project owner
+- Suggest conventional commit messages with meaningful bodies when asked
 
 See `docs/AI_AGENT_RULES.md` for details.
