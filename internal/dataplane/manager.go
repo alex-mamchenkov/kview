@@ -212,10 +212,14 @@ type DataPlaneManager interface {
 
 	// Policy returns the current dataplane behavior policy.
 	Policy() DataplanePolicy
+	// PolicyBundle returns the current dataplane behavior bundle.
+	PolicyBundle() DataplanePolicyBundle
 	// EffectivePolicy returns context-aware policy with overrides applied.
 	EffectivePolicy(contextName string) DataplanePolicy
 	// SetPolicy updates the current dataplane behavior policy for existing and future planes.
 	SetPolicy(policy DataplanePolicy) DataplanePolicy
+	// SetPolicyBundle updates the current dataplane behavior bundle for existing and future planes.
+	SetPolicyBundle(bundle DataplanePolicyBundle) DataplanePolicyBundle
 
 	// SchedulerRunStats returns cumulative snapshot-run durations by priority and resource kind.
 	SchedulerRunStats() SchedulerRunStatsSnapshot
@@ -363,10 +367,14 @@ func NewManager(cfg ManagerConfig) DataPlaneManager {
 }
 
 func (m *manager) Policy() DataplanePolicy {
+	return m.PolicyBundle().Global
+}
+
+func (m *manager) PolicyBundle() DataplanePolicyBundle {
 	m.policyMu.RLock()
-	policy := CloneDataplanePolicy(m.bundle.Global)
+	bundle := CloneDataplanePolicyBundle(m.bundle)
 	m.policyMu.RUnlock()
-	return ValidateDataplanePolicy(policy)
+	return ValidateDataplanePolicyBundle(bundle)
 }
 
 func (m *manager) EffectivePolicy(contextName string) DataplanePolicy {
@@ -377,9 +385,16 @@ func (m *manager) EffectivePolicy(contextName string) DataplanePolicy {
 }
 
 func (m *manager) SetPolicy(policy DataplanePolicy) DataplanePolicy {
-	next := ValidateDataplanePolicy(policy)
+	bundle := m.PolicyBundle()
+	bundle.Global = policy
+	return m.SetPolicyBundle(bundle).Global
+}
+
+func (m *manager) SetPolicyBundle(bundle DataplanePolicyBundle) DataplanePolicyBundle {
+	nextBundle := ValidateDataplanePolicyBundle(bundle)
+	next := nextBundle.Global
 	m.policyMu.Lock()
-	m.bundle.Global = next
+	m.bundle = nextBundle
 	m.policy = next
 	m.policyMu.Unlock()
 	if m.scheduler != nil {
@@ -393,12 +408,13 @@ func (m *manager) SetPolicy(policy DataplanePolicy) DataplanePolicy {
 	}
 	if err := m.configurePersistence(next); err != nil {
 		next.Persistence.Enabled = false
+		nextBundle.Global = next
 		m.policyMu.Lock()
-		m.bundle.Global = next
+		m.bundle = nextBundle
 		m.policy = next
 		m.policyMu.Unlock()
 	}
-	return next
+	return nextBundle
 }
 
 func (m *manager) configurePersistence(policy DataplanePolicy) error {

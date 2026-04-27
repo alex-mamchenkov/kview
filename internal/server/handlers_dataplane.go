@@ -80,9 +80,13 @@ func (s *Server) registerActivityAndDataplaneRoutes(api chi.Router) {
 			return
 		}
 		active := s.readContextName(r)
+		bundle := s.dp.PolicyBundle()
+		effective := bundle.EffectivePolicy(active)
 		writeJSON(w, http.StatusOK, map[string]any{
-			"active": active,
-			"item":   s.dp.EffectivePolicy(active),
+			"active":    active,
+			"bundle":    bundle,
+			"item":      effective,
+			"effective": effective,
 		})
 	})
 
@@ -103,12 +107,31 @@ func (s *Server) registerActivityAndDataplaneRoutes(api chi.Router) {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "dataplane unavailable"})
 			return
 		}
-		var body dataplane.DataplanePolicy
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		var raw map[string]json.RawMessage
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid dataplane config"})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"item": s.dp.SetPolicy(body)})
+		var bundle dataplane.DataplanePolicyBundle
+		if _, isBundle := raw["global"]; isBundle {
+			if payload, err := json.Marshal(raw); err != nil || json.Unmarshal(payload, &bundle) != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid dataplane config"})
+				return
+			}
+		} else {
+			var policy dataplane.DataplanePolicy
+			if payload, err := json.Marshal(raw); err != nil || json.Unmarshal(payload, &policy) != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid dataplane config"})
+				return
+			}
+			bundle = s.dp.PolicyBundle()
+			bundle.Global = policy
+		}
+		next := s.dp.SetPolicyBundle(bundle)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"bundle": next,
+			"item":   next.Global,
+		})
 	})
 
 	api.Get("/activity/{id}/logs", func(w http.ResponseWriter, r *http.Request) {

@@ -143,27 +143,38 @@ func mustDecodeJSON(t *testing.T, data []byte) map[string]any {
 
 type stubDataplane struct {
 	policy    dataplane.DataplanePolicy
+	bundle    dataplane.DataplanePolicyBundle
 	effective map[string]dataplane.DataplanePolicy
 }
 
 func newStubDataplane() *stubDataplane {
-	return &stubDataplane{policy: dataplane.DefaultDataplanePolicy(), effective: map[string]dataplane.DataplanePolicy{}}
+	bundle := dataplane.DefaultDataplanePolicyBundle()
+	return &stubDataplane{policy: bundle.Global, bundle: bundle, effective: map[string]dataplane.DataplanePolicy{}}
 }
 
 func (s *stubDataplane) NoteUserActivity()                           {}
 func (s *stubDataplane) EnsureObservers(_ context.Context, _ string) {}
 func (s *stubDataplane) Policy() dataplane.DataplanePolicy           { return s.policy }
+func (s *stubDataplane) PolicyBundle() dataplane.DataplanePolicyBundle {
+	return s.bundle
+}
 func (s *stubDataplane) EffectivePolicy(contextName string) dataplane.DataplanePolicy {
 	if s.effective != nil {
 		if p, ok := s.effective[contextName]; ok {
 			return p
 		}
 	}
-	return s.policy
+	return s.bundle.EffectivePolicy(contextName)
 }
 func (s *stubDataplane) SetPolicy(p dataplane.DataplanePolicy) dataplane.DataplanePolicy {
+	s.bundle.Global = p
 	s.policy = p
-	return p
+	return s.bundle.Global
+}
+func (s *stubDataplane) SetPolicyBundle(bundle dataplane.DataplanePolicyBundle) dataplane.DataplanePolicyBundle {
+	s.bundle = dataplane.ValidateDataplanePolicyBundle(bundle)
+	s.policy = s.bundle.Global
+	return s.bundle
 }
 func (s *stubDataplane) SchedulerLiveWork() dataplane.SchedulerLiveWork {
 	return dataplane.SchedulerLiveWork{}
@@ -824,6 +835,65 @@ func TestPostDataplaneConfig(t *testing.T) {
 	}
 }
 
+func TestPostDataplaneConfig_BundlePreservesContextOverrides(t *testing.T) {
+	s, h := newTestServer(t)
+	dp := s.dp.(*stubDataplane)
+	manual := string(dataplane.DataplaneProfileManual)
+	body := toJSON(t, map[string]any{
+		"global": map[string]any{
+			"profile": "focused",
+			"metrics": map[string]any{
+				"enabled": true,
+			},
+		},
+		"contextOverrides": map[string]any{
+			"ctx-a": map[string]any{
+				"metrics": map[string]any{
+					"enabled": false,
+				},
+			},
+			"ctx-b": map[string]any{
+				"profile": manual,
+			},
+		},
+	})
+	rec := doReq(t, h, http.MethodPost, "/api/dataplane/config", testToken, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (body=%s)", rec.Code, rec.Body.String())
+	}
+	if _, ok := dp.bundle.ContextOverrides["ctx-a"]; !ok {
+		t.Fatalf("expected ctx-a override to be stored")
+	}
+	if _, ok := dp.bundle.ContextOverrides["ctx-b"]; !ok {
+		t.Fatalf("expected ctx-b override to be stored")
+	}
+}
+
+func TestPostDataplaneConfig_LegacyPolicyDoesNotRewriteOverrides(t *testing.T) {
+	s, h := newTestServer(t)
+	dp := s.dp.(*stubDataplane)
+	manual := dataplane.DataplaneProfileManual
+	dp.bundle = dataplane.ValidateDataplanePolicyBundle(dataplane.DataplanePolicyBundle{
+		Global: dataplane.DefaultDataplanePolicy(),
+		ContextOverrides: map[string]dataplane.DataplanePolicyOverride{
+			"ctx-a": {
+				Profile: &manual,
+			},
+		},
+	})
+	dp.policy = dp.bundle.Global
+	body := toJSON(t, map[string]any{
+		"profile": "balanced",
+	})
+	rec := doReq(t, h, http.MethodPost, "/api/dataplane/config", testToken, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (body=%s)", rec.Code, rec.Body.String())
+	}
+	if _, ok := dp.bundle.ContextOverrides["ctx-a"]; !ok {
+		t.Fatalf("expected pre-existing ctx-a override to be preserved")
+	}
+}
+
 // ── GET /api/dataplane/metrics/status ────────────────────────────────────────
 
 func TestGetDataplaneMetricsStatus(t *testing.T) {
@@ -850,14 +920,18 @@ func TestGetDataplaneMetricsStatus(t *testing.T) {
 func TestDataplaneConfigAndMetricsStatusResolvePerContextPolicy(t *testing.T) {
 	s, h := newTestServer(t)
 	dp := s.dp.(*stubDataplane)
-	manual := dataplane.DefaultDataplanePolicy()
-	manual.Profile = dataplane.DataplaneProfileManual
-	manual.Metrics.Enabled = false
-	wide := dataplane.DefaultDataplanePolicy()
-	wide.Profile = dataplane.DataplaneProfileWide
-	wide.Metrics.Enabled = true
-	dp.effective["ctx-a"] = manual
-	dp.effective["ctx-b"] = wide
+	profileManual := dataplane.DataplaneProfileManual
+	metricsOff := false
+	dp.bundle = dataplane.ValidateDataplanePolicyBundle(dataplane.DataplanePolicyBundle{
+		Global: dataplane.DefaultDataplanePolicy(),
+		ContextOverrides: map[string]dataplane.DataplanePolicyOverride{
+			"ctx-a": {
+				Profile: &profileManual,
+				Metrics: &dataplane.MetricsPolicyOverride{Enabled: &metricsOff},
+			},
+		},
+	})
+	dp.policy = dp.bundle.Global
 
 	recA := doReqWithHeader(t, h, http.MethodGet, "/api/dataplane/config", map[string]string{
 		"Authorization":   "Bearer " + testToken,

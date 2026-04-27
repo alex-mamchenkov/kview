@@ -59,6 +59,7 @@ import StartupDialog, { type StartupKubeconfigInfo, type StartupStep, type Start
 import { POLL_STATUS_INTERVAL_MS } from "./constants/pollIntervals";
 import { dataplaneSearchSectionByKind } from "./constants/resourceSections";
 import { dataplaneSettingsForContext } from "./settings";
+import { buildDataplaneBundleForSync } from "./dataplaneSync";
 import "./styles/theme.css";
 
 function getToken(): string {
@@ -648,12 +649,16 @@ function AppInner() {
   );
 }
 
-function DataplaneSettingsSync({ token }: { token: string }) {
+export function DataplaneSettingsSync({ token }: { token: string }) {
   const { settings } = useUserSettings();
   const activeContext = useActiveContext();
   const lastSweepWarmKeyRef = useRef<string>("");
   const dashboardRefreshSec = settings.appearance.dashboardRefreshSec;
   const dataplaneSettings = settings.dataplane;
+  const dataplaneBundle = useMemo(
+    () => buildDataplaneBundleForSync(dataplaneSettings, dashboardRefreshSec),
+    [dashboardRefreshSec, dataplaneSettings],
+  );
   const effectiveDataplane = useMemo(
     () => dataplaneSettingsForContext(dataplaneSettings, activeContext),
     [activeContext, dataplaneSettings],
@@ -663,14 +668,7 @@ function DataplaneSettingsSync({ token }: { token: string }) {
     let cancelled = false;
     const timer = window.setTimeout(() => {
       if (cancelled) return;
-      const dataplanePolicy = {
-        ...effectiveDataplane,
-        dashboard: {
-          ...effectiveDataplane.dashboard,
-          refreshSec: dashboardRefreshSec,
-        },
-      };
-      apiPost("/api/dataplane/config", token, dataplanePolicy)
+      apiPost("/api/dataplane/config", token, dataplaneBundle)
         .then(() => {
           const sweep = effectiveDataplane.namespaceEnrichment.sweep;
           const warmKey = effectiveDataplane.namespaceEnrichment.enabled && sweep.enabled
@@ -701,7 +699,7 @@ function DataplaneSettingsSync({ token }: { token: string }) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [activeContext, dashboardRefreshSec, effectiveDataplane, token]);
+  }, [activeContext, dataplaneBundle, effectiveDataplane, token]);
   return null;
 }
 

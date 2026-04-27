@@ -158,6 +158,63 @@ func TestPolicyBundleManualProfileDisablesObserversAndEnrichment(t *testing.T) {
 	}
 }
 
+func TestManagerSetPolicyBundlePreservesOverridesAndScopedMetrics(t *testing.T) {
+	dm := NewManager(ManagerConfig{})
+	m := dm.(*manager)
+	disabled := false
+	manual := DataplaneProfileManual
+	bundle := DataplanePolicyBundle{
+		Global: DefaultDataplanePolicy(),
+		ContextOverrides: map[string]DataplanePolicyOverride{
+			"context-a": {
+				Metrics: &MetricsPolicyOverride{Enabled: &disabled},
+			},
+			"context-b": {
+				Profile: &manual,
+			},
+		},
+	}
+	m.SetPolicyBundle(bundle)
+	got := m.PolicyBundle()
+	if len(got.ContextOverrides) != 2 {
+		t.Fatalf("expected two context overrides, got %d", len(got.ContextOverrides))
+	}
+	if m.EffectivePolicy("context-a").Metrics.Enabled {
+		t.Fatalf("expected metrics disabled in context-a")
+	}
+	if m.EffectivePolicy("context-b").Profile != DataplaneProfileManual {
+		t.Fatalf("expected manual profile override in context-b")
+	}
+	if !m.Policy().Metrics.Enabled {
+		t.Fatalf("expected global metrics to remain enabled")
+	}
+}
+
+func TestManagerActiveContextSwitchDoesNotRewriteGlobalPolicy(t *testing.T) {
+	dm := NewManager(ManagerConfig{})
+	m := dm.(*manager)
+	disabled := false
+	bundle := DataplanePolicyBundle{
+		Global: DefaultDataplanePolicy(),
+		ContextOverrides: map[string]DataplanePolicyOverride{
+			"context-a": {
+				Metrics: &MetricsPolicyOverride{Enabled: &disabled},
+			},
+		},
+	}
+	m.SetPolicyBundle(bundle)
+	globalBefore := m.Policy()
+	_ = m.EffectivePolicy("context-a")
+	_ = m.EffectivePolicy("context-b")
+	globalAfter := m.Policy()
+	if globalAfter.Metrics.Enabled != globalBefore.Metrics.Enabled {
+		t.Fatalf("expected context switches to leave global metrics unchanged")
+	}
+	if globalAfter.Profile != globalBefore.Profile {
+		t.Fatalf("expected context switches to leave global profile unchanged")
+	}
+}
+
 func TestValidateDataplanePolicy_MigratesLegacyThresholdsToSignalDetectors(t *testing.T) {
 	in := DefaultDataplanePolicy()
 	in.Dashboard.RestartElevatedThreshold = 7
