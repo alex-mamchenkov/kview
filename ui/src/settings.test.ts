@@ -8,6 +8,7 @@ import {
   exportUserSettingsJSON,
   customCommandsForContainer,
   customActionsForResource,
+  dataplaneSettingsForContext,
   labelForSmartFilterRules,
   loadUserSettings,
   parseUserSettingsJSON,
@@ -141,7 +142,7 @@ describe("user settings", () => {
       },
     });
     expect(migrated?.v).toBe(2);
-    expect(migrated?.dataplane.contextOverrides["prod-eu"]?.signals.overrides.pod_restarts).toEqual({
+    expect(migrated?.dataplane.contextOverrides["prod-eu"]?.signals?.overrides.pod_restarts).toEqual({
       enabled: false,
       severity: "high",
     });
@@ -163,7 +164,56 @@ describe("user settings", () => {
         },
       },
     });
-    expect(parsed?.dataplane.contextOverrides["stage-us"]?.signals.overrides.pod_restarts?.priority).toBe(7);
+    expect(parsed?.dataplane.contextOverrides["stage-us"]?.signals?.overrides.pod_restarts?.priority).toBe(7);
+  });
+
+  it("supports sparse context metric-enabled overrides in v2 imports", () => {
+    const parsed = validateUserSettings({
+      ...defaultUserSettings(),
+      dataplane: {
+        ...defaultUserSettings().dataplane,
+        contextOverrides: {
+          "stage-us": {
+            metrics: {
+              enabled: false,
+            },
+          },
+        },
+      },
+    });
+    expect(parsed?.dataplane.contextOverrides["stage-us"]?.metrics?.enabled).toBe(false);
+  });
+
+  it("resolves effective dataplane settings per context override", () => {
+    const base = defaultUserSettings();
+    const settings: ReturnType<typeof defaultUserSettings> = {
+      ...base,
+      dataplane: {
+        ...base.dataplane,
+        global: {
+          ...base.dataplane.global,
+          metrics: {
+            ...base.dataplane.global.metrics,
+            enabled: true,
+          },
+        },
+        contextOverrides: {
+          "prod-eu": {
+            metrics: { enabled: false },
+            signals: {
+              overrides: {
+                pod_restarts: { severity: "high" as const },
+              },
+            },
+          },
+        },
+      },
+    };
+    const inherited = dataplaneSettingsForContext(settings.dataplane, "dev-us");
+    const overridden = dataplaneSettingsForContext(settings.dataplane, "prod-eu");
+    expect(inherited.metrics.enabled).toBe(true);
+    expect(overridden.metrics.enabled).toBe(false);
+    expect(overridden.signals.overrides.pod_restarts?.severity).toBe("high");
   });
 
   it("preserves explicit dataplane persistence when normalizing settings", () => {

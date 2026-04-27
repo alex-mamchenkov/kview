@@ -53,7 +53,10 @@ export type KviewUserSettingsV1 = {
 };
 
 export type DataplaneContextOverrideSettings = {
-  signals: {
+  metrics?: {
+    enabled?: boolean;
+  };
+  signals?: {
     overrides: Record<string, SignalOverride>;
   };
 };
@@ -1179,14 +1182,44 @@ function normalizeDataplaneContextOverrides(input: unknown): Record<string, Data
   for (const [rawContext, rawOverride] of Object.entries(input as Record<string, unknown>)) {
     const ctx = rawContext.trim();
     if (!ctx) continue;
-    const rawSignals = (rawOverride && typeof rawOverride === "object" ? (rawOverride as { signals?: unknown }).signals : undefined) as
-      | { overrides?: unknown }
-      | undefined;
-    const overrides = normalizeSignalOverrides(rawSignals?.overrides);
-    if (Object.keys(overrides).length === 0) continue;
-    out[ctx] = { signals: { overrides } };
+    if (!rawOverride || typeof rawOverride !== "object") continue;
+    const typed = rawOverride as { signals?: { overrides?: unknown }; metrics?: { enabled?: unknown } };
+    const overrides = normalizeSignalOverrides(typed.signals?.overrides);
+    const metricsEnabled = typeof typed.metrics?.enabled === "boolean" ? typed.metrics.enabled : undefined;
+    const next: DataplaneContextOverrideSettings = {};
+    if (typeof metricsEnabled === "boolean") next.metrics = { enabled: metricsEnabled };
+    if (Object.keys(overrides).length > 0) next.signals = { overrides };
+    if (!next.metrics && !next.signals) continue;
+    out[ctx] = next;
   }
   return out;
+}
+
+function mergeDataplaneContextOverride(
+  global: DataplaneSettings,
+  override: DataplaneContextOverrideSettings | undefined,
+): DataplaneSettings {
+  if (!override) return global;
+  const mergedSignals = override.signals?.overrides
+    ? {
+      ...global.signals,
+      overrides: { ...global.signals.overrides, ...override.signals.overrides },
+    }
+    : global.signals;
+  const mergedMetrics = override.metrics && typeof override.metrics.enabled === "boolean"
+    ? { ...global.metrics, enabled: override.metrics.enabled }
+    : global.metrics;
+  return {
+    ...global,
+    metrics: mergedMetrics,
+    signals: mergedSignals,
+  };
+}
+
+export function dataplaneSettingsForContext(dataplane: DataplaneSettingsV2, contextName: string): DataplaneSettings {
+  const contextKey = contextName.trim();
+  if (!contextKey) return dataplane.global;
+  return mergeDataplaneContextOverride(dataplane.global, dataplane.contextOverrides[contextKey]);
 }
 
 export function validateUserSettings(input: unknown): KviewUserSettingsV2 | null {

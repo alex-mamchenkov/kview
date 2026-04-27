@@ -58,6 +58,7 @@ import type { ApiDataplaneSearchItem } from "./types/api";
 import StartupDialog, { type StartupKubeconfigInfo, type StartupStep, type StartupStepStatus } from "./components/StartupDialog";
 import { POLL_STATUS_INTERVAL_MS } from "./constants/pollIntervals";
 import { dataplaneSearchSectionByKind } from "./constants/resourceSections";
+import { dataplaneSettingsForContext } from "./settings";
 import "./styles/theme.css";
 
 function getToken(): string {
@@ -651,29 +652,36 @@ function DataplaneSettingsSync({ token }: { token: string }) {
   const { settings } = useUserSettings();
   const activeContext = useActiveContext();
   const lastSweepWarmKeyRef = useRef<string>("");
+  const dashboardRefreshSec = settings.appearance.dashboardRefreshSec;
+  const dataplaneSettings = settings.dataplane;
+  const effectiveDataplane = useMemo(
+    () => dataplaneSettingsForContext(dataplaneSettings, activeContext),
+    [activeContext, dataplaneSettings],
+  );
+
   useEffect(() => {
     let cancelled = false;
     const timer = window.setTimeout(() => {
       if (cancelled) return;
       const dataplanePolicy = {
-        ...settings.dataplane.global,
+        ...effectiveDataplane,
         dashboard: {
-          ...settings.dataplane.global.dashboard,
-          refreshSec: settings.appearance.dashboardRefreshSec,
+          ...effectiveDataplane.dashboard,
+          refreshSec: dashboardRefreshSec,
         },
       };
       apiPost("/api/dataplane/config", token, dataplanePolicy)
         .then(() => {
-          const sweep = settings.dataplane.global.namespaceEnrichment.sweep;
-          const warmKey = settings.dataplane.global.namespaceEnrichment.enabled && sweep.enabled
+          const sweep = effectiveDataplane.namespaceEnrichment.sweep;
+          const warmKey = effectiveDataplane.namespaceEnrichment.enabled && sweep.enabled
             ? [
                 activeContext,
-                settings.dataplane.global.profile,
+                effectiveDataplane.profile,
                 sweep.maxNamespacesPerCycle,
                 sweep.maxNamespacesPerHour,
                 sweep.minReenrichIntervalMinutes,
                 sweep.includeSystemNamespaces,
-                settings.dataplane.global.namespaceEnrichment.warmResourceKinds.join(","),
+                effectiveDataplane.namespaceEnrichment.warmResourceKinds.join(","),
               ].join(":")
             : "";
           if (!activeContext || !warmKey || warmKey === lastSweepWarmKeyRef.current || cancelled) {
@@ -693,7 +701,7 @@ function DataplaneSettingsSync({ token }: { token: string }) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [activeContext, settings.appearance.dashboardRefreshSec, settings.dataplane, token]);
+  }, [activeContext, dashboardRefreshSec, effectiveDataplane, token]);
   return null;
 }
 

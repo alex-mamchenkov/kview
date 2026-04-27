@@ -20,6 +20,8 @@ import {
   Tab,
   Tabs,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -307,7 +309,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
   const [importMessage, setImportMessage] = useState<{ severity: "success" | "error"; text: string } | null>(null);
   const [signalCatalog, setSignalCatalog] = useState<DataplaneSignalCatalogItem[]>([]);
   const [signalCatalogError, setSignalCatalogError] = useState<string | null>(null);
-  const [signalOverrideScope, setSignalOverrideScope] = useState<"global" | "context">("global");
+  const [dataplaneEditScope, setDataplaneEditScope] = useState<"global" | "context">("global");
   const [signalCatalogQuery, setSignalCatalogQuery] = useState("");
 
   const contextOptions = useMemo(
@@ -411,6 +413,41 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
       metrics: { ...prev.dataplane.global.metrics, ...patch },
     }));
   };
+
+  const setContextMetricsEnabled = (enabled: boolean) => {
+    const contextName = activeContext.trim();
+    if (!contextName) return;
+    setSettings((prev) => {
+      const contextOverrides = { ...prev.dataplane.contextOverrides };
+      const existing = contextOverrides[contextName] || {};
+      const inherited = prev.dataplane.global.metrics.enabled;
+      const metrics = enabled === inherited ? undefined : { enabled };
+      const next = { ...existing, metrics };
+      const hasSignalOverrides = Boolean(next.signals && Object.keys(next.signals.overrides).length > 0);
+      if (!next.metrics && !hasSignalOverrides) {
+        delete contextOverrides[contextName];
+      } else {
+        contextOverrides[contextName] = next;
+      }
+      return { ...prev, dataplane: { ...prev.dataplane, contextOverrides } };
+    });
+  };
+
+  const resetContextMetricsOverride = () => {
+    const contextName = activeContext.trim();
+    if (!contextName) return;
+    setSettings((prev) => {
+      const contextOverrides = { ...prev.dataplane.contextOverrides };
+      const existing = contextOverrides[contextName];
+      if (!existing?.metrics) return prev;
+      const next = { ...existing };
+      delete next.metrics;
+      const hasSignalOverrides = Boolean(next.signals && Object.keys(next.signals.overrides).length > 0);
+      if (!hasSignalOverrides) delete contextOverrides[contextName];
+      else contextOverrides[contextName] = next;
+      return { ...prev, dataplane: { ...prev.dataplane, contextOverrides } };
+    });
+  };
   const setDataplaneSignals = (patch: Partial<DataplaneSettings["signals"]>) => {
     setSettings((prev) => updateDataplane(prev, {
       signals: (() => {
@@ -446,11 +483,13 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
       const contextName = activeContext.trim();
       if (!contextName) return prev;
       const contextOverrides = { ...prev.dataplane.contextOverrides };
-      const current = { ...(contextOverrides[contextName]?.signals.overrides || {}) };
+      const current = { ...(contextOverrides[contextName]?.signals?.overrides || {}) };
       const next = cleanOverride(current[signalType] || {});
       if (next) current[signalType] = next;
       else delete current[signalType];
-      if (Object.keys(current).length > 0) contextOverrides[contextName] = { signals: { overrides: current } };
+      const existing = contextOverrides[contextName] || {};
+      if (Object.keys(current).length > 0) contextOverrides[contextName] = { ...existing, signals: { overrides: current } };
+      else if (existing.metrics) contextOverrides[contextName] = { ...existing, signals: undefined };
       else delete contextOverrides[contextName];
       return { ...updateDataplane(prev, { signals }), dataplane: { ...prev.dataplane, contextOverrides } };
     });
@@ -467,9 +506,11 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
       const contextName = activeContext.trim();
       if (!contextName) return prev;
       const contextOverrides = { ...prev.dataplane.contextOverrides };
-      const current = { ...(contextOverrides[contextName]?.signals.overrides || {}) };
+      const current = { ...(contextOverrides[contextName]?.signals?.overrides || {}) };
       delete current[signalType];
-      if (Object.keys(current).length > 0) contextOverrides[contextName] = { signals: { overrides: current } };
+      const existing = contextOverrides[contextName] || {};
+      if (Object.keys(current).length > 0) contextOverrides[contextName] = { ...existing, signals: { overrides: current } };
+      else if (existing.metrics) contextOverrides[contextName] = { ...existing, signals: undefined };
       else delete contextOverrides[contextName];
       return { ...updateDataplane(prev, { signals }), dataplane: { ...prev.dataplane, contextOverrides } };
     });
@@ -484,7 +525,10 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
       const contextName = activeContext.trim();
       if (!contextName) return prev;
       const contextOverrides = { ...prev.dataplane.contextOverrides };
-      delete contextOverrides[contextName];
+      const existing = contextOverrides[contextName];
+      if (!existing) return prev;
+      if (existing.metrics) contextOverrides[contextName] = { ...existing, signals: undefined };
+      else delete contextOverrides[contextName];
       return { ...updateDataplane(prev, { signals }), dataplane: { ...prev.dataplane, contextOverrides } };
     });
   };
@@ -1127,7 +1171,24 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
   );
 
   const renderDataplane = () => {
-    const dp = settings.dataplane.global;
+    const contextName = activeContext.trim();
+    const activeContextOverride = contextName ? (settings.dataplane.contextOverrides[contextName] || {}) : {};
+    const contextSignals = activeContextOverride.signals?.overrides || {};
+    const dp = dataplaneEditScope === "context"
+      ? {
+        ...settings.dataplane.global,
+        metrics: {
+          ...settings.dataplane.global.metrics,
+          ...(activeContextOverride.metrics && typeof activeContextOverride.metrics.enabled === "boolean"
+            ? { enabled: activeContextOverride.metrics.enabled }
+            : {}),
+        },
+        signals: {
+          ...settings.dataplane.global.signals,
+          overrides: { ...settings.dataplane.global.signals.overrides, ...contextSignals },
+        },
+      }
+      : settings.dataplane.global;
     const ne = dp.namespaceEnrichment;
     const sweep = ne.sweep;
     const signalDefaults = defaultDataplaneSettings().signals;
@@ -1136,9 +1197,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
     const estimatedSweepHours = sweep.maxNamespacesPerHour > 0 && namespaces.length > 0
       ? Math.ceil(namespaces.length / sweep.maxNamespacesPerHour)
       : 0;
-    const activeContextSignalOverrides = activeContext
-      ? (settings.dataplane.contextOverrides[activeContext]?.signals.overrides || {})
-      : {};
+    const activeContextSignalOverrides = contextSignals;
     const filteredSignalCatalog = signalCatalog.filter((item) => {
       const q = signalCatalogQuery.trim().toLowerCase();
       if (!q) return true;
@@ -1172,6 +1231,25 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
             Dataplane controls cached Kubernetes snapshots, namespace enrichment, metrics sampling, and the signals derived
             from that data.
           </Typography>
+          <Box sx={{ mt: 1 }}>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={dataplaneEditScope}
+              onChange={(_, value: "global" | "context" | null) => {
+                if (!value) return;
+                setDataplaneEditScope(value);
+              }}
+            >
+              <ToggleButton value="global">Global defaults</ToggleButton>
+              <ToggleButton value="context" disabled={!activeContext}>This context</ToggleButton>
+            </ToggleButtonGroup>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+              {dataplaneEditScope === "context" && activeContext
+                ? `Editing sparse overrides for ${activeContext}. Unchanged fields inherit from global defaults.`
+                : "Editing global defaults shared by all contexts without local overrides."}
+            </Typography>
+          </Box>
         </Box>
 
         <Paper variant="outlined" sx={{ px: 1, pt: 0.5 }}>
@@ -1437,10 +1515,36 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
             "Metrics (metrics.k8s.io)",
             "Real-time pod and node usage from metrics-server. Disabled automatically when the API is missing or RBAC denies it; this toggle adds a soft gate on top of capability detection.",
           )}
-          <FormControlLabel
-            control={<Switch checked={dp.metrics.enabled} onChange={(e) => setDataplaneMetrics({ enabled: e.target.checked })} />}
-            label={labelWithHint("Enable metrics integration", "Allows dataplane to request metrics.k8s.io snapshots when the cluster and RBAC permit it.")}
-          />
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={dp.metrics.enabled}
+                  onChange={(e) => {
+                    if (dataplaneEditScope === "context") setContextMetricsEnabled(e.target.checked);
+                    else setDataplaneMetrics({ enabled: e.target.checked });
+                  }}
+                />
+              }
+              label={labelWithHint("Enable metrics integration", "Allows dataplane to request metrics.k8s.io snapshots when the cluster and RBAC permit it.")}
+            />
+            {dataplaneEditScope === "context" ? (
+              <>
+                <Typography variant="caption" color="text.secondary">
+                  {activeContextOverride.metrics?.enabled === undefined
+                    ? `Inherited from global (${settings.dataplane.global.metrics.enabled ? "enabled" : "disabled"})`
+                    : "Context override active"}
+                </Typography>
+                <Button
+                  size="small"
+                  disabled={activeContextOverride.metrics?.enabled === undefined}
+                  onClick={() => resetContextMetricsOverride()}
+                >
+                  Reset override
+                </Button>
+              </>
+            ) : null}
+          </Box>
           <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
             {numField(
               "Pod metrics TTL (sec)",
@@ -1565,16 +1669,16 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                 <TextField
                   select
                   size="small"
-                  label="Edit scope"
-                  value={signalOverrideScope}
-                  onChange={(e) => setSignalOverrideScope(e.target.value as "global" | "context")}
+                  label="Scope"
+                  value={dataplaneEditScope}
+                  disabled
                   sx={{ minWidth: 180 }}
                 >
                   <MenuItem value="global">Global defaults</MenuItem>
-                  <MenuItem value="context" disabled={!activeContext}>This context</MenuItem>
+                  <MenuItem value="context">This context</MenuItem>
                 </TextField>
-                <Button size="small" onClick={() => resetSignalOverrides(signalOverrideScope)}>
-                  Reset {signalOverrideScope === "global" ? "global" : "context"} overrides
+                <Button size="small" onClick={() => resetSignalOverrides(dataplaneEditScope)}>
+                  Reset {dataplaneEditScope === "global" ? "global" : "context"} overrides
                 </Button>
               </Box>
             </Box>
@@ -1583,7 +1687,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               label="Filter signals"
               value={signalCatalogQuery}
               onChange={(e) => setSignalCatalogQuery(e.target.value)}
-              helperText={signalOverrideScope === "context" && activeContext ? `Editing local overrides for ${activeContext}.` : "Editing global signal defaults."}
+              helperText={dataplaneEditScope === "context" && activeContext ? `Editing local overrides for ${activeContext}.` : "Editing global signal defaults."}
             />
             {signalCatalogError ? <Alert severity="warning">{signalCatalogError}</Alert> : null}
             {filteredSignalCatalog.length === 0 ? (
@@ -1595,13 +1699,13 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                 {filteredSignalCatalog.map((item) => {
                   const globalOverride = dp.signals.overrides[item.type] || {};
                   const contextOverride = activeContextSignalOverrides[item.type] || {};
-                  const override = signalOverrideScope === "global"
+                  const override = dataplaneEditScope === "global"
                     ? globalOverride
                     : contextOverride;
-                  const inheritedEnabled = signalOverrideScope === "context"
+                  const inheritedEnabled = dataplaneEditScope === "context"
                     ? (globalOverride.enabled ?? item.defaultEnabled)
                     : item.defaultEnabled;
-                  const inheritedSeverity = signalOverrideScope === "context"
+                  const inheritedSeverity = dataplaneEditScope === "context"
                     ? (globalOverride.severity || item.defaultSeverity || "low")
                     : (item.defaultSeverity || "low");
                   const effectiveSeverity = contextOverride.severity || globalOverride.severity || item.defaultSeverity;
@@ -1647,7 +1751,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                             control={
                               <Switch
                                 checked={enabledChecked}
-                                onChange={(e) => setSignalOverride(item.type, signalOverrideScope, { enabled: e.target.checked })}
+                                onChange={(e) => setSignalOverride(item.type, dataplaneEditScope, { enabled: e.target.checked })}
                               />
                             }
                             label="Enabled"
@@ -1657,7 +1761,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                               {override.enabled === undefined ? `Inherits ${inheritedEnabled ? "enabled" : "disabled"}` : "Overrides inherited state"}
                             </Typography>
                             {override.enabled !== undefined ? (
-                              <Button size="small" onClick={() => setSignalOverride(item.type, signalOverrideScope, { enabled: undefined })}>
+                              <Button size="small" onClick={() => setSignalOverride(item.type, dataplaneEditScope, { enabled: undefined })}>
                                 Inherit
                               </Button>
                             ) : null}
@@ -1670,7 +1774,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                           value={severityValue}
                           onChange={(e) => {
                             const value = e.target.value;
-                            setSignalOverride(item.type, signalOverrideScope, {
+                            setSignalOverride(item.type, dataplaneEditScope, {
                               severity: value === "inherit" ? undefined : value as SignalOverride["severity"],
                             });
                           }}
@@ -1686,13 +1790,13 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                           type="number"
                           label="Display priority"
                           value={override.priority ?? ""}
-                          onChange={(e) => setSignalOverride(item.type, signalOverrideScope, {
+                          onChange={(e) => setSignalOverride(item.type, dataplaneEditScope, {
                             priority: e.target.value === "" ? undefined : Math.round(Number(e.target.value) || 0),
                           })}
-                          helperText={`Inherits ${signalOverrideScope === "context" ? (globalOverride.priority ?? item.defaultPriority) : item.defaultPriority}`}
+                          helperText={`Inherits ${dataplaneEditScope === "context" ? (globalOverride.priority ?? item.defaultPriority) : item.defaultPriority}`}
                         />
                         <Box sx={{ display: "flex", alignItems: "center" }}>
-                          <Button size="small" disabled={!changed} onClick={() => resetSignalOverride(item.type, signalOverrideScope)}>
+                          <Button size="small" disabled={!changed} onClick={() => resetSignalOverride(item.type, dataplaneEditScope)}>
                             Reset signal
                           </Button>
                         </Box>
