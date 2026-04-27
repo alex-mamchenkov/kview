@@ -2,6 +2,7 @@ package dataplane
 
 import (
 	"testing"
+	"time"
 
 	"github.com/korex-labs/kview/internal/kube/dto"
 )
@@ -98,6 +99,76 @@ func TestEnrichPodListItemsWithMetrics(t *testing.T) {
 	}
 	if out[1].UsageAvailable {
 		t.Fatalf("p2 must not report usage when no metrics matched")
+	}
+}
+
+func TestEnrichPodListItemsWithSignalSummary_UsesBackendSignals(t *testing.T) {
+	policy := DefaultDataplanePolicy()
+	policy.Dashboard.RestartElevatedThreshold = 3
+	policy.Metrics.ContainerNearLimitPct = 90
+	now := time.Unix(1_700_000_000, 0)
+	items := []dto.PodListItemDTO{
+		{
+			Name:             "api",
+			Namespace:        "team-a",
+			Phase:            "Running",
+			Ready:            "1/1",
+			Restarts:         4,
+			CPULimitMilli:    100,
+			MemoryLimitBytes: 100 * 1024 * 1024,
+		},
+		{
+			Name:      "ok",
+			Namespace: "team-a",
+			Phase:     "Running",
+			Ready:     "1/1",
+		},
+	}
+	podMetrics := []dto.PodMetricsDTO{
+		{
+			Namespace: "team-a",
+			Name:      "api",
+			Containers: []dto.ContainerMetricsDTO{
+				{Name: "c", CPUMilli: 110, MemoryBytes: 20 * 1024 * 1024},
+			},
+		},
+	}
+	enriched := EnrichPodListItemsWithMetrics(items, BuildPodMetricsIndex(podMetrics))
+	out := EnrichPodListItemsWithSignalSummary(enriched, "team-a", podMetrics, policy, now)
+	if out[0].ListSignalSeverity != "high" || out[0].ListSignalCount != 2 {
+		t.Fatalf("api pod should summarize 2 backend signals with high severity: %+v", out[0])
+	}
+	if out[1].ListSignalSeverity != listSignalOK || out[1].ListSignalCount != 0 {
+		t.Fatalf("ok pod should have no backend signals: %+v", out[1])
+	}
+}
+
+func TestEnrichPodListItemsWithSignalSummary_RespectsConfiguredThreshold(t *testing.T) {
+	policy := DefaultDataplanePolicy()
+	policy.Metrics.ContainerNearLimitPct = 95
+	now := time.Unix(1_700_000_000, 0)
+	items := []dto.PodListItemDTO{
+		{
+			Name:          "api",
+			Namespace:     "team-a",
+			Phase:         "Running",
+			Ready:         "1/1",
+			CPULimitMilli: 100,
+		},
+	}
+	podMetrics := []dto.PodMetricsDTO{
+		{
+			Namespace: "team-a",
+			Name:      "api",
+			Containers: []dto.ContainerMetricsDTO{
+				{Name: "c", CPUMilli: 92},
+			},
+		},
+	}
+	enriched := EnrichPodListItemsWithMetrics(items, BuildPodMetricsIndex(podMetrics))
+	out := EnrichPodListItemsWithSignalSummary(enriched, "team-a", podMetrics, policy, now)
+	if out[0].ListSignalSeverity != listSignalOK || out[0].ListSignalCount != 0 {
+		t.Fatalf("92%% of limit should not trigger signal when threshold is 95%%: %+v", out[0])
 	}
 }
 

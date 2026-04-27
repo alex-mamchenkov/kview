@@ -50,7 +50,12 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 		// percent-of-request and percent-of-limit can be computed here
 		// without re-reading pod specs. The drawer merges per-container
 		// usage against each container's own spec in the detail handler.
-		items := dataplane.EnrichPodListItemsWithMetrics(snap.Items, podMetricsIndexOrNil(s, active, ns))
+		var podMetricsItems []dto.PodMetricsDTO
+		if msnap, ok := s.dp.PodMetricsCachedSnapshot(active, ns); ok && len(msnap.Items) > 0 {
+			podMetricsItems = msnap.Items
+		}
+		items := dataplane.EnrichPodListItemsWithMetrics(snap.Items, dataplane.BuildPodMetricsIndex(podMetricsItems))
+		items = dataplane.EnrichPodListItemsWithSignalSummary(items, ns, podMetricsItems, s.dp.Policy(), time.Now())
 		writeDataplaneListResponse(w, active, items, snap.Meta, snap.Err)
 	})
 

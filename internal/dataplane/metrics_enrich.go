@@ -2,6 +2,7 @@ package dataplane
 
 import (
 	"strings"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -85,6 +86,68 @@ func EnrichPodListItemsWithMetrics(items []dto.PodListItemDTO, metrics PodMetric
 		enriched[i] = row
 	}
 	return enriched
+}
+
+// EnrichPodListItemsWithSignalSummary applies backend pod signal detectors to
+// list rows and sets ListSignalSeverity/ListSignalCount from detected signals:
+// highest severity + total signal count per pod.
+//
+// This keeps UI list chips aligned with backend-derived signals (same source
+// as per-resource signals endpoint) and avoids client-side warning heuristics.
+func EnrichPodListItemsWithSignalSummary(items []dto.PodListItemDTO, namespace string, podMetricsItems []dto.PodMetricsDTO, policy DataplanePolicy, now time.Time) []dto.PodListItemDTO {
+	if len(items) == 0 {
+		return items
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	set := dashboardSnapshotSet{
+		podsOK:                true,
+		pods:                  PodsSnapshot{Items: items},
+		restartThreshold:      int32(policy.Dashboard.RestartElevatedThreshold),
+		containerNearLimitPct: policy.Metrics.ContainerNearLimitPct,
+	}
+	if len(podMetricsItems) > 0 {
+		set.podMetricsOK = true
+		set.podMetrics = PodMetricsSnapshot{Items: podMetricsItems}
+	}
+	signals := detectDashboardSignals(now, namespace, set)
+	if len(signals) == 0 {
+		out := append([]dto.PodListItemDTO(nil), items...)
+		for i := range out {
+			out[i].ListSignalSeverity = listSignalOK
+			out[i].ListSignalCount = 0
+		}
+		return out
+	}
+	type podSignalSummary struct {
+		severity string
+		count    int
+	}
+	byPod := make(map[string]podSignalSummary, len(items))
+	for _, signal := range signals {
+		if signal.ResourceKind != "Pod" || signal.ResourceName == "" {
+			continue
+		}
+		sum := byPod[signal.ResourceName]
+		addSeverityCount(&sum.severity, &sum.count, signal.Severity, 1)
+		byPod[signal.ResourceName] = sum
+	}
+	out := append([]dto.PodListItemDTO(nil), items...)
+	for i := range out {
+		sum, ok := byPod[out[i].Name]
+		if !ok || sum.count <= 0 {
+			out[i].ListSignalSeverity = listSignalOK
+			out[i].ListSignalCount = 0
+			continue
+		}
+		if sum.severity == "" {
+			sum.severity = listSignalOK
+		}
+		out[i].ListSignalSeverity = sum.severity
+		out[i].ListSignalCount = sum.count
+	}
+	return out
 }
 
 // EnrichNodeListItemsWithMetrics merges per-node CPU/memory usage and
