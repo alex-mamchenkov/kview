@@ -2,10 +2,14 @@ package jobdebug
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -290,31 +294,78 @@ func TestManager_StopNoJobYet(t *testing.T) {
 	}
 }
 
-func TestManager_Stream_DrainsThenStops(t *testing.T) {
+var wsUpgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+
+func wsTestServer(t *testing.T, fn func(conn *websocket.Conn)) (*httptest.Server, string) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := wsUpgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		fn(conn)
+	}))
+	url := "ws" + strings.TrimPrefix(srv.URL, "http")
+	return srv, url
+}
+
+func wsCollect(t *testing.T, url string) []Record {
+	t.Helper()
+	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	var out []Record
+	for {
+		var rec Record
+		if err := conn.ReadJSON(&rec); err != nil {
+			break
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+// TestSession_Stream_DrainsThenStops verifies that Stream() sends all buffered
+// records over the WebSocket connection and returns once the session is closed.
+func TestSession_Stream_DrainsThenStops(t *testing.T) {
 	s := &Session{}
 	s.append(Record{Type: "log", Line: "a"})
 	s.append(Record{Type: "log", Line: "b"})
 	s.close()
 
-	var got []Record
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+	srv, url := wsTestServer(t, func(conn *websocket.Conn) {
+		s.Stream(context.Background(), conn)
+	})
+	defer srv.Close()
 
-	// Collect records in the background via a fake conn-less approach:
-	// we call Stream and collect records by intercepting the records slice directly
-	// since writing to a real websocket.Conn is not testable here.
-	// Instead verify the invariants directly.
-	s.mu.Lock()
-	got = append(got, s.records...)
-	s.mu.Unlock()
-
+	got := wsCollect(t, url)
 	if len(got) != 2 {
-		t.Errorf("expected 2 records, got %d", len(got))
+		t.Fatalf("expected 2 records, got %d", len(got))
 	}
 	if got[0].Line != "a" || got[1].Line != "b" {
 		t.Errorf("unexpected record order: %+v", got)
 	}
-	_ = ctx
+}
+
+// TestSession_Stream_ContextCancel verifies that Stream() returns promptly when
+// the context is cancelled, without sending any records.
+func TestSession_Stream_ContextCancel(t *testing.T) {
+	s := &Session{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	srv, url := wsTestServer(t, func(conn *websocket.Conn) {
+		s.Stream(ctx, conn)
+	})
+	defer srv.Close()
+
+	got := wsCollect(t, url)
+	if len(got) != 0 {
+		t.Errorf("expected 0 records after context cancel, got %d", len(got))
+	}
 }
 
 func TestRandomID_Length(t *testing.T) {
