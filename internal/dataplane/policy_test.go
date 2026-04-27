@@ -79,3 +79,81 @@ func TestManagerPolicyConcurrentAccess(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestPolicyBundleInheritanceAndContextMetricsDisable(t *testing.T) {
+	disabled := false
+	bundle := ValidateDataplanePolicyBundle(DataplanePolicyBundle{
+		Global: DefaultDataplanePolicy(),
+		ContextOverrides: map[string]DataplanePolicyOverride{
+			"dev": {
+				Metrics: &MetricsPolicyOverride{
+					Enabled: &disabled,
+				},
+			},
+		},
+	})
+	dev := bundle.EffectivePolicy("dev")
+	prod := bundle.EffectivePolicy("prod")
+	if dev.Metrics.Enabled {
+		t.Fatalf("expected metrics disabled in dev override")
+	}
+	if !prod.Metrics.Enabled {
+		t.Fatalf("expected metrics enabled for inherited context")
+	}
+}
+
+func TestPolicyBundleOverrideClearingByNilTTL(t *testing.T) {
+	v := 17
+	bundle := ValidateDataplanePolicyBundle(DataplanePolicyBundle{
+		Global: DefaultDataplanePolicy(),
+		ContextOverrides: map[string]DataplanePolicyOverride{
+			"ctx": {
+				Snapshots: &SnapshotPolicyOverride{
+					TTLSeconds: map[string]*int{
+						string(ResourceKindPods): &v,
+					},
+				},
+			},
+		},
+	})
+	override := bundle.EffectivePolicy("ctx")
+	if got := override.Snapshots.TTLSeconds[string(ResourceKindPods)]; got != 17 {
+		t.Fatalf("expected overridden pod TTL=17, got %d", got)
+	}
+	bundle.ContextOverrides["ctx"] = DataplanePolicyOverride{
+		Snapshots: &SnapshotPolicyOverride{
+			TTLSeconds: map[string]*int{
+				string(ResourceKindPods): nil,
+			},
+		},
+	}
+	cleared := ValidateDataplanePolicyBundle(bundle).EffectivePolicy("ctx")
+	if got := cleared.Snapshots.TTLSeconds[string(ResourceKindPods)]; got == 17 {
+		t.Fatalf("expected cleared override to inherit global pod TTL, got %d", got)
+	}
+}
+
+func TestPolicyBundleManualProfileDisablesObserversAndEnrichment(t *testing.T) {
+	profile := DataplaneProfileManual
+	bundle := ValidateDataplanePolicyBundle(DataplanePolicyBundle{
+		Global: DefaultDataplanePolicy(),
+		ContextOverrides: map[string]DataplanePolicyOverride{
+			"manual-ctx": {
+				Profile: &profile,
+			},
+		},
+	})
+	got := bundle.EffectivePolicy("manual-ctx")
+	if got.Profile != DataplaneProfileManual {
+		t.Fatalf("expected manual profile, got %q", got.Profile)
+	}
+	if got.Observers.Enabled {
+		t.Fatalf("expected observers disabled for manual profile")
+	}
+	if got.NamespaceEnrichment.Enabled {
+		t.Fatalf("expected namespace enrichment disabled for manual profile")
+	}
+	if got.NamespaceEnrichment.Sweep.Enabled {
+		t.Fatalf("expected namespace sweep disabled for manual profile")
+	}
+}

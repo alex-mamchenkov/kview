@@ -232,7 +232,7 @@ func (m *manager) BeginNamespaceListProgressiveEnrichment(cluster string, items 
 	if m.clients == nil || len(items) == 0 {
 		return 0
 	}
-	policy := m.Policy().NamespaceEnrichment
+	policy := m.EffectivePolicy(cluster).NamespaceEnrichment
 	if !policy.Enabled {
 		return 0
 	}
@@ -497,7 +497,7 @@ func (m *manager) runNamespaceListEnrichment(ctx context.Context, cluster string
 	var runErr error
 	defer func() { m.finalizeNsEnrichActivity(sess.activityID, sess, runErr) }()
 
-	policy := m.Policy().NamespaceEnrichment
+	policy := m.EffectivePolicy(cluster).NamespaceEnrichment
 	if len(sess.workNames) > 0 {
 		m.patchNsEnrichActivityProgress(sess.activityID, sess, "focused_idle_wait")
 		runErr = m.waitAPIQuiet(ctx, time.Duration(policy.IdleQuietMs)*time.Millisecond)
@@ -544,7 +544,7 @@ func (m *manager) runNamespaceEnrichmentBatch(ctx context.Context, cluster strin
 	if maxParallel <= 0 {
 		maxParallel = 1
 	}
-	policy := m.Policy().NamespaceEnrichment
+	policy := m.EffectivePolicy(cluster).NamespaceEnrichment
 	sem := make(chan struct{}, maxParallel)
 	g, gctx := errgroup.WithContext(ctx)
 

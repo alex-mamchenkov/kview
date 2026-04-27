@@ -110,7 +110,7 @@ func (m *manager) ResourceSignals(ctx context.Context, clusterName, scope, names
 		return ResourceSignalsResult{}, nil
 	}
 
-	policy := m.Policy()
+	policy := m.EffectivePolicy(clusterName)
 	thresholds := signalThresholdsFromPolicy(policy)
 	store := newDashboardSignalStore()
 	now := time.Now()

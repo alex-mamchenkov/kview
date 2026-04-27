@@ -119,7 +119,7 @@ func warmPodMetricsAsync(s *Server, clusterName, namespace string) {
 	if s == nil || s.dp == nil {
 		return
 	}
-	if !s.dp.Policy().Metrics.Enabled {
+	if !s.dp.EffectivePolicy(clusterName).Metrics.Enabled {
 		return
 	}
 	go func() {
@@ -134,7 +134,7 @@ func warmNodeMetricsAsync(s *Server, clusterName string) {
 	if s == nil || s.dp == nil {
 		return
 	}
-	if !s.dp.Policy().Metrics.Enabled {
+	if !s.dp.EffectivePolicy(clusterName).Metrics.Enabled {
 		return
 	}
 	go func() {

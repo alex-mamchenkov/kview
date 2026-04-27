@@ -55,7 +55,7 @@ func (s *Server) registerActivityAndDataplaneRoutes(api chi.Router) {
 		ctx, cancel := context.WithTimeout(r.Context(), ctxTimeoutStatus)
 		defer cancel()
 		resp["capability"] = s.dp.MetricsCapability(ctx, active)
-		resp["enabled"] = s.dp.Policy().Metrics.Enabled
+		resp["enabled"] = s.dp.EffectivePolicy(active).Metrics.Enabled
 		writeJSON(w, http.StatusOK, resp)
 	})
 
@@ -90,7 +90,7 @@ func (s *Server) registerActivityAndDataplaneRoutes(api chi.Router) {
 		contextName := s.readContextName(r)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"active": contextName,
-			"items":  dataplane.DashboardSignalCatalog(s.dp.Policy(), contextName),
+			"items":  dataplane.DashboardSignalCatalog(s.dp.EffectivePolicy(contextName), contextName),
 		})
 	})
 

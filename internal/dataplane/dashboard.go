@@ -267,7 +267,7 @@ type ClusterDashboardDataplaneKindStats struct {
 // DashboardSummary builds a bounded cluster dashboard from cached snapshots.
 func (m *manager) DashboardSummary(ctx context.Context, clusterName string, opts ClusterDashboardListOptions) ClusterDashboardSummary {
 	ctx = ContextWithWorkSourceIfUnset(ctx, WorkSourceDashboard)
-	policy := m.Policy()
+	policy := m.EffectivePolicy(clusterName)
 	planeAny, _ := m.PlaneForCluster(ctx, clusterName)
 	plane := planeAny.(*clusterPlane)
 

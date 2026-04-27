@@ -30,7 +30,7 @@ func (m *manager) NamespaceInsightsProjection(ctx context.Context, clusterName, 
 	plane := planeAny.(*clusterPlane)
 	ctx = ContextWithWorkSourceIfUnset(ctx, WorkSourceProjection)
 	prio := WorkPriorityHigh
-	policy := m.Policy()
+	policy := m.EffectivePolicy(clusterName)
 	thresholds := signalThresholdsFromPolicy(policy)
 
 	podsSnap, podsErr := plane.PodsSnapshot(ctx, m.scheduler, m.clients, namespace, prio)

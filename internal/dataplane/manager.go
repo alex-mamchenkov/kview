@@ -212,6 +212,8 @@ type DataPlaneManager interface {
 
 	// Policy returns the current dataplane behavior policy.
 	Policy() DataplanePolicy
+	// EffectivePolicy returns context-aware policy with overrides applied.
+	EffectivePolicy(contextName string) DataplanePolicy
 	// SetPolicy updates the current dataplane behavior policy for existing and future planes.
 	SetPolicy(policy DataplanePolicy) DataplanePolicy
 
@@ -270,6 +272,7 @@ type manager struct {
 
 	policyMu sync.RWMutex
 	policy   DataplanePolicy
+	bundle   DataplanePolicyBundle
 
 	persistenceMu sync.RWMutex
 	persistence   snapshotPersistence
@@ -304,7 +307,10 @@ func NewManager(cfg ManagerConfig) DataPlaneManager {
 		cp = managerClients{m: cfg.ClusterManager}
 	}
 
-	policy := ValidateDataplanePolicy(cfg.Policy)
+	bundle := ValidateDataplanePolicyBundle(DataplanePolicyBundle{
+		Global: cfg.Policy,
+	})
+	policy := bundle.Global
 
 	sched := newWorkScheduler(policy.BackgroundBudget.MaxConcurrentPerCluster)
 	sched.configureRetries(policy.BackgroundBudget.TransientRetries, 100*time.Millisecond, 1500*time.Millisecond)
@@ -321,6 +327,7 @@ func NewManager(cfg ManagerConfig) DataPlaneManager {
 		clients:              cp,
 		stats:                newDataplaneSessionStats(time.Now().UTC()),
 		policy:               policy,
+		bundle:               bundle,
 		signalHistory:        map[string]map[string]signalHistoryRecord{},
 		nsEnrich:             newNsEnrichmentCoordinator(),
 		nsSweepLast:          map[string]map[string]time.Time{},
@@ -335,14 +342,22 @@ func NewManager(cfg ManagerConfig) DataPlaneManager {
 
 func (m *manager) Policy() DataplanePolicy {
 	m.policyMu.RLock()
-	policy := CloneDataplanePolicy(m.policy)
+	policy := CloneDataplanePolicy(m.bundle.Global)
 	m.policyMu.RUnlock()
 	return ValidateDataplanePolicy(policy)
+}
+
+func (m *manager) EffectivePolicy(contextName string) DataplanePolicy {
+	m.policyMu.RLock()
+	bundle := CloneDataplanePolicyBundle(m.bundle)
+	m.policyMu.RUnlock()
+	return bundle.EffectivePolicy(contextName)
 }
 
 func (m *manager) SetPolicy(policy DataplanePolicy) DataplanePolicy {
 	next := ValidateDataplanePolicy(policy)
 	m.policyMu.Lock()
+	m.bundle.Global = next
 	m.policy = next
 	m.policyMu.Unlock()
 	if m.scheduler != nil {
@@ -438,9 +453,11 @@ func (m *manager) PlaneForCluster(_ context.Context, clusterName string) (Cluste
 		Namespaces:    nil,
 		ResourceKinds: nil,
 	}
-	p := newClusterPlane(clusterName, m.defaultProfile, m.defaultDiscoveryMode, scope, m.Policy, m.currentPersistence, m.stats)
+	p := newClusterPlane(clusterName, m.defaultProfile, m.defaultDiscoveryMode, scope, func() DataplanePolicy {
+		return m.EffectivePolicy(clusterName)
+	}, m.currentPersistence, m.stats)
 	m.planes[clusterName] = p
-	policy := m.Policy()
+	policy := m.EffectivePolicy(clusterName)
 	if policy.Persistence.Enabled {
 		_ = p.hydratePersistedSnapshots(policy.PersistenceMaxAge())
 		m.ensureSignalHistory(clusterName)

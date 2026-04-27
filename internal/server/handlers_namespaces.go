@@ -45,7 +45,7 @@ func (s *Server) registerNamespaceRoutes(api chi.Router) {
 		items = cachedItems
 		hints := dataplane.ParseNamespaceEnrichHints(r.URL.Query())
 		rev := s.dp.BeginNamespaceListProgressiveEnrichment(active, items, hints)
-		policy := s.dp.Policy().NamespaceEnrichment
+		policy := s.dp.EffectivePolicy(active).NamespaceEnrichment
 		rowProj := dto.NamespaceListRowProjectionMetaDTO{
 			TotalRows:    len(items),
 			EnrichedRows: cachedEnriched,

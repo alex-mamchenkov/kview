@@ -152,6 +152,9 @@ func newStubDataplane() *stubDataplane {
 func (s *stubDataplane) NoteUserActivity()                           {}
 func (s *stubDataplane) EnsureObservers(_ context.Context, _ string) {}
 func (s *stubDataplane) Policy() dataplane.DataplanePolicy           { return s.policy }
+func (s *stubDataplane) EffectivePolicy(_ string) dataplane.DataplanePolicy {
+	return s.policy
+}
 func (s *stubDataplane) SetPolicy(p dataplane.DataplanePolicy) dataplane.DataplanePolicy {
 	s.policy = p
 	return p

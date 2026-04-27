@@ -38,7 +38,7 @@ func resourceTotalsCompletenessLabel(visible, withCachedDataplaneLists int) stri
 func (m *manager) aggregateClusterDashboard(plane *clusterPlane, nsNamesSorted []string, nsTotal int, nodesSnap NodesSnapshot, nodeState string, opts ClusterDashboardListOptions) (ClusterDashboardResourcesPanel, ClusterDashboardSignalsPanel, ClusterDashboardDerivedPanel, ClusterDashboardCoverage) {
 	opts = normalizeClusterDashboardListOptions(opts)
 	cov := m.buildDashboardCoverage(plane.name, nsNamesSorted, nsTotal)
-	p := m.Policy()
+	p := m.EffectivePolicy(plane.name)
 	policy := p.Dashboard
 	thresholds := signalThresholdsFromPolicy(p)
 
