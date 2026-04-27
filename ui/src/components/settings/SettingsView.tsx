@@ -500,6 +500,11 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
           next.quotaWarnPercent = defaults.quotaWarnPercent;
           next.quotaCriticalPercent = defaults.quotaCriticalPercent;
         }
+        if (next.detectors.resource_quota_pressure.criticalPercent <= next.detectors.resource_quota_pressure.warnPercent) {
+          const defaults = defaultDataplaneSettings().signals;
+          next.detectors.resource_quota_pressure.warnPercent = defaults.detectors.resource_quota_pressure.warnPercent;
+          next.detectors.resource_quota_pressure.criticalPercent = defaults.detectors.resource_quota_pressure.criticalPercent;
+        }
         return next;
       };
       if (dataplaneEditScope === "global") {
@@ -579,24 +584,6 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
           : undefined,
       };
       const cleaned = stripUndefinedDeep(nextOverride);
-      if (cleaned) contextOverrides[contextName] = cleaned;
-      else delete contextOverrides[contextName];
-      return { ...prev, dataplane: { ...prev.dataplane, contextOverrides } };
-    });
-  };
-
-  const resetSignalOverrides = (scope: "global" | "context") => {
-    setSettings((prev) => {
-      const signals = prev.dataplane.global.signals;
-      if (scope === "global") {
-        return updateDataplane(prev, { signals: { ...signals, overrides: {} } });
-      }
-      const contextName = activeContext.trim();
-      if (!contextName) return prev;
-      const contextOverrides = { ...prev.dataplane.contextOverrides };
-      const existing = contextOverrides[contextName];
-      if (!existing) return prev;
-      const cleaned = stripUndefinedDeep({ ...existing, signals: undefined });
       if (cleaned) contextOverrides[contextName] = cleaned;
       else delete contextOverrides[contextName];
       return { ...prev, dataplane: { ...prev.dataplane, contextOverrides } };
@@ -1317,12 +1304,134 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
     const ne = dp.namespaceEnrichment;
     const sweep = ne.sweep;
     const signalDefaults = defaultDataplaneSettings().signals;
+    const signalDetectors = {
+      pod_restarts: {
+        ...signalDefaults.detectors.pod_restarts,
+        ...(dp.signals.detectors?.pod_restarts || {}),
+      },
+      container_near_limit: {
+        ...signalDefaults.detectors.container_near_limit,
+        ...(dp.signals.detectors?.container_near_limit || {}),
+      },
+      node_resource_pressure: {
+        ...signalDefaults.detectors.node_resource_pressure,
+        ...(dp.signals.detectors?.node_resource_pressure || {}),
+      },
+      resource_quota_pressure: {
+        ...signalDefaults.detectors.resource_quota_pressure,
+        ...(dp.signals.detectors?.resource_quota_pressure || {}),
+      },
+    };
     const profileLabel = dataplaneProfileLabel(dp.profile);
     const profileEnrichmentText = dataplaneProfileEnrichmentText(dp.profile);
     const estimatedSweepHours = sweep.maxNamespacesPerHour > 0 && namespaces.length > 0
       ? Math.ceil(namespaces.length / sweep.maxNamespacesPerHour)
       : 0;
     const activeContextSignalOverrides = contextSignals;
+    const signalThresholdPaths = (signalType: string): string[][] => {
+      switch (signalType) {
+        case "pod_restarts":
+          return [["signals", "detectors", "pod_restarts", "restartCount"]];
+        case "container_near_limit":
+          return [["signals", "detectors", "container_near_limit", "percent"]];
+        case "node_resource_pressure":
+          return [["signals", "detectors", "node_resource_pressure", "percent"]];
+        case "resource_quota_pressure":
+          return [
+            ["signals", "detectors", "resource_quota_pressure", "warnPercent"],
+            ["signals", "detectors", "resource_quota_pressure", "criticalPercent"],
+          ];
+        case "long_running_job":
+          return [["signals", "longRunningJobSec"]];
+        case "cronjob_no_recent_success":
+          return [["signals", "cronJobNoRecentSuccessSec"]];
+        case "stale_transitional_helm_release":
+          return [["signals", "staleHelmReleaseSec"]];
+        case "potentially_unused_pvc":
+        case "potentially_unused_serviceaccount":
+          return [["signals", "unusedResourceAgeSec"]];
+        case "pod_young_frequent_restarts":
+          return [["signals", "podYoungRestartWindowSec"]];
+        case "deployment_unavailable":
+          return [["signals", "deploymentUnavailableSec"]];
+        default:
+          return [];
+      }
+    };
+    const signalThresholdCustomized = (signalType: string): boolean => {
+      if (dataplaneEditScope === "context" && isContextEditing) {
+        return signalThresholdPaths(signalType).some((path) => hasOverrideAtPath(path));
+      }
+      switch (signalType) {
+        case "pod_restarts":
+          return signalDetectors.pod_restarts.restartCount !== signalDefaults.detectors.pod_restarts.restartCount;
+        case "container_near_limit":
+          return signalDetectors.container_near_limit.percent !== signalDefaults.detectors.container_near_limit.percent;
+        case "node_resource_pressure":
+          return signalDetectors.node_resource_pressure.percent !== signalDefaults.detectors.node_resource_pressure.percent;
+        case "resource_quota_pressure":
+          return signalDetectors.resource_quota_pressure.warnPercent !== signalDefaults.detectors.resource_quota_pressure.warnPercent ||
+            signalDetectors.resource_quota_pressure.criticalPercent !== signalDefaults.detectors.resource_quota_pressure.criticalPercent;
+        case "long_running_job":
+          return dp.signals.longRunningJobSec !== signalDefaults.longRunningJobSec;
+        case "cronjob_no_recent_success":
+          return dp.signals.cronJobNoRecentSuccessSec !== signalDefaults.cronJobNoRecentSuccessSec;
+        case "stale_transitional_helm_release":
+          return dp.signals.staleHelmReleaseSec !== signalDefaults.staleHelmReleaseSec;
+        case "potentially_unused_pvc":
+        case "potentially_unused_serviceaccount":
+          return dp.signals.unusedResourceAgeSec !== signalDefaults.unusedResourceAgeSec;
+        case "pod_young_frequent_restarts":
+          return dp.signals.podYoungRestartWindowSec !== signalDefaults.podYoungRestartWindowSec;
+        case "deployment_unavailable":
+          return dp.signals.deploymentUnavailableSec !== signalDefaults.deploymentUnavailableSec;
+        default:
+          return false;
+      }
+    };
+    const resetSignalCard = (signalType: string) => {
+      if (dataplaneEditScope === "context") {
+        resetSignalOverride(signalType, "context");
+        signalThresholdPaths(signalType).forEach((path) => resetOverridePath(path));
+        return;
+      }
+      resetSignalOverride(signalType, "global");
+      switch (signalType) {
+        case "pod_restarts":
+          setDataplaneSignals({ detectors: { ...signalDetectors, pod_restarts: { ...signalDefaults.detectors.pod_restarts } } });
+          break;
+        case "container_near_limit":
+          setDataplaneSignals({ detectors: { ...signalDetectors, container_near_limit: { ...signalDefaults.detectors.container_near_limit } } });
+          break;
+        case "node_resource_pressure":
+          setDataplaneSignals({ detectors: { ...signalDetectors, node_resource_pressure: { ...signalDefaults.detectors.node_resource_pressure } } });
+          break;
+        case "resource_quota_pressure":
+          setDataplaneSignals({ detectors: { ...signalDetectors, resource_quota_pressure: { ...signalDefaults.detectors.resource_quota_pressure } } });
+          break;
+        case "long_running_job":
+          setDataplaneSignals({ longRunningJobSec: signalDefaults.longRunningJobSec });
+          break;
+        case "cronjob_no_recent_success":
+          setDataplaneSignals({ cronJobNoRecentSuccessSec: signalDefaults.cronJobNoRecentSuccessSec });
+          break;
+        case "stale_transitional_helm_release":
+          setDataplaneSignals({ staleHelmReleaseSec: signalDefaults.staleHelmReleaseSec });
+          break;
+        case "potentially_unused_pvc":
+        case "potentially_unused_serviceaccount":
+          setDataplaneSignals({ unusedResourceAgeSec: signalDefaults.unusedResourceAgeSec });
+          break;
+        case "pod_young_frequent_restarts":
+          setDataplaneSignals({ podYoungRestartWindowSec: signalDefaults.podYoungRestartWindowSec });
+          break;
+        case "deployment_unavailable":
+          setDataplaneSignals({ deploymentUnavailableSec: signalDefaults.deploymentUnavailableSec });
+          break;
+        default:
+          break;
+      }
+    };
     const filteredSignalCatalog = signalCatalog.filter((item) => {
       const q = signalCatalogQuery.trim().toLowerCase();
       if (!q) return true;
@@ -1353,7 +1462,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
         <Box>
           <Typography variant="h6">Dataplane</Typography>
           <Typography variant="body2" color="text.secondary">
-            Dataplane controls cached Kubernetes snapshots, namespace enrichment, metrics sampling, and the signals derived
+            Dataplane controls cached Kubernetes snapshots, namespace enrichment, metrics sampling cadence, and the signals derived
             from that data.
           </Typography>
           <Box sx={{ mt: 1 }}>
@@ -1568,17 +1677,6 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
             {numField("Node observer (sec)", dp.observers.nodesIntervalSec, (value) => setDataplaneObservers({ nodesIntervalSec: value }), undefined, "Seconds between passive node list refreshes.", ["observers", "nodesIntervalSec"])}
             {numField("Node backoff max (sec)", dp.observers.nodesBackoffMaxSec, (value) => setDataplaneObservers({ nodesBackoffMaxSec: value }), undefined, "Maximum node observer backoff after access or connectivity failures.", ["observers", "nodesBackoffMaxSec"])}
             {numField("Dashboard refresh (sec)", dp.dashboard.refreshSec, (value) => setDataplaneDashboard({ refreshSec: value }), undefined, "Dataplane dashboard refresh interval in seconds.", ["dashboard", "refreshSec"])}
-            {numField(
-              "Restart threshold",
-              dp.signals.detectors.pod_restarts.restartCount,
-              (value) =>
-                setDataplaneSignals({
-                  detectors: { ...dp.signals.detectors, pod_restarts: { restartCount: value } },
-                }),
-              undefined,
-              "Pod restart count above which dashboard restart signals become elevated.",
-              ["signals", "detectors", "pod_restarts", "restartCount"],
-            )}
             {numField("Signal limit", dp.dashboard.signalLimit, (value) => setDataplaneDashboard({ signalLimit: value }), undefined, "Maximum number of top dashboard signals shown by default.", ["dashboard", "signalLimit"])}
           </Box>
         </Paper>
@@ -1610,7 +1708,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
         <Paper variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
           {sectionTitle(
             "Metrics (metrics.k8s.io)",
-            "Real-time pod and node usage from metrics-server. Disabled automatically when the API is missing or RBAC denies it; this toggle adds a soft gate on top of capability detection.",
+            "Real-time pod and node usage from metrics-server. This section controls metrics sampling only. Disabled automatically when the API is missing or RBAC denies it; this toggle adds a soft gate on top of capability detection.",
           )}
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
             <FormControlLabel
@@ -1664,138 +1762,28 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               "Minimum age before node metrics snapshots are refreshed.",
               ["metrics", "nodeMetricsTtlSec"],
             )}
-            {numField(
-              "Container near-limit (%)",
-              dp.signals.detectors.container_near_limit.percent,
-              (value) =>
-                setDataplaneSignals({
-                  detectors: { ...dp.signals.detectors, container_near_limit: { percent: value } },
-                }),
-              "Threshold above which containers raise a usage signal.",
-              "Percent of configured CPU or memory limit that triggers a near-limit container signal.",
-              ["signals", "detectors", "container_near_limit", "percent"],
-            )}
-            {numField(
-              "Node pressure (%)",
-              dp.signals.detectors.node_resource_pressure.percent,
-              (value) =>
-                setDataplaneSignals({
-                  detectors: { ...dp.signals.detectors, node_resource_pressure: { percent: value } },
-                }),
-              "Threshold above which nodes raise a resource-pressure signal.",
-              "Percent of node allocatable CPU or memory that triggers a node pressure signal.",
-              ["signals", "detectors", "node_resource_pressure", "percent"],
-            )}
           </Box>
         </Paper>
         ) : null}
 
         {dataplaneTab === "signals" ? (
         <Paper variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
-          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
-            {sectionTitle(
-              "Signal Thresholds",
-              "These values control when dataplane signals trigger. Defaults are applied automatically on first startup; use reset to return to system defaults.",
-            )}
-            <Tooltip title="Reset signal thresholds">
-              <IconButton
-                size="small"
-                onClick={() => {
-                  setDataplaneSignals(signalDefaults);
-                }}
-                aria-label="Reset signal thresholds"
-              >
-                <RestartAltIcon fontSize="inherit" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-          <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
-            {numField(
-              "Long-running job (sec)",
-              dp.signals.longRunningJobSec,
-              (value) => setDataplaneSignals({ longRunningJobSec: value }),
-              `Default: ${signalDefaults.longRunningJobSec}`,
-              "Job runtime in seconds before a long-running job signal can fire.",
-              ["signals", "longRunningJobSec"],
-            )}
-            {numField(
-              "CronJob no recent success (sec)",
-              dp.signals.cronJobNoRecentSuccessSec,
-              (value) => setDataplaneSignals({ cronJobNoRecentSuccessSec: value }),
-              `Default: ${signalDefaults.cronJobNoRecentSuccessSec}`,
-              "Seconds without a recorded successful CronJob run before a signal can fire.",
-              ["signals", "cronJobNoRecentSuccessSec"],
-            )}
-            {numField(
-              "Stale Helm release (sec)",
-              dp.signals.staleHelmReleaseSec,
-              (value) => setDataplaneSignals({ staleHelmReleaseSec: value }),
-              `Default: ${signalDefaults.staleHelmReleaseSec}`,
-              "Seconds a Helm release can remain transitional before it is treated as stale.",
-              ["signals", "staleHelmReleaseSec"],
-            )}
-            {numField(
-              "Unused resource age (sec)",
-              dp.signals.unusedResourceAgeSec,
-              (value) => setDataplaneSignals({ unusedResourceAgeSec: value }),
-              `Default: ${signalDefaults.unusedResourceAgeSec}`,
-              "Minimum resource age before potentially-unused signals are considered.",
-              ["signals", "unusedResourceAgeSec"],
-            )}
-            {numField(
-              "Young pod restart window (sec)",
-              dp.signals.podYoungRestartWindowSec,
-              (value) => setDataplaneSignals({ podYoungRestartWindowSec: value }),
-              `Default: ${signalDefaults.podYoungRestartWindowSec}`,
-              "Pod age window used to identify young pods with frequent restarts.",
-              ["signals", "podYoungRestartWindowSec"],
-            )}
-            {numField(
-              "Deployment unavailable (sec)",
-              dp.signals.deploymentUnavailableSec,
-              (value) => setDataplaneSignals({ deploymentUnavailableSec: value }),
-              `Default: ${signalDefaults.deploymentUnavailableSec}`,
-              "Seconds a Deployment can stay unavailable before an unavailable deployment signal can fire.",
-              ["signals", "deploymentUnavailableSec"],
-            )}
-            {numField(
-              "Quota warn (%)",
-              dp.signals.quotaWarnPercent,
-              (value) => setDataplaneSignals({ quotaWarnPercent: value }),
-              `Default: ${signalDefaults.quotaWarnPercent}`,
-              "Quota usage percent that marks quota pressure as warning.",
-              ["signals", "quotaWarnPercent"],
-            )}
-            {numField(
-              "Quota critical (%)",
-              dp.signals.quotaCriticalPercent,
-              (value) => setDataplaneSignals({ quotaCriticalPercent: value }),
-              `Default: ${signalDefaults.quotaCriticalPercent}`,
-              "Quota usage percent that marks quota pressure as critical. Must be greater than warn.",
-              ["signals", "quotaCriticalPercent"],
-            )}
-          </Box>
-          <Divider />
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
               {sectionTitle(
                 "Signal Catalog",
-                "Global overrides apply everywhere. This context overrides inherit from global values and only affect the active Kubernetes context.",
+                "Signal cards define enable/severity/priority plus detector-specific emission thresholds. Scope follows the Dataplane context switch above.",
               )}
               <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                <TextField
-                  select
-                  size="small"
-                  label="Scope"
-                  value={dataplaneEditScope}
-                  disabled
-                  sx={{ minWidth: 180 }}
-                >
-                  <MenuItem value="global">Global defaults</MenuItem>
-                  <MenuItem value="context">This context</MenuItem>
-                </TextField>
-                <Tooltip title={`Reset ${dataplaneEditScope === "global" ? "global" : "context"} overrides`}>
-                  <IconButton size="small" onClick={() => resetSignalOverrides(dataplaneEditScope)} aria-label="Reset signal overrides">
+                <Tooltip title={dataplaneEditScope === "context" ? "Reset context signal overrides and thresholds" : "Reset all signal defaults and thresholds"}>
+                  <IconButton
+                    size="small"
+                    onClick={() => {
+                      if (dataplaneEditScope === "context") resetOverrideSection("signals");
+                      else setDataplaneSignals(signalDefaults);
+                    }}
+                    aria-label="Reset signals"
+                  >
                     <RestartAltIcon fontSize="inherit" />
                   </IconButton>
                 </Tooltip>
@@ -1806,7 +1794,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               label="Filter signals"
               value={signalCatalogQuery}
               onChange={(e) => setSignalCatalogQuery(e.target.value)}
-              helperText={dataplaneEditScope === "context" && activeContext ? `Editing local overrides for ${activeContext}.` : "Editing global signal defaults."}
+              helperText={dataplaneEditScope === "context" && activeContext ? `Editing context overrides for ${activeContext}.` : "Editing global defaults."}
             />
             {signalCatalogError ? <Alert severity="warning">{signalCatalogError}</Alert> : null}
             {filteredSignalCatalog.length === 0 ? (
@@ -1830,7 +1818,150 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                   const effectiveSeverity = contextOverride.severity || globalOverride.severity || item.defaultSeverity;
                   const enabledChecked = override.enabled ?? inheritedEnabled;
                   const severityValue = override.severity || "inherit";
-                  const changed = Object.keys(override).length > 0;
+                      const changed = Object.keys(override).length > 0 || signalThresholdCustomized(item.type);
+                  const renderSignalThresholdControls = () => {
+                    const thresholdField = (
+                      label: string,
+                      value: number,
+                      onChange: (value: number) => void,
+                      helperText: string,
+                      overridePath: string[],
+                    ) => (
+                      <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
+                        <TextField
+                          size="small"
+                          type="number"
+                          label={label}
+                          value={value}
+                          onChange={(e) => onChange(Math.round(Number(e.target.value) || 0))}
+                          helperText={helperText}
+                        />
+                      </Box>
+                    );
+                    switch (item.type) {
+                      case "pod_restarts":
+                        return thresholdField(
+                          "Restart count",
+                          signalDetectors.pod_restarts.restartCount,
+                          (value) =>
+                            setDataplaneSignals({
+                              detectors: { ...signalDetectors, pod_restarts: { restartCount: value } },
+                            }),
+                          `Default: ${signalDefaults.detectors.pod_restarts.restartCount}`,
+                          ["signals", "detectors", "pod_restarts", "restartCount"],
+                        );
+                      case "container_near_limit":
+                        return thresholdField(
+                          "Percent",
+                          signalDetectors.container_near_limit.percent,
+                          (value) =>
+                            setDataplaneSignals({
+                              detectors: { ...signalDetectors, container_near_limit: { percent: value } },
+                            }),
+                          `Default: ${signalDefaults.detectors.container_near_limit.percent}`,
+                          ["signals", "detectors", "container_near_limit", "percent"],
+                        );
+                      case "node_resource_pressure":
+                        return thresholdField(
+                          "Percent",
+                          signalDetectors.node_resource_pressure.percent,
+                          (value) =>
+                            setDataplaneSignals({
+                              detectors: { ...signalDetectors, node_resource_pressure: { percent: value } },
+                            }),
+                          `Default: ${signalDefaults.detectors.node_resource_pressure.percent}`,
+                          ["signals", "detectors", "node_resource_pressure", "percent"],
+                        );
+                      case "resource_quota_pressure":
+                        return (
+                          <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+                            {thresholdField(
+                              "Warn percent",
+                              signalDetectors.resource_quota_pressure.warnPercent,
+                              (value) =>
+                                setDataplaneSignals({
+                                  detectors: {
+                                    ...signalDetectors,
+                                    resource_quota_pressure: {
+                                      ...signalDetectors.resource_quota_pressure,
+                                      warnPercent: value,
+                                    },
+                                  },
+                                }),
+                              `Default: ${signalDefaults.detectors.resource_quota_pressure.warnPercent}`,
+                              ["signals", "detectors", "resource_quota_pressure", "warnPercent"],
+                            )}
+                            {thresholdField(
+                              "Critical percent",
+                              signalDetectors.resource_quota_pressure.criticalPercent,
+                              (value) =>
+                                setDataplaneSignals({
+                                  detectors: {
+                                    ...signalDetectors,
+                                    resource_quota_pressure: {
+                                      ...signalDetectors.resource_quota_pressure,
+                                      criticalPercent: value,
+                                    },
+                                  },
+                                }),
+                              `Default: ${signalDefaults.detectors.resource_quota_pressure.criticalPercent}`,
+                              ["signals", "detectors", "resource_quota_pressure", "criticalPercent"],
+                            )}
+                          </Box>
+                        );
+                      case "long_running_job":
+                        return thresholdField(
+                          "Long running job (sec)",
+                          dp.signals.longRunningJobSec,
+                          (value) => setDataplaneSignals({ longRunningJobSec: value }),
+                          `Default: ${signalDefaults.longRunningJobSec}`,
+                          ["signals", "longRunningJobSec"],
+                        );
+                      case "cronjob_no_recent_success":
+                        return thresholdField(
+                          "No recent success (sec)",
+                          dp.signals.cronJobNoRecentSuccessSec,
+                          (value) => setDataplaneSignals({ cronJobNoRecentSuccessSec: value }),
+                          `Default: ${signalDefaults.cronJobNoRecentSuccessSec}`,
+                          ["signals", "cronJobNoRecentSuccessSec"],
+                        );
+                      case "stale_transitional_helm_release":
+                        return thresholdField(
+                          "Stale release (sec)",
+                          dp.signals.staleHelmReleaseSec,
+                          (value) => setDataplaneSignals({ staleHelmReleaseSec: value }),
+                          `Default: ${signalDefaults.staleHelmReleaseSec}`,
+                          ["signals", "staleHelmReleaseSec"],
+                        );
+                      case "potentially_unused_pvc":
+                      case "potentially_unused_serviceaccount":
+                        return thresholdField(
+                          "Unused age (sec)",
+                          dp.signals.unusedResourceAgeSec,
+                          (value) => setDataplaneSignals({ unusedResourceAgeSec: value }),
+                          `Default: ${signalDefaults.unusedResourceAgeSec}`,
+                          ["signals", "unusedResourceAgeSec"],
+                        );
+                      case "pod_young_frequent_restarts":
+                        return thresholdField(
+                          "Young restart window (sec)",
+                          dp.signals.podYoungRestartWindowSec,
+                          (value) => setDataplaneSignals({ podYoungRestartWindowSec: value }),
+                          `Default: ${signalDefaults.podYoungRestartWindowSec}`,
+                          ["signals", "podYoungRestartWindowSec"],
+                        );
+                      case "deployment_unavailable":
+                        return thresholdField(
+                          "Unavailable duration (sec)",
+                          dp.signals.deploymentUnavailableSec,
+                          (value) => setDataplaneSignals({ deploymentUnavailableSec: value }),
+                          `Default: ${signalDefaults.deploymentUnavailableSec}`,
+                          ["signals", "deploymentUnavailableSec"],
+                        );
+                      default:
+                        return null;
+                    }
+                  };
                   return (
                     <Paper key={item.type} variant="outlined" sx={{ p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
                       <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
@@ -1879,11 +2010,6 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                             <Typography variant="caption" color="text.secondary">
                               {override.enabled === undefined ? `Inherits ${inheritedEnabled ? "enabled" : "disabled"}` : "Overrides inherited state"}
                             </Typography>
-                            {override.enabled !== undefined ? (
-                              <Button size="small" onClick={() => setSignalOverride(item.type, dataplaneEditScope, { enabled: undefined })}>
-                                Inherit
-                              </Button>
-                            ) : null}
                           </Box>
                         </Box>
                         <TextField
@@ -1915,13 +2041,13 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                           helperText={`Inherits ${dataplaneEditScope === "context" ? (globalOverride.priority ?? item.defaultPriority) : item.defaultPriority}`}
                         />
                         <Box sx={{ display: "flex", alignItems: "center" }}>
-                          <Tooltip title="Reset signal override">
+                          <Tooltip title="Reset signal configuration">
                             <span>
                               <IconButton
                                 size="small"
                                 disabled={!changed}
-                                onClick={() => resetSignalOverride(item.type, dataplaneEditScope)}
-                                aria-label={`Reset ${item.type} signal override`}
+                                onClick={() => resetSignalCard(item.type)}
+                                aria-label={`Reset ${item.type} signal configuration`}
                               >
                                 <RestartAltIcon fontSize="inherit" />
                               </IconButton>
@@ -1929,6 +2055,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                           </Tooltip>
                         </Box>
                       </Box>
+                      {renderSignalThresholdControls()}
                     </Paper>
                   );
                 })}

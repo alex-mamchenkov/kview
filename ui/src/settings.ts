@@ -151,8 +151,7 @@ export type DataplaneSettings = {
    * Metrics integrates real-time pod and node usage from metrics.k8s.io.
    * `enabled` is a soft gate that the backend pairs with capability detection
    * (Installed + Allowed) before any UI widget is shown. TTLs control sample
-   * frequency; the percent thresholds drive heuristic signals
-   * (container near limit, node resource pressure).
+   * frequency for dataplane usage snapshots.
    */
   metrics: {
     enabled: boolean;
@@ -1258,10 +1257,31 @@ function mergeDataplaneContextOverride(
   override: DataplaneContextOverrideSettings | undefined,
 ): DataplaneSettings {
   if (!override) return global;
+  const overrideDetectors = override.signals?.detectors;
   const mergedSignals = override.signals
     ? {
       ...global.signals,
       ...override.signals,
+      detectors: {
+        ...global.signals.detectors,
+        ...(overrideDetectors || {}),
+        pod_restarts: {
+          ...global.signals.detectors.pod_restarts,
+          ...(overrideDetectors?.pod_restarts || {}),
+        },
+        container_near_limit: {
+          ...global.signals.detectors.container_near_limit,
+          ...(overrideDetectors?.container_near_limit || {}),
+        },
+        node_resource_pressure: {
+          ...global.signals.detectors.node_resource_pressure,
+          ...(overrideDetectors?.node_resource_pressure || {}),
+        },
+        resource_quota_pressure: {
+          ...global.signals.detectors.resource_quota_pressure,
+          ...(overrideDetectors?.resource_quota_pressure || {}),
+        },
+      },
       overrides: { ...global.signals.overrides, ...(override.signals.overrides || {}) },
     }
     : global.signals;
