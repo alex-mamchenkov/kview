@@ -184,6 +184,29 @@ describe("user settings", () => {
     expect(parsed?.dataplane.contextOverrides["stage-us"]?.metrics?.enabled).toBe(false);
   });
 
+  it("keeps global metrics TTL unchanged when context override is created", () => {
+    const settings = defaultUserSettings();
+    const globalPodTtl = settings.dataplane.global.metrics.podMetricsTtlSec;
+    const updated = {
+      ...settings,
+      dataplane: {
+        ...settings.dataplane,
+        contextOverrides: {
+          ...settings.dataplane.contextOverrides,
+          "stage-us": {
+            metrics: {
+              podMetricsTtlSec: 99,
+            },
+          },
+        },
+      },
+    };
+    const effective = dataplaneSettingsForContext(updated.dataplane, "stage-us");
+    expect(updated.dataplane.global.metrics.podMetricsTtlSec).toBe(globalPodTtl);
+    expect(updated.dataplane.contextOverrides["stage-us"]?.metrics?.podMetricsTtlSec).toBe(99);
+    expect(effective.metrics.podMetricsTtlSec).toBe(99);
+  });
+
   it("resolves effective dataplane settings per context override", () => {
     const base = defaultUserSettings();
     const settings: ReturnType<typeof defaultUserSettings> = {

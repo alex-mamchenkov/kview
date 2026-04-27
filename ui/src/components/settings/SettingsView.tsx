@@ -31,6 +31,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import {
   applyDataplaneProfile,
   customActionResourceKeys,
@@ -44,6 +45,7 @@ import {
   parseUserSettingsJSON,
   sanitizeRegexFlags,
   smartFilterResourceKeysForScope,
+  dataplaneSettingsForContext,
   type CustomActionDefinition,
   type CustomActionKind,
   type CustomActionPatchType,
@@ -52,6 +54,7 @@ import {
   type CustomCommandOutputType,
   type CustomCommandSafety,
   type DataplaneProfile,
+  type DataplaneContextOverrideSettings,
   type DataplaneSettings,
   type KviewUserSettingsV2,
   type SettingsResourceScopeMode,
@@ -151,6 +154,20 @@ const settingsMainSurfaceSx = {
   },
 };
 
+const overrideMetaRowSx = {
+  display: "flex",
+  alignItems: "center",
+  gap: 0.5,
+  minHeight: 22,
+};
+
+const overrideControlBlockSx = {
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "space-between",
+  minHeight: 56,
+};
+
 function ReorderButtons({
   label,
   index,
@@ -236,6 +253,36 @@ function updateDataplane(settings: KviewUserSettingsV2, patch: Partial<Dataplane
     ...settings,
     dataplane: { ...settings.dataplane, global: { ...settings.dataplane.global, ...patch } },
   };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function deepMerge<T>(base: T, patch: Partial<T>): T {
+  if (!isPlainObject(base) || !isPlainObject(patch)) return (patch as T) ?? base;
+  const out: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) continue;
+    const prev = out[key];
+    if (isPlainObject(prev) && isPlainObject(value)) out[key] = deepMerge(prev, value);
+    else out[key] = value;
+  }
+  return out as T;
+}
+
+function stripUndefinedDeep<T>(value: T): T | undefined {
+  if (Array.isArray(value)) return value as T;
+  if (!isPlainObject(value)) return value;
+  const next: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (child === undefined) continue;
+    const normalized = stripUndefinedDeep(child);
+    if (normalized === undefined) continue;
+    if (isPlainObject(normalized) && Object.keys(normalized).length === 0) continue;
+    next[key] = normalized;
+  }
+  return Object.keys(next).length > 0 ? (next as T) : undefined;
 }
 
 function rulePatternError(rule: SmartFilterRule): string | null {
@@ -364,102 +411,112 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
     });
   };
 
+  const updateContextDataplaneOverride = (
+    prev: KviewUserSettingsV2,
+    updater: (current: DataplaneContextOverrideSettings) => DataplaneContextOverrideSettings,
+  ): KviewUserSettingsV2 => {
+    const contextName = activeContext.trim();
+    if (!contextName) return prev;
+    const contextOverrides = { ...prev.dataplane.contextOverrides };
+    const current = contextOverrides[contextName] || {};
+    const next = stripUndefinedDeep(updater(current));
+    if (next) contextOverrides[contextName] = next;
+    else delete contextOverrides[contextName];
+    return { ...prev, dataplane: { ...prev.dataplane, contextOverrides } };
+  };
+
+  const patchDataplaneSection = <K extends keyof DataplaneSettings>(
+    key: K,
+    patch: Partial<DataplaneSettings[K]>,
+  ) => {
+    setSettings((prev) => {
+      if (dataplaneEditScope === "global") {
+        return updateDataplane(prev, {
+          [key]: deepMerge(prev.dataplane.global[key], patch),
+        } as Partial<DataplaneSettings>);
+      }
+      return updateContextDataplaneOverride(prev, (current) => ({
+        ...current,
+        [key]: deepMerge((current[key] || {}) as DataplaneSettings[K], patch),
+      }));
+    });
+  };
+
+  const setDataplanePrimitive = <K extends keyof DataplaneSettings>(key: K, value: DataplaneSettings[K]) => {
+    setSettings((prev) => {
+      if (dataplaneEditScope === "global") return updateDataplane(prev, { [key]: value } as Partial<DataplaneSettings>);
+      return updateContextDataplaneOverride(prev, (current) => ({ ...current, [key]: value }));
+    });
+  };
+
   const setNamespaceEnrichment = (patch: Partial<DataplaneSettings["namespaceEnrichment"]>) => {
-    setSettings((prev) => updateDataplane(prev, {
-      namespaceEnrichment: { ...prev.dataplane.global.namespaceEnrichment, ...patch },
-    }));
+    patchDataplaneSection("namespaceEnrichment", patch);
   };
 
   const setNamespaceSweep = (patch: Partial<DataplaneSettings["namespaceEnrichment"]["sweep"]>) => {
-    setSettings((prev) => updateDataplane(prev, {
-      namespaceEnrichment: {
-        ...prev.dataplane.global.namespaceEnrichment,
-        sweep: { ...prev.dataplane.global.namespaceEnrichment.sweep, ...patch },
-      },
-    }));
+    patchDataplaneSection("namespaceEnrichment", {
+      sweep: patch as DataplaneSettings["namespaceEnrichment"]["sweep"],
+    });
   };
 
   const setDataplaneSnapshots = (patch: Partial<DataplaneSettings["snapshots"]>) => {
-    setSettings((prev) => updateDataplane(prev, {
-      snapshots: { ...prev.dataplane.global.snapshots, ...patch },
-    }));
+    patchDataplaneSection("snapshots", patch);
   };
 
   const setDataplanePersistence = (patch: Partial<DataplaneSettings["persistence"]>) => {
-    setSettings((prev) => updateDataplane(prev, {
-      persistence: { ...prev.dataplane.global.persistence, ...patch },
-    }));
+    patchDataplaneSection("persistence", patch);
   };
 
   const setDataplaneObservers = (patch: Partial<DataplaneSettings["observers"]>) => {
-    setSettings((prev) => updateDataplane(prev, {
-      observers: { ...prev.dataplane.global.observers, ...patch },
-    }));
+    patchDataplaneSection("observers", patch);
   };
 
   const setDataplaneBudget = (patch: Partial<DataplaneSettings["backgroundBudget"]>) => {
-    setSettings((prev) => updateDataplane(prev, {
-      backgroundBudget: { ...prev.dataplane.global.backgroundBudget, ...patch },
-    }));
+    patchDataplaneSection("backgroundBudget", patch);
   };
 
   const setDataplaneDashboard = (patch: Partial<DataplaneSettings["dashboard"]>) => {
-    setSettings((prev) => updateDataplane(prev, {
-      dashboard: { ...prev.dataplane.global.dashboard, ...patch },
-    }));
+    patchDataplaneSection("dashboard", patch);
   };
   const setDataplaneMetrics = (patch: Partial<DataplaneSettings["metrics"]>) => {
-    setSettings((prev) => updateDataplane(prev, {
-      metrics: { ...prev.dataplane.global.metrics, ...patch },
-    }));
+    patchDataplaneSection("metrics", patch);
   };
 
   const setContextMetricsEnabled = (enabled: boolean) => {
-    const contextName = activeContext.trim();
-    if (!contextName) return;
-    setSettings((prev) => {
-      const contextOverrides = { ...prev.dataplane.contextOverrides };
-      const existing = contextOverrides[contextName] || {};
-      const inherited = prev.dataplane.global.metrics.enabled;
-      const metrics = enabled === inherited ? undefined : { enabled };
-      const next = { ...existing, metrics };
-      const hasSignalOverrides = Boolean(next.signals && Object.keys(next.signals.overrides).length > 0);
-      if (!next.metrics && !hasSignalOverrides) {
-        delete contextOverrides[contextName];
-      } else {
-        contextOverrides[contextName] = next;
-      }
-      return { ...prev, dataplane: { ...prev.dataplane, contextOverrides } };
-    });
+    setDataplaneMetrics({ enabled });
   };
 
   const resetContextMetricsOverride = () => {
-    const contextName = activeContext.trim();
-    if (!contextName) return;
     setSettings((prev) => {
-      const contextOverrides = { ...prev.dataplane.contextOverrides };
-      const existing = contextOverrides[contextName];
-      if (!existing?.metrics) return prev;
-      const next = { ...existing };
-      delete next.metrics;
-      const hasSignalOverrides = Boolean(next.signals && Object.keys(next.signals.overrides).length > 0);
-      if (!hasSignalOverrides) delete contextOverrides[contextName];
-      else contextOverrides[contextName] = next;
-      return { ...prev, dataplane: { ...prev.dataplane, contextOverrides } };
+      if (dataplaneEditScope !== "context") return prev;
+      return updateContextDataplaneOverride(prev, (current) => ({ ...current, metrics: undefined }));
     });
   };
   const setDataplaneSignals = (patch: Partial<DataplaneSettings["signals"]>) => {
-    setSettings((prev) => updateDataplane(prev, {
-      signals: (() => {
-        const next = { ...prev.dataplane.global.signals, ...patch };
+    setSettings((prev) => {
+      const sanitizeSignals = (next: DataplaneSettings["signals"]) => {
         if (next.quotaCriticalPercent <= next.quotaWarnPercent) {
           const defaults = defaultDataplaneSettings().signals;
           next.quotaWarnPercent = defaults.quotaWarnPercent;
           next.quotaCriticalPercent = defaults.quotaCriticalPercent;
         }
         return next;
-      })(),
-    }));
+      };
+      if (dataplaneEditScope === "global") {
+        return updateDataplane(prev, {
+          signals: sanitizeSignals(deepMerge(prev.dataplane.global.signals, patch)),
+        });
+      }
+      return updateContextDataplaneOverride(prev, (current) => ({
+        ...current,
+        signals: sanitizeSignals(
+          deepMerge(
+            (current.signals || { overrides: {} }) as DataplaneSettings["signals"],
+            patch,
+          ),
+        ),
+      }));
+    });
   };
 
   const setSignalOverride = (signalType: string, scope: "global" | "context", patch: Partial<SignalOverride>) => {
@@ -488,10 +545,16 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
       if (next) current[signalType] = next;
       else delete current[signalType];
       const existing = contextOverrides[contextName] || {};
-      if (Object.keys(current).length > 0) contextOverrides[contextName] = { ...existing, signals: { overrides: current } };
-      else if (existing.metrics) contextOverrides[contextName] = { ...existing, signals: undefined };
+      const nextOverride: DataplaneContextOverrideSettings = {
+        ...existing,
+        signals: Object.keys(current).length > 0
+          ? { ...(existing.signals || {}), overrides: current }
+          : undefined,
+      };
+      const cleaned = stripUndefinedDeep(nextOverride);
+      if (cleaned) contextOverrides[contextName] = cleaned;
       else delete contextOverrides[contextName];
-      return { ...updateDataplane(prev, { signals }), dataplane: { ...prev.dataplane, contextOverrides } };
+      return { ...prev, dataplane: { ...prev.dataplane, contextOverrides } };
     });
   };
 
@@ -509,10 +572,16 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
       const current = { ...(contextOverrides[contextName]?.signals?.overrides || {}) };
       delete current[signalType];
       const existing = contextOverrides[contextName] || {};
-      if (Object.keys(current).length > 0) contextOverrides[contextName] = { ...existing, signals: { overrides: current } };
-      else if (existing.metrics) contextOverrides[contextName] = { ...existing, signals: undefined };
+      const nextOverride: DataplaneContextOverrideSettings = {
+        ...existing,
+        signals: Object.keys(current).length > 0
+          ? { ...(existing.signals || {}), overrides: current }
+          : undefined,
+      };
+      const cleaned = stripUndefinedDeep(nextOverride);
+      if (cleaned) contextOverrides[contextName] = cleaned;
       else delete contextOverrides[contextName];
-      return { ...updateDataplane(prev, { signals }), dataplane: { ...prev.dataplane, contextOverrides } };
+      return { ...prev, dataplane: { ...prev.dataplane, contextOverrides } };
     });
   };
 
@@ -527,9 +596,10 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
       const contextOverrides = { ...prev.dataplane.contextOverrides };
       const existing = contextOverrides[contextName];
       if (!existing) return prev;
-      if (existing.metrics) contextOverrides[contextName] = { ...existing, signals: undefined };
+      const cleaned = stripUndefinedDeep({ ...existing, signals: undefined });
+      if (cleaned) contextOverrides[contextName] = cleaned;
       else delete contextOverrides[contextName];
-      return { ...updateDataplane(prev, { signals }), dataplane: { ...prev.dataplane, contextOverrides } };
+      return { ...prev, dataplane: { ...prev.dataplane, contextOverrides } };
     });
   };
 
@@ -1139,21 +1209,88 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
     </Box>
   );
 
+  const currentContextOverride = settings.dataplane.contextOverrides[activeContext.trim()] || {};
+  const isContextEditing = dataplaneEditScope === "context" && Boolean(activeContext.trim());
+  const getOverrideAtPath = (path: string[]): unknown => {
+    let cursor: unknown = currentContextOverride;
+    for (const key of path) {
+      if (!isPlainObject(cursor) || !(key in cursor)) return undefined;
+      cursor = (cursor as Record<string, unknown>)[key];
+    }
+    return cursor;
+  };
+  const hasOverrideAtPath = (path: string[]): boolean => getOverrideAtPath(path) !== undefined;
+  const resetOverridePath = (path: string[]) => {
+    if (!isContextEditing) return;
+    setSettings((prev) =>
+      updateContextDataplaneOverride(prev, (current) => {
+        const next = JSON.parse(JSON.stringify(current)) as Record<string, unknown>;
+        let cursor: Record<string, unknown> = next;
+        for (let i = 0; i < path.length - 1; i += 1) {
+          const key = path[i];
+          if (!isPlainObject(cursor[key])) return current;
+          cursor = cursor[key] as Record<string, unknown>;
+        }
+        delete cursor[path[path.length - 1]];
+        return next as DataplaneContextOverrideSettings;
+      }),
+    );
+  };
+  const resetOverrideSection = (sectionKey: keyof DataplaneContextOverrideSettings) => resetOverridePath([sectionKey]);
+
+  const fieldOverrideMeta = (overridePath: string[], resetTitle = "Reset to global") => {
+    if (!isContextEditing) return null;
+    const overridden = hasOverrideAtPath(overridePath);
+    return (
+      <Box sx={overrideMetaRowSx}>
+        <Typography variant="caption" color="text.secondary">
+          {overridden ? "Overridden" : "Inherited"}
+        </Typography>
+        {overridden ? (
+          <Tooltip title={resetTitle}>
+            <IconButton size="small" onClick={() => resetOverridePath(overridePath)} aria-label={resetTitle}>
+              <RestartAltIcon fontSize="inherit" />
+            </IconButton>
+          </Tooltip>
+        ) : null}
+      </Box>
+    );
+  };
+
   const numField = (
     label: string,
     value: number,
     onChange: (value: number) => void,
     helperText?: string,
     hint?: string,
+    overridePath?: string[],
   ) => (
-    <TextField
-      size="small"
-      type="number"
-      label={hint ? labelWithHint(label, hint) : label}
-      value={value}
-      onChange={(e) => onChange(Math.round(Number(e.target.value) || 0))}
-      helperText={helperText}
-    />
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+      <TextField
+        size="small"
+        type="number"
+        label={hint ? labelWithHint(label, hint) : label}
+        value={value}
+        onChange={(e) => onChange(Math.round(Number(e.target.value) || 0))}
+        helperText={helperText}
+      />
+      {isContextEditing && overridePath ? fieldOverrideMeta(overridePath) : null}
+    </Box>
+  );
+
+  const toggleField = (
+    checked: boolean,
+    onChange: (checked: boolean) => void,
+    label: React.ReactNode,
+    overridePath: string[],
+  ) => (
+    <Box sx={overrideControlBlockSx}>
+      <FormControlLabel
+        control={<Switch checked={checked} onChange={(e) => onChange(e.target.checked)} />}
+        label={label}
+      />
+      {fieldOverrideMeta(overridePath)}
+    </Box>
   );
 
   const labelWithHint = (label: string, hint: string) => (
@@ -1175,19 +1312,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
     const activeContextOverride = contextName ? (settings.dataplane.contextOverrides[contextName] || {}) : {};
     const contextSignals = activeContextOverride.signals?.overrides || {};
     const dp = dataplaneEditScope === "context"
-      ? {
-        ...settings.dataplane.global,
-        metrics: {
-          ...settings.dataplane.global.metrics,
-          ...(activeContextOverride.metrics && typeof activeContextOverride.metrics.enabled === "boolean"
-            ? { enabled: activeContextOverride.metrics.enabled }
-            : {}),
-        },
-        signals: {
-          ...settings.dataplane.global.signals,
-          overrides: { ...settings.dataplane.global.signals.overrides, ...contextSignals },
-        },
-      }
+      ? dataplaneSettingsForContext(settings.dataplane, contextName)
       : settings.dataplane.global;
     const ne = dp.namespaceEnrichment;
     const sweep = ne.sweep;
@@ -1270,48 +1395,74 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
 
         {dataplaneTab === "overview" ? (
         <Paper variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
-          {sectionTitle(
-            "Profile and Scheduler",
-            "Profiles tune observers, enrichment scope, sweep behavior, and scheduler limits together. Manual keeps cached dataplane reads but turns off automatic background work.",
-          )}
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
+            {sectionTitle(
+              "Profile and Scheduler",
+              "Profiles tune observers, enrichment scope, sweep behavior, and scheduler limits together. Manual keeps cached dataplane reads but turns off automatic background work.",
+            )}
+            {isContextEditing ? (
+              <Tooltip title="Reset section to global">
+                <span>
+                  <IconButton
+                    size="small"
+                    disabled={!hasOverrideAtPath(["profile"]) && !hasOverrideAtPath(["backgroundBudget"])}
+                    onClick={() => { resetOverridePath(["profile"]); resetOverrideSection("backgroundBudget"); }}
+                    aria-label="Reset section to global"
+                  >
+                    <RestartAltIcon fontSize="inherit" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            ) : null}
+          </Box>
           <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-            <TextField
-              select
-              size="small"
-              label={labelWithHint("Dataplane profile", "Choose the overall dataplane behavior. Profile changes preserve operator-tuned metrics, signals, and persistence settings.")}
-              value={dp.profile}
-              onChange={(e) =>
-                setSettings((prev) =>
-                  updateDataplane(prev, applyDataplaneProfile(prev.dataplane.global, e.target.value as DataplaneProfile)),
-                )
-              }
-              helperText="Manual keeps dataplane snapshots but disables background enhancement."
-            >
-              <MenuItem value="manual">Manual: user interaction only</MenuItem>
-              <MenuItem value="focused">Focused: current, recent, favourites</MenuItem>
-              <MenuItem value="balanced">Balanced</MenuItem>
-              <MenuItem value="wide">Wide</MenuItem>
-              <MenuItem value="diagnostic">Diagnostic</MenuItem>
-            </TextField>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+              <TextField
+                select
+                size="small"
+                label={labelWithHint("Dataplane profile", "Choose the overall dataplane behavior. Profile changes preserve operator-tuned metrics, signals, and persistence settings.")}
+                value={dp.profile}
+                onChange={(e) => {
+                  const nextProfile = e.target.value as DataplaneProfile;
+                  if (dataplaneEditScope === "global") {
+                    setSettings((prev) => updateDataplane(prev, applyDataplaneProfile(prev.dataplane.global, nextProfile)));
+                    return;
+                  }
+                  setDataplanePrimitive("profile", nextProfile);
+                }}
+                helperText="Manual keeps dataplane snapshots but disables background enhancement."
+              >
+                <MenuItem value="manual">Manual: user interaction only</MenuItem>
+                <MenuItem value="focused">Focused: current, recent, favourites</MenuItem>
+                <MenuItem value="balanced">Balanced</MenuItem>
+                <MenuItem value="wide">Wide</MenuItem>
+                <MenuItem value="diagnostic">Diagnostic</MenuItem>
+              </TextField>
+              {fieldOverrideMeta(["profile"])}
+            </Box>
             {numField("Scheduler concurrency", dp.backgroundBudget.maxConcurrentPerCluster, (value) =>
               setDataplaneBudget({ maxConcurrentPerCluster: value }),
               "Max snapshot workers per cluster.",
               "Upper bound for all dataplane snapshot work running at once per cluster.",
+              ["backgroundBudget", "maxConcurrentPerCluster"],
             )}
             {numField("Background concurrency", dp.backgroundBudget.maxBackgroundConcurrentPerCluster, (value) =>
               setDataplaneBudget({ maxBackgroundConcurrentPerCluster: value }),
               "Max background workers per cluster.",
               "Upper bound for non-interactive enrichment and sweep work per cluster.",
+              ["backgroundBudget", "maxBackgroundConcurrentPerCluster"],
             )}
             {numField("Long-run notice (sec)", dp.backgroundBudget.longRunNoticeSec, (value) =>
               setDataplaneBudget({ longRunNoticeSec: value }),
               "0 disables long-running snapshot activity notices.",
               "How long snapshot work can run before the activity panel calls attention to it.",
+              ["backgroundBudget", "longRunNoticeSec"],
             )}
             {numField("Transient retries", dp.backgroundBudget.transientRetries, (value) =>
               setDataplaneBudget({ transientRetries: value }),
               undefined,
               "Retry budget for transient dataplane list failures before surfacing the error.",
+              ["backgroundBudget", "transientRetries"],
             )}
           </Box>
         </Paper>
@@ -1328,44 +1479,23 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
             {profileEnrichmentText}
           </Typography>
           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-            <FormControlLabel
-              control={<Switch checked={ne.enabled} onChange={(e) => setNamespaceEnrichment({ enabled: e.target.checked })} />}
-              label={labelWithHint("Enabled", "Allows automatic namespace enrichment for selected targets. Manual profile disables this by default.")}
-            />
-            <FormControlLabel
-              control={<Switch checked={ne.includeFocus} onChange={(e) => setNamespaceEnrichment({ includeFocus: e.target.checked })} />}
-              label={labelWithHint("Current namespace", "Keep the active namespace at the front of the enrichment queue.")}
-            />
-            <FormControlLabel
-              control={<Switch checked={ne.includeRecent} onChange={(e) => setNamespaceEnrichment({ includeRecent: e.target.checked })} />}
-              label={labelWithHint("Recent", "Include recently visited namespaces as enrichment targets.")}
-            />
-            <FormControlLabel
-              control={<Switch checked={ne.includeFavourites} onChange={(e) => setNamespaceEnrichment({ includeFavourites: e.target.checked })} />}
-              label={labelWithHint("Favourites", "Include favourited namespaces as enrichment targets.")}
-            />
+            {toggleField(ne.enabled, (checked) => setNamespaceEnrichment({ enabled: checked }), labelWithHint("Enabled", "Allows automatic namespace enrichment for selected targets. Manual profile disables this by default."), ["namespaceEnrichment", "enabled"])}
+            {toggleField(ne.includeFocus, (checked) => setNamespaceEnrichment({ includeFocus: checked }), labelWithHint("Current namespace", "Keep the active namespace at the front of the enrichment queue."), ["namespaceEnrichment", "includeFocus"])}
+            {toggleField(ne.includeRecent, (checked) => setNamespaceEnrichment({ includeRecent: checked }), labelWithHint("Recent", "Include recently visited namespaces as enrichment targets."), ["namespaceEnrichment", "includeRecent"])}
+            {toggleField(ne.includeFavourites, (checked) => setNamespaceEnrichment({ includeFavourites: checked }), labelWithHint("Favourites", "Include favourited namespaces as enrichment targets."), ["namespaceEnrichment", "includeFavourites"])}
           </Box>
           <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
-            {numField("Max targets", ne.maxTargets, (value) => setNamespaceEnrichment({ maxTargets: value }), undefined, "Maximum namespaces considered for focused enrichment in one planning pass.")}
-            {numField("Max parallel", ne.maxParallel, (value) => setNamespaceEnrichment({ maxParallel: value }), undefined, "Maximum focused enrichment workers running at once.")}
-            {numField("Idle quiet (ms)", ne.idleQuietMs, (value) => setNamespaceEnrichment({ idleQuietMs: value }), undefined, "How long the UI should be quiet before background enrichment starts.")}
-            {numField("Poll interval (ms)", ne.pollMs, (value) => setNamespaceEnrichment({ pollMs: value }), undefined, "How often the UI polls enrichment progress while work is active.")}
-            {numField("Recent hint limit", ne.recentLimit, (value) => setNamespaceEnrichment({ recentLimit: value }), undefined, "Maximum recent namespaces eligible for focused enrichment.")}
-            {numField("Favourite hint limit", ne.favouriteLimit, (value) => setNamespaceEnrichment({ favouriteLimit: value }), undefined, "Maximum favourite namespaces eligible for focused enrichment.")}
+            {numField("Max targets", ne.maxTargets, (value) => setNamespaceEnrichment({ maxTargets: value }), undefined, "Maximum namespaces considered for focused enrichment in one planning pass.", ["namespaceEnrichment", "maxTargets"])}
+            {numField("Max parallel", ne.maxParallel, (value) => setNamespaceEnrichment({ maxParallel: value }), undefined, "Maximum focused enrichment workers running at once.", ["namespaceEnrichment", "maxParallel"])}
+            {numField("Idle quiet (ms)", ne.idleQuietMs, (value) => setNamespaceEnrichment({ idleQuietMs: value }), undefined, "How long the UI should be quiet before background enrichment starts.", ["namespaceEnrichment", "idleQuietMs"])}
+            {numField("Poll interval (ms)", ne.pollMs, (value) => setNamespaceEnrichment({ pollMs: value }), undefined, "How often the UI polls enrichment progress while work is active.", ["namespaceEnrichment", "pollMs"])}
+            {numField("Recent hint limit", ne.recentLimit, (value) => setNamespaceEnrichment({ recentLimit: value }), undefined, "Maximum recent namespaces eligible for focused enrichment.", ["namespaceEnrichment", "recentLimit"])}
+            {numField("Favourite hint limit", ne.favouriteLimit, (value) => setNamespaceEnrichment({ favouriteLimit: value }), undefined, "Maximum favourite namespaces eligible for focused enrichment.", ["namespaceEnrichment", "favouriteLimit"])}
           </Box>
           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-            <FormControlLabel
-              control={<Switch checked={ne.enrichDetails} onChange={(e) => setNamespaceEnrichment({ enrichDetails: e.target.checked })} />}
-              label={labelWithHint("Namespace details", "Warm namespace detail snapshots used by summaries and navigation hints.")}
-            />
-            <FormControlLabel
-              control={<Switch checked={ne.enrichPods} onChange={(e) => setNamespaceEnrichment({ enrichPods: e.target.checked })} />}
-              label={labelWithHint("Pods", "Warm pod snapshots for namespace summaries, workload projections, and pod-derived signals.")}
-            />
-            <FormControlLabel
-              control={<Switch checked={ne.enrichDeployments} onChange={(e) => setNamespaceEnrichment({ enrichDeployments: e.target.checked })} />}
-              label={labelWithHint("Deployments", "Warm deployment snapshots for rollout projections and namespace workload summaries.")}
-            />
+            {toggleField(ne.enrichDetails, (checked) => setNamespaceEnrichment({ enrichDetails: checked }), labelWithHint("Namespace details", "Warm namespace detail snapshots used by summaries and navigation hints."), ["namespaceEnrichment", "enrichDetails"])}
+            {toggleField(ne.enrichPods, (checked) => setNamespaceEnrichment({ enrichPods: checked }), labelWithHint("Pods", "Warm pod snapshots for namespace summaries, workload projections, and pod-derived signals."), ["namespaceEnrichment", "enrichPods"])}
+            {toggleField(ne.enrichDeployments, (checked) => setNamespaceEnrichment({ enrichDeployments: checked }), labelWithHint("Deployments", "Warm deployment snapshots for rollout projections and namespace workload summaries."), ["namespaceEnrichment", "enrichDeployments"])}
           </Box>
           <FormControl size="small" fullWidth>
             <InputLabel id="namespace-warm-kinds-label">
@@ -1395,6 +1525,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               Focused defaults to pods and deployments. Wide and diagnostic warm every namespaced dataplane list kind slowly within the same target and sweep caps.
             </Typography>
           </FormControl>
+          {fieldOverrideMeta(["namespaceEnrichment", "warmResourceKinds"])}
         </Paper>
 
         <Paper variant="outlined" sx={{ p: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
@@ -1402,34 +1533,19 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
             "Background Namespace Sweep",
             `Sweep slowly enriches namespaces outside the focused set while the app is idle. On this context, ${namespaces.length || "unknown"} namespaces would take about ${estimatedSweepHours || "?"} idle hour(s) at the current hourly cap.`,
           )}
-          <FormControlLabel
-            control={<Switch checked={sweep.enabled} onChange={(e) => setNamespaceSweep({ enabled: e.target.checked })} />}
-            label={labelWithHint("Enable background sweep", "Allows slow idle discovery across namespaces that are not current, recent, or favourites.")}
-          />
+          {toggleField(sweep.enabled, (checked) => setNamespaceSweep({ enabled: checked }), labelWithHint("Enable background sweep", "Allows slow idle discovery across namespaces that are not current, recent, or favourites."), ["namespaceEnrichment", "sweep", "enabled"])}
           <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
-            {numField("Idle quiet (ms)", sweep.idleQuietMs, (value) => setNamespaceSweep({ idleQuietMs: value }), undefined, "How long the app should be idle before sweep work starts.")}
-            {numField("Namespaces / cycle", sweep.maxNamespacesPerCycle, (value) => setNamespaceSweep({ maxNamespacesPerCycle: value }), undefined, "Maximum namespaces selected for each sweep planning cycle.")}
-            {numField("Namespaces / hour", sweep.maxNamespacesPerHour, (value) => setNamespaceSweep({ maxNamespacesPerHour: value }), undefined, "Hourly cap that keeps sweep work gentle on large clusters.")}
-            {numField("Re-enrich after (min)", sweep.minReenrichIntervalMinutes, (value) => setNamespaceSweep({ minReenrichIntervalMinutes: value }), undefined, "Minimum age before a namespace is eligible for sweep enrichment again.")}
-            {numField("Max parallel", sweep.maxParallel, (value) => setNamespaceSweep({ maxParallel: value }), undefined, "Maximum sweep workers running at once.")}
+            {numField("Idle quiet (ms)", sweep.idleQuietMs, (value) => setNamespaceSweep({ idleQuietMs: value }), undefined, "How long the app should be idle before sweep work starts.", ["namespaceEnrichment", "sweep", "idleQuietMs"])}
+            {numField("Namespaces / cycle", sweep.maxNamespacesPerCycle, (value) => setNamespaceSweep({ maxNamespacesPerCycle: value }), undefined, "Maximum namespaces selected for each sweep planning cycle.", ["namespaceEnrichment", "sweep", "maxNamespacesPerCycle"])}
+            {numField("Namespaces / hour", sweep.maxNamespacesPerHour, (value) => setNamespaceSweep({ maxNamespacesPerHour: value }), undefined, "Hourly cap that keeps sweep work gentle on large clusters.", ["namespaceEnrichment", "sweep", "maxNamespacesPerHour"])}
+            {numField("Re-enrich after (min)", sweep.minReenrichIntervalMinutes, (value) => setNamespaceSweep({ minReenrichIntervalMinutes: value }), undefined, "Minimum age before a namespace is eligible for sweep enrichment again.", ["namespaceEnrichment", "sweep", "minReenrichIntervalMinutes"])}
+            {numField("Max parallel", sweep.maxParallel, (value) => setNamespaceSweep({ maxParallel: value }), undefined, "Maximum sweep workers running at once.", ["namespaceEnrichment", "sweep", "maxParallel"])}
           </Box>
           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-            <FormControlLabel
-              control={<Switch checked={sweep.pauseOnUserActivity} onChange={(e) => setNamespaceSweep({ pauseOnUserActivity: e.target.checked })} />}
-              label={labelWithHint("Pause on activity", "Stop sweep work while the operator is actively navigating or filtering.")}
-            />
-            <FormControlLabel
-              control={<Switch checked={sweep.pauseWhenSchedulerBusy} onChange={(e) => setNamespaceSweep({ pauseWhenSchedulerBusy: e.target.checked })} />}
-              label={labelWithHint("Pause when busy", "Stop sweep work while the dataplane scheduler is already occupied.")}
-            />
-            <FormControlLabel
-              control={<Switch checked={sweep.pauseOnRateLimitOrConnectivityIssues} onChange={(e) => setNamespaceSweep({ pauseOnRateLimitOrConnectivityIssues: e.target.checked })} />}
-              label={labelWithHint("Pause on rate limits", "Stop sweep work when recent requests suggest rate limiting or connectivity trouble.")}
-            />
-            <FormControlLabel
-              control={<Switch checked={sweep.includeSystemNamespaces} onChange={(e) => setNamespaceSweep({ includeSystemNamespaces: e.target.checked })} />}
-              label={labelWithHint("Include system namespaces", "Allows sweep to include kube-system and other system namespaces.")}
-            />
+            {toggleField(sweep.pauseOnUserActivity, (checked) => setNamespaceSweep({ pauseOnUserActivity: checked }), labelWithHint("Pause on activity", "Stop sweep work while the operator is actively navigating or filtering."), ["namespaceEnrichment", "sweep", "pauseOnUserActivity"])}
+            {toggleField(sweep.pauseWhenSchedulerBusy, (checked) => setNamespaceSweep({ pauseWhenSchedulerBusy: checked }), labelWithHint("Pause when busy", "Stop sweep work while the dataplane scheduler is already occupied."), ["namespaceEnrichment", "sweep", "pauseWhenSchedulerBusy"])}
+            {toggleField(sweep.pauseOnRateLimitOrConnectivityIssues, (checked) => setNamespaceSweep({ pauseOnRateLimitOrConnectivityIssues: checked }), labelWithHint("Pause on rate limits", "Stop sweep work when recent requests suggest rate limiting or connectivity trouble."), ["namespaceEnrichment", "sweep", "pauseOnRateLimitOrConnectivityIssues"])}
+            {toggleField(sweep.includeSystemNamespaces, (checked) => setNamespaceSweep({ includeSystemNamespaces: checked }), labelWithHint("Include system namespaces", "Allows sweep to include kube-system and other system namespaces."), ["namespaceEnrichment", "sweep", "includeSystemNamespaces"])}
           </Box>
         </Paper>
         </>
@@ -1442,28 +1558,16 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
             "Observers keep cluster-wide namespace and node snapshots reasonably fresh. Dashboard controls decide how cached dataplane data is summarized.",
           )}
           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-            <FormControlLabel
-              control={<Switch checked={dp.observers.enabled} onChange={(e) => setDataplaneObservers({ enabled: e.target.checked })} />}
-              label={labelWithHint("Observers", "Master switch for passive namespace and node observers.")}
-            />
-            <FormControlLabel
-              control={<Switch checked={dp.observers.namespacesEnabled} onChange={(e) => setDataplaneObservers({ namespacesEnabled: e.target.checked })} />}
-              label={labelWithHint("Namespace observer", "Periodically refreshes the namespace list snapshot for the active cluster.")}
-            />
-            <FormControlLabel
-              control={<Switch checked={dp.observers.nodesEnabled} onChange={(e) => setDataplaneObservers({ nodesEnabled: e.target.checked })} />}
-              label={labelWithHint("Node observer", "Periodically refreshes node snapshots when node list access is available.")}
-            />
-            <FormControlLabel
-              control={<Switch checked={dp.dashboard.useCachedTotalsOnly} onChange={(e) => setDataplaneDashboard({ useCachedTotalsOnly: e.target.checked })} />}
-              label={labelWithHint("Use cached dashboard totals", "Uses only cached namespace list snapshots for dashboard resource totals instead of triggering broader reads.")}
-            />
+            {toggleField(dp.observers.enabled, (checked) => setDataplaneObservers({ enabled: checked }), labelWithHint("Observers", "Master switch for passive namespace and node observers."), ["observers", "enabled"])}
+            {toggleField(dp.observers.namespacesEnabled, (checked) => setDataplaneObservers({ namespacesEnabled: checked }), labelWithHint("Namespace observer", "Periodically refreshes the namespace list snapshot for the active cluster."), ["observers", "namespacesEnabled"])}
+            {toggleField(dp.observers.nodesEnabled, (checked) => setDataplaneObservers({ nodesEnabled: checked }), labelWithHint("Node observer", "Periodically refreshes node snapshots when node list access is available."), ["observers", "nodesEnabled"])}
+            {toggleField(dp.dashboard.useCachedTotalsOnly, (checked) => setDataplaneDashboard({ useCachedTotalsOnly: checked }), labelWithHint("Use cached dashboard totals", "Uses only cached namespace list snapshots for dashboard resource totals instead of triggering broader reads."), ["dashboard", "useCachedTotalsOnly"])}
           </Box>
           <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
-            {numField("Namespace observer (sec)", dp.observers.namespacesIntervalSec, (value) => setDataplaneObservers({ namespacesIntervalSec: value }), undefined, "Seconds between passive namespace list refreshes.")}
-            {numField("Node observer (sec)", dp.observers.nodesIntervalSec, (value) => setDataplaneObservers({ nodesIntervalSec: value }), undefined, "Seconds between passive node list refreshes.")}
-            {numField("Node backoff max (sec)", dp.observers.nodesBackoffMaxSec, (value) => setDataplaneObservers({ nodesBackoffMaxSec: value }), undefined, "Maximum node observer backoff after access or connectivity failures.")}
-            {numField("Dashboard refresh (sec)", dp.dashboard.refreshSec, (value) => setDataplaneDashboard({ refreshSec: value }), undefined, "Dataplane dashboard refresh interval in seconds.")}
+            {numField("Namespace observer (sec)", dp.observers.namespacesIntervalSec, (value) => setDataplaneObservers({ namespacesIntervalSec: value }), undefined, "Seconds between passive namespace list refreshes.", ["observers", "namespacesIntervalSec"])}
+            {numField("Node observer (sec)", dp.observers.nodesIntervalSec, (value) => setDataplaneObservers({ nodesIntervalSec: value }), undefined, "Seconds between passive node list refreshes.", ["observers", "nodesIntervalSec"])}
+            {numField("Node backoff max (sec)", dp.observers.nodesBackoffMaxSec, (value) => setDataplaneObservers({ nodesBackoffMaxSec: value }), undefined, "Maximum node observer backoff after access or connectivity failures.", ["observers", "nodesBackoffMaxSec"])}
+            {numField("Dashboard refresh (sec)", dp.dashboard.refreshSec, (value) => setDataplaneDashboard({ refreshSec: value }), undefined, "Dataplane dashboard refresh interval in seconds.", ["dashboard", "refreshSec"])}
             {numField(
               "Restart threshold",
               dp.signals.detectors.pod_restarts.restartCount,
@@ -1473,8 +1577,9 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                 }),
               undefined,
               "Pod restart count above which dashboard restart signals become elevated.",
+              ["signals", "detectors", "pod_restarts", "restartCount"],
             )}
-            {numField("Signal limit", dp.dashboard.signalLimit, (value) => setDataplaneDashboard({ signalLimit: value }), undefined, "Maximum number of top dashboard signals shown by default.")}
+            {numField("Signal limit", dp.dashboard.signalLimit, (value) => setDataplaneDashboard({ signalLimit: value }), undefined, "Maximum number of top dashboard signals shown by default.", ["dashboard", "signalLimit"])}
           </Box>
         </Paper>
         ) : null}
@@ -1486,18 +1591,9 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
             "Persisted snapshots keep the last observed list data on this device for restart recovery and cached quick access search. Results are stale until refreshed by the cluster.",
           )}
           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-            <FormControlLabel
-              control={<Switch checked={dp.persistence.enabled} onChange={(e) => setDataplanePersistence({ enabled: e.target.checked })} />}
-              label={labelWithHint("Persist dataplane snapshots", "Stores eligible dataplane list snapshots on disk so kview can hydrate the cache on restart.")}
-            />
-            <FormControlLabel
-              control={<Switch checked={dp.snapshots.manualRefreshBypassesTtl} onChange={(e) => setDataplaneSnapshots({ manualRefreshBypassesTtl: e.target.checked })} />}
-              label={labelWithHint("Manual refresh bypasses TTL", "A user-triggered refresh fetches live data even when the cached snapshot is still inside its TTL.")}
-            />
-            <FormControlLabel
-              control={<Switch checked={dp.snapshots.invalidateAfterKnownMutations} onChange={(e) => setDataplaneSnapshots({ invalidateAfterKnownMutations: e.target.checked })} />}
-              label={labelWithHint("Invalidate after known mutations", "Drops affected cached snapshots after kview performs a known mutating action.")}
-            />
+            {toggleField(dp.persistence.enabled, (checked) => setDataplanePersistence({ enabled: checked }), labelWithHint("Persist dataplane snapshots", "Stores eligible dataplane list snapshots on disk so kview can hydrate the cache on restart."), ["persistence", "enabled"])}
+            {toggleField(dp.snapshots.manualRefreshBypassesTtl, (checked) => setDataplaneSnapshots({ manualRefreshBypassesTtl: checked }), labelWithHint("Manual refresh bypasses TTL", "A user-triggered refresh fetches live data even when the cached snapshot is still inside its TTL."), ["snapshots", "manualRefreshBypassesTtl"])}
+            {toggleField(dp.snapshots.invalidateAfterKnownMutations, (checked) => setDataplaneSnapshots({ invalidateAfterKnownMutations: checked }), labelWithHint("Invalidate after known mutations", "Drops affected cached snapshots after kview performs a known mutating action."), ["snapshots", "invalidateAfterKnownMutations"])}
           </Box>
           {numField(
             "Max persisted age (hours)",
@@ -1505,6 +1601,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
             (value) => setDataplanePersistence({ maxAgeHours: value }),
             "Older snapshots are ignored and pruned from the persisted cache.",
             "Snapshots older than this age are not hydrated on restart and are removed from the bbolt cache during persistence cleanup.",
+            ["persistence", "maxAgeHours"],
           )}
         </Paper>
         ) : null}
@@ -1535,13 +1632,18 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                     ? `Inherited from global (${settings.dataplane.global.metrics.enabled ? "enabled" : "disabled"})`
                     : "Context override active"}
                 </Typography>
-                <Button
-                  size="small"
-                  disabled={activeContextOverride.metrics?.enabled === undefined}
-                  onClick={() => resetContextMetricsOverride()}
-                >
-                  Reset override
-                </Button>
+                <Tooltip title="Reset to global">
+                  <span>
+                    <IconButton
+                      size="small"
+                      disabled={activeContextOverride.metrics?.enabled === undefined}
+                      onClick={() => resetContextMetricsOverride()}
+                      aria-label="Reset metrics enabled to global"
+                    >
+                      <RestartAltIcon fontSize="inherit" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
               </>
             ) : null}
           </Box>
@@ -1552,6 +1654,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               (value) => setDataplaneMetrics({ podMetricsTtlSec: value }),
               "How often pod usage is sampled per cluster.",
               "Minimum age before pod metrics snapshots are refreshed.",
+              ["metrics", "podMetricsTtlSec"],
             )}
             {numField(
               "Node metrics TTL (sec)",
@@ -1559,6 +1662,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               (value) => setDataplaneMetrics({ nodeMetricsTtlSec: value }),
               "How often node usage is sampled per cluster.",
               "Minimum age before node metrics snapshots are refreshed.",
+              ["metrics", "nodeMetricsTtlSec"],
             )}
             {numField(
               "Container near-limit (%)",
@@ -1569,6 +1673,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                 }),
               "Threshold above which containers raise a usage signal.",
               "Percent of configured CPU or memory limit that triggers a near-limit container signal.",
+              ["signals", "detectors", "container_near_limit", "percent"],
             )}
             {numField(
               "Node pressure (%)",
@@ -1579,6 +1684,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                 }),
               "Threshold above which nodes raise a resource-pressure signal.",
               "Percent of node allocatable CPU or memory that triggers a node pressure signal.",
+              ["signals", "detectors", "node_resource_pressure", "percent"],
             )}
           </Box>
         </Paper>
@@ -1591,14 +1697,17 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               "Signal Thresholds",
               "These values control when dataplane signals trigger. Defaults are applied automatically on first startup; use reset to return to system defaults.",
             )}
-            <Button
-              size="small"
-              onClick={() => {
-                setDataplaneSignals(signalDefaults);
-              }}
-            >
-              Reset signal thresholds
-            </Button>
+            <Tooltip title="Reset signal thresholds">
+              <IconButton
+                size="small"
+                onClick={() => {
+                  setDataplaneSignals(signalDefaults);
+                }}
+                aria-label="Reset signal thresholds"
+              >
+                <RestartAltIcon fontSize="inherit" />
+              </IconButton>
+            </Tooltip>
           </Box>
           <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
             {numField(
@@ -1607,6 +1716,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               (value) => setDataplaneSignals({ longRunningJobSec: value }),
               `Default: ${signalDefaults.longRunningJobSec}`,
               "Job runtime in seconds before a long-running job signal can fire.",
+              ["signals", "longRunningJobSec"],
             )}
             {numField(
               "CronJob no recent success (sec)",
@@ -1614,6 +1724,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               (value) => setDataplaneSignals({ cronJobNoRecentSuccessSec: value }),
               `Default: ${signalDefaults.cronJobNoRecentSuccessSec}`,
               "Seconds without a recorded successful CronJob run before a signal can fire.",
+              ["signals", "cronJobNoRecentSuccessSec"],
             )}
             {numField(
               "Stale Helm release (sec)",
@@ -1621,6 +1732,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               (value) => setDataplaneSignals({ staleHelmReleaseSec: value }),
               `Default: ${signalDefaults.staleHelmReleaseSec}`,
               "Seconds a Helm release can remain transitional before it is treated as stale.",
+              ["signals", "staleHelmReleaseSec"],
             )}
             {numField(
               "Unused resource age (sec)",
@@ -1628,6 +1740,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               (value) => setDataplaneSignals({ unusedResourceAgeSec: value }),
               `Default: ${signalDefaults.unusedResourceAgeSec}`,
               "Minimum resource age before potentially-unused signals are considered.",
+              ["signals", "unusedResourceAgeSec"],
             )}
             {numField(
               "Young pod restart window (sec)",
@@ -1635,6 +1748,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               (value) => setDataplaneSignals({ podYoungRestartWindowSec: value }),
               `Default: ${signalDefaults.podYoungRestartWindowSec}`,
               "Pod age window used to identify young pods with frequent restarts.",
+              ["signals", "podYoungRestartWindowSec"],
             )}
             {numField(
               "Deployment unavailable (sec)",
@@ -1642,6 +1756,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               (value) => setDataplaneSignals({ deploymentUnavailableSec: value }),
               `Default: ${signalDefaults.deploymentUnavailableSec}`,
               "Seconds a Deployment can stay unavailable before an unavailable deployment signal can fire.",
+              ["signals", "deploymentUnavailableSec"],
             )}
             {numField(
               "Quota warn (%)",
@@ -1649,6 +1764,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               (value) => setDataplaneSignals({ quotaWarnPercent: value }),
               `Default: ${signalDefaults.quotaWarnPercent}`,
               "Quota usage percent that marks quota pressure as warning.",
+              ["signals", "quotaWarnPercent"],
             )}
             {numField(
               "Quota critical (%)",
@@ -1656,6 +1772,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               (value) => setDataplaneSignals({ quotaCriticalPercent: value }),
               `Default: ${signalDefaults.quotaCriticalPercent}`,
               "Quota usage percent that marks quota pressure as critical. Must be greater than warn.",
+              ["signals", "quotaCriticalPercent"],
             )}
           </Box>
           <Divider />
@@ -1677,9 +1794,11 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                   <MenuItem value="global">Global defaults</MenuItem>
                   <MenuItem value="context">This context</MenuItem>
                 </TextField>
-                <Button size="small" onClick={() => resetSignalOverrides(dataplaneEditScope)}>
-                  Reset {dataplaneEditScope === "global" ? "global" : "context"} overrides
-                </Button>
+                <Tooltip title={`Reset ${dataplaneEditScope === "global" ? "global" : "context"} overrides`}>
+                  <IconButton size="small" onClick={() => resetSignalOverrides(dataplaneEditScope)} aria-label="Reset signal overrides">
+                    <RestartAltIcon fontSize="inherit" />
+                  </IconButton>
+                </Tooltip>
               </Box>
             </Box>
             <TextField
@@ -1796,9 +1915,18 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                           helperText={`Inherits ${dataplaneEditScope === "context" ? (globalOverride.priority ?? item.defaultPriority) : item.defaultPriority}`}
                         />
                         <Box sx={{ display: "flex", alignItems: "center" }}>
-                          <Button size="small" disabled={!changed} onClick={() => resetSignalOverride(item.type, dataplaneEditScope)}>
-                            Reset signal
-                          </Button>
+                          <Tooltip title="Reset signal override">
+                            <span>
+                              <IconButton
+                                size="small"
+                                disabled={!changed}
+                                onClick={() => resetSignalOverride(item.type, dataplaneEditScope)}
+                                aria-label={`Reset ${item.type} signal override`}
+                              >
+                                <RestartAltIcon fontSize="inherit" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
                         </Box>
                       </Box>
                     </Paper>
@@ -1818,22 +1946,24 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
           )}
           <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
             {dataplaneTTLResourceKeys.map((key) => (
-              <TextField
-                key={key}
-                size="small"
-                type="number"
-                label={`${getResourceLabel(key as ListResourceKey)} TTL`}
-                value={dp.snapshots.ttlSec[key]}
-                onChange={(e) =>
-                  setDataplaneSnapshots({
-                    ttlSec: {
-                      ...dp.snapshots.ttlSec,
-                      [key]: Math.round(Number(e.target.value) || 0),
-                    },
-                  })
-                }
-                helperText="seconds"
-              />
+              <Box key={key} sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+                <TextField
+                  size="small"
+                  type="number"
+                  label={`${getResourceLabel(key as ListResourceKey)} TTL`}
+                  value={dp.snapshots.ttlSec[key]}
+                  onChange={(e) =>
+                    setDataplaneSnapshots({
+                      ttlSec: {
+                        ...dp.snapshots.ttlSec,
+                        [key]: Math.round(Number(e.target.value) || 0),
+                      },
+                    })
+                  }
+                  helperText="seconds"
+                />
+                {fieldOverrideMeta(["snapshots", "ttlSec", key])}
+              </Box>
             ))}
           </Box>
         </Paper>

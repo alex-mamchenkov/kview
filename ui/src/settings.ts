@@ -53,10 +53,23 @@ export type KviewUserSettingsV1 = {
 };
 
 export type DataplaneContextOverrideSettings = {
+  profile?: DataplaneProfile;
+  snapshots?: Partial<DataplaneSettings["snapshots"]> & {
+    ttlSec?: Record<string, number>;
+  };
+  persistence?: Partial<DataplaneSettings["persistence"]>;
+  observers?: Partial<DataplaneSettings["observers"]>;
+  namespaceEnrichment?: Partial<DataplaneSettings["namespaceEnrichment"]> & {
+    sweep?: Partial<DataplaneSettings["namespaceEnrichment"]["sweep"]>;
+  };
+  backgroundBudget?: Partial<DataplaneSettings["backgroundBudget"]>;
+  dashboard?: Partial<DataplaneSettings["dashboard"]>;
   metrics?: {
     enabled?: boolean;
+    podMetricsTtlSec?: number;
+    nodeMetricsTtlSec?: number;
   };
-  signals?: {
+  signals?: Partial<Omit<DataplaneSettings["signals"], "overrides" | "contextOverrides">> & {
     overrides: Record<string, SignalOverride>;
   };
 };
@@ -1183,13 +1196,58 @@ function normalizeDataplaneContextOverrides(input: unknown): Record<string, Data
     const ctx = rawContext.trim();
     if (!ctx) continue;
     if (!rawOverride || typeof rawOverride !== "object") continue;
-    const typed = rawOverride as { signals?: { overrides?: unknown }; metrics?: { enabled?: unknown } };
+    const typed = rawOverride as DataplaneContextOverrideSettings;
     const overrides = normalizeSignalOverrides(typed.signals?.overrides);
     const metricsEnabled = typeof typed.metrics?.enabled === "boolean" ? typed.metrics.enabled : undefined;
+    const metricsPodTtl = typeof typed.metrics?.podMetricsTtlSec === "number" ? typed.metrics.podMetricsTtlSec : undefined;
+    const metricsNodeTtl = typeof typed.metrics?.nodeMetricsTtlSec === "number" ? typed.metrics.nodeMetricsTtlSec : undefined;
     const next: DataplaneContextOverrideSettings = {};
-    if (typeof metricsEnabled === "boolean") next.metrics = { enabled: metricsEnabled };
-    if (Object.keys(overrides).length > 0) next.signals = { overrides };
-    if (!next.metrics && !next.signals) continue;
+    if (
+      typeof metricsEnabled === "boolean" ||
+      typeof metricsPodTtl === "number" ||
+      typeof metricsNodeTtl === "number"
+    ) {
+      next.metrics = {};
+      if (typeof metricsEnabled === "boolean") next.metrics.enabled = metricsEnabled;
+      if (typeof metricsPodTtl === "number") next.metrics.podMetricsTtlSec = metricsPodTtl;
+      if (typeof metricsNodeTtl === "number") next.metrics.nodeMetricsTtlSec = metricsNodeTtl;
+    }
+    if (typed.profile && allowedDataplaneProfiles.has(typed.profile)) next.profile = typed.profile;
+    if (typed.persistence) next.persistence = { ...typed.persistence };
+    if (typed.observers) next.observers = { ...typed.observers };
+    if (typed.backgroundBudget) next.backgroundBudget = { ...typed.backgroundBudget };
+    if (typed.dashboard) next.dashboard = { ...typed.dashboard };
+    if (typed.namespaceEnrichment) {
+      next.namespaceEnrichment = {
+        ...typed.namespaceEnrichment,
+        ...(typed.namespaceEnrichment.sweep ? { sweep: { ...typed.namespaceEnrichment.sweep } } : {}),
+      };
+    }
+    if (typed.snapshots) {
+      next.snapshots = {
+        ...typed.snapshots,
+        ...(typed.snapshots.ttlSec ? { ttlSec: { ...typed.snapshots.ttlSec } } : {}),
+      };
+    }
+    if (typed.signals) {
+      next.signals = {
+        ...typed.signals,
+        overrides,
+      };
+    } else if (Object.keys(overrides).length > 0) {
+      next.signals = { overrides };
+    }
+    if (
+      !next.profile &&
+      !next.snapshots &&
+      !next.persistence &&
+      !next.observers &&
+      !next.namespaceEnrichment &&
+      !next.backgroundBudget &&
+      !next.dashboard &&
+      !next.metrics &&
+      !next.signals
+    ) continue;
     out[ctx] = next;
   }
   return out;
@@ -1200,17 +1258,47 @@ function mergeDataplaneContextOverride(
   override: DataplaneContextOverrideSettings | undefined,
 ): DataplaneSettings {
   if (!override) return global;
-  const mergedSignals = override.signals?.overrides
+  const mergedSignals = override.signals
     ? {
       ...global.signals,
-      overrides: { ...global.signals.overrides, ...override.signals.overrides },
+      ...override.signals,
+      overrides: { ...global.signals.overrides, ...(override.signals.overrides || {}) },
     }
     : global.signals;
-  const mergedMetrics = override.metrics && typeof override.metrics.enabled === "boolean"
-    ? { ...global.metrics, enabled: override.metrics.enabled }
+  const mergedMetrics = override.metrics
+    ? { ...global.metrics, ...override.metrics }
     : global.metrics;
   return {
     ...global,
+    ...(override.profile ? { profile: override.profile } : {}),
+    ...(override.snapshots
+      ? {
+        snapshots: {
+          ...global.snapshots,
+          ...override.snapshots,
+          ...(override.snapshots.ttlSec
+            ? { ttlSec: { ...global.snapshots.ttlSec, ...override.snapshots.ttlSec } }
+            : {}),
+        },
+      }
+      : {}),
+    ...(override.persistence ? { persistence: { ...global.persistence, ...override.persistence } } : {}),
+    ...(override.observers ? { observers: { ...global.observers, ...override.observers } } : {}),
+    ...(override.namespaceEnrichment
+      ? {
+        namespaceEnrichment: {
+          ...global.namespaceEnrichment,
+          ...override.namespaceEnrichment,
+          ...(override.namespaceEnrichment.sweep
+            ? { sweep: { ...global.namespaceEnrichment.sweep, ...override.namespaceEnrichment.sweep } }
+            : {}),
+        },
+      }
+      : {}),
+    ...(override.backgroundBudget
+      ? { backgroundBudget: { ...global.backgroundBudget, ...override.backgroundBudget } }
+      : {}),
+    ...(override.dashboard ? { dashboard: { ...global.dashboard, ...override.dashboard } } : {}),
     metrics: mergedMetrics,
     signals: mergedSignals,
   };
