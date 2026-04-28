@@ -148,9 +148,10 @@ func fallbackSignalsForResource(now time.Time, scope, namespace, kind, name stri
 		return nil
 	}
 	var out []dto.NamespaceInsightSignalDTO
-	if scope == ResourceSignalsScopeNamespace {
+	switch scope {
+	case ResourceSignalsScopeNamespace:
 		out = fallbackNamespaceSignals(now, namespace, kind, name, plane)
-	} else if scope == ResourceSignalsScopeCluster {
+	case ResourceSignalsScopeCluster:
 		out = fallbackClusterSignals(now, kind, name, plane, restartThreshold)
 	}
 	if len(out) == 0 {

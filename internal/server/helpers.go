@@ -93,19 +93,6 @@ func nodeMetricsIndexOrNil(s *Server, clusterName string) dataplane.NodeMetricsB
 	return dataplane.BuildNodeMetricsIndex(snap.Items)
 }
 
-// podMetricsIndexOrNil returns a namespaced pod metrics index from the cache, or nil.
-// Cache-only by the same rules as nodeMetricsIndexOrNil.
-func podMetricsIndexOrNil(s *Server, clusterName, namespace string) dataplane.PodMetricsByKey {
-	if s == nil || s.dp == nil {
-		return nil
-	}
-	snap, ok := s.dp.PodMetricsCachedSnapshot(clusterName, namespace)
-	if !ok || len(snap.Items) == 0 {
-		return nil
-	}
-	return dataplane.BuildPodMetricsIndex(snap.Items)
-}
-
 // warmPodMetricsAsync fires a background fetch for the namespace pod metrics
 // snapshot without blocking the caller. The scheduler internally dedupes
 // concurrent work for the same key and respects the configured TTL, so hot
