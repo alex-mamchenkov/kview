@@ -23,6 +23,7 @@ import ErrorState from "../../shared/ErrorState";
 import AttentionSummary from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import EventsList from "../../shared/EventsList";
+import EventsPanel from "../../shared/EventsPanel";
 import CodeBlock from "../../shared/CodeBlock";
 import SecretActions from "./SecretActions";
 import NamespaceDrawer from "../namespaces/NamespaceDrawer";
@@ -131,7 +132,7 @@ export default function SecretDrawer(props: {
       setDetails(item);
 
       const ev = await apiGet<ApiListResponse<EventDTO>>(
-        `/api/namespaces/${encodeURIComponent(ns)}/secrets/${encodeURIComponent(name)}/events`,
+        `/api/namespaces/${encodeURIComponent(ns)}/secrets/${encodeURIComponent(name)}/events?limit=5&type=Warning`,
         props.token
       );
       setEvents(ev?.items || []);
@@ -274,7 +275,7 @@ export default function SecretDrawer(props: {
               {/* EVENTS */}
               {tab === 2 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  <EventsList events={events} emptyMessage="No events found for this Secret." />
+                  <EventsPanel endpoint={`/api/namespaces/${encodeURIComponent(ns)}/secrets/${encodeURIComponent(name || "")}/events`} token={props.token} emptyMessage="No events found for this Secret." />
                 </Box>
               )}
 

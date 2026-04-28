@@ -21,6 +21,7 @@ import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import AttentionSummary from "../../shared/AttentionSummary";
 import EventsList from "../../shared/EventsList";
+import EventsPanel from "../../shared/EventsPanel";
 import ResourceYamlPanel from "../../shared/ResourceYamlPanel";
 import Section from "../../shared/Section";
 import RoleDrawer from "../roles/RoleDrawer";
@@ -111,7 +112,7 @@ export default function RoleBindingDrawer(props: {
       setDetails(item);
 
       const ev = await apiGet<ApiListResponse<EventDTO>>(
-        `/api/namespaces/${encodeURIComponent(ns)}/rolebindings/${encodeURIComponent(name)}/events`,
+        `/api/namespaces/${encodeURIComponent(ns)}/rolebindings/${encodeURIComponent(name)}/events?limit=5&type=Warning`,
         props.token
       );
       setEvents(ev?.items || []);
@@ -276,7 +277,7 @@ export default function RoleBindingDrawer(props: {
               {/* EVENTS */}
               {tab === 3 && (
                 <Box sx={[drawerTabContentSx, { gap: 1 }] as SxProps<Theme>}>
-                  <EventsList events={events} emptyMessage="No events found for this RoleBinding." />
+                  <EventsPanel endpoint={`/api/namespaces/${encodeURIComponent(ns)}/rolebindings/${encodeURIComponent(name || "")}/events`} token={props.token} emptyMessage="No events found for this RoleBinding." />
                 </Box>
               )}
 

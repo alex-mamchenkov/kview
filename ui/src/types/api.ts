@@ -7,7 +7,13 @@
 export type ApiItemResponse<T> = { item?: T };
 
 /** List response: { items?: T[] } */
-export type ApiListResponse<T> = { items?: T[] };
+export type ApiListResponse<T> = {
+  items?: T[];
+  total?: number;
+  limit?: number;
+  offset?: number;
+  hasMore?: boolean;
+};
 
 /**
  * Dataplane-backed list metadata (writeDataplaneListResponse shape; namespaces list uses same meta + top-level observed).

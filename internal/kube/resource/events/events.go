@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,8 +14,34 @@ import (
 	"github.com/korex-labs/kview/internal/kube/dto"
 )
 
+const MaxListLimit = 200
+
+type ListOptions struct {
+	Limit       int
+	Offset      int
+	Query       string
+	Type        string
+	SubResource string
+}
+
+type ListResult struct {
+	Items   []dto.EventDTO
+	Total   int
+	Limit   int
+	Offset  int
+	HasMore bool
+}
+
 func ListEventsForPod(ctx context.Context, c *cluster.Clients, namespace, podName string) ([]dto.EventDTO, error) {
 	return ListEventsForObject(ctx, c, namespace, "Pod", podName)
+}
+
+func ListEventsForPodPage(ctx context.Context, c *cluster.Clients, namespace, podName string, opts ListOptions) (ListResult, error) {
+	items, err := ListEventsForPod(ctx, c, namespace, podName)
+	if err != nil {
+		return ListResult{}, err
+	}
+	return FilterAndPaginate(items, opts), nil
 }
 
 func ListEventsForNamespace(ctx context.Context, c *cluster.Clients, namespace string) ([]dto.EventDTO, error) {
@@ -23,6 +50,14 @@ func ListEventsForNamespace(ctx context.Context, c *cluster.Clients, namespace s
 		return nil, err
 	}
 	return mapAndSortEvents(evs.Items), nil
+}
+
+func ListEventsForNamespacePage(ctx context.Context, c *cluster.Clients, namespace string, opts ListOptions) (ListResult, error) {
+	items, err := ListEventsForNamespace(ctx, c, namespace)
+	if err != nil {
+		return ListResult{}, err
+	}
+	return FilterAndPaginate(items, opts), nil
 }
 
 func LatestEventsByObject(ctx context.Context, c *cluster.Clients, namespace, kind string) (map[string]dto.EventBriefDTO, error) {
@@ -83,6 +118,103 @@ func ListEventsForObject(ctx context.Context, c *cluster.Clients, namespace, kin
 
 	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen > out[j].LastSeen })
 	return out, nil
+}
+
+func ListEventsForObjectPage(ctx context.Context, c *cluster.Clients, namespace, kind, name string, opts ListOptions) (ListResult, error) {
+	items, err := ListEventsForObject(ctx, c, namespace, kind, name)
+	if err != nil {
+		return ListResult{}, err
+	}
+	return FilterAndPaginate(items, opts), nil
+}
+
+func FilterAndPaginate(items []dto.EventDTO, opts ListOptions) ListResult {
+	offset := opts.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	query := strings.ToLower(strings.TrimSpace(opts.Query))
+	eventType := strings.ToLower(strings.TrimSpace(opts.Type))
+	subResource := strings.TrimSpace(opts.SubResource)
+
+	filtered := make([]dto.EventDTO, 0, len(items))
+	for _, item := range items {
+		if eventType != "" && strings.ToLower(strings.TrimSpace(item.Type)) != eventType {
+			continue
+		}
+		if subResource != "" && eventSubResource(item) != subResource {
+			continue
+		}
+		if query != "" && !eventMatchesQuery(item, query) {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+
+	total := len(filtered)
+	limit := normalizeLimit(opts.Limit, total)
+	if offset > total {
+		offset = total
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	out := filtered[offset:end]
+	if out == nil {
+		out = []dto.EventDTO{}
+	}
+	return ListResult{
+		Items:   out,
+		Total:   total,
+		Limit:   limit,
+		Offset:  offset,
+		HasMore: end < total,
+	}
+}
+
+func normalizeLimit(limit int, total int) int {
+	if limit <= 0 {
+		return total
+	}
+	if limit > MaxListLimit {
+		return MaxListLimit
+	}
+	return limit
+}
+
+func eventMatchesQuery(item dto.EventDTO, query string) bool {
+	haystack := strings.ToLower(strings.Join([]string{
+		item.Type,
+		item.Reason,
+		item.Message,
+		item.FieldPath,
+		item.InvolvedKind,
+		item.InvolvedName,
+		strconv.Itoa(int(item.Count)),
+	}, " "))
+	return strings.Contains(haystack, query)
+}
+
+func eventSubResource(item dto.EventDTO) string {
+	path := strings.TrimSpace(item.FieldPath)
+	if path == "" {
+		return ""
+	}
+	for _, prefix := range []string{
+		"spec.initContainers{",
+		"spec.containers{",
+		"spec.ephemeralContainers{",
+	} {
+		if strings.HasPrefix(path, prefix) {
+			rest := strings.TrimPrefix(path, prefix)
+			end := strings.Index(rest, "}")
+			if end >= 0 {
+				return rest[:end]
+			}
+		}
+	}
+	return ""
 }
 
 func mapAndSortEvents(items []corev1.Event) []dto.EventDTO {

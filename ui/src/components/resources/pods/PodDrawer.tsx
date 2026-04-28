@@ -37,7 +37,7 @@ import { apiGet, toApiError, type ApiError } from "../../../api";
 import { useConnectionState } from "../../../connectionState";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { fmtAge, fmtTimeAgo, valueOrDash } from "../../../utils/format";
-import { eventChipColor, phaseChipColor } from "../../../utils/k8sUi";
+import { phaseChipColor } from "../../../utils/k8sUi";
 import HealthConditionsPanel from "../../shared/HealthConditionsPanel";
 import CodeBlock from "../../shared/CodeBlock";
 import IngressDrawer from "../ingresses/IngressDrawer";
@@ -61,7 +61,6 @@ import type {
 import useResourceSignals from "../../../utils/useResourceSignals";
 import {
   panelBoxSx,
-  panelBoxCompactSx,
   drawerBodySx,
   drawerTabContentSx,
   drawerTabContentCompactSx,
@@ -82,6 +81,7 @@ import MetadataSection from "../../shared/MetadataSection";
 import GaugeBar, { type GaugeTone } from "../../shared/GaugeBar";
 import GaugeTableRow from "../../shared/GaugeTableRow";
 import StatusChip from "../../shared/StatusChip";
+import EventsPanel from "../../shared/EventsPanel";
 import { formatCPUMilli, formatMemoryBytes, formatPct, severityForPct } from "../../metrics/format";
 import { useMetricsStatus, isMetricsUsable } from "../../metrics/useMetricsStatus";
 import PortForwardDialog, { type PortForwardOption } from "../../shared/PortForwardDialog";
@@ -113,16 +113,6 @@ type PodDetails = {
 // merge them with snapshot-level signals from useResourceSignals.
 type PodDetailsResponse = ApiItemResponse<PodDetails> & {
   detailSignals?: DashboardSignalItem[];
-};
-
-type EventDTO = {
-  type: string;
-  reason: string;
-  message: string;
-  count: number;
-  firstSeen: number;
-  lastSeen: number;
-  fieldPath?: string;
 };
 
 type PodSummary = {
@@ -516,13 +506,11 @@ export default function PodDrawer(props: {
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<PodDetails | null>(null);
-  const [events, setEvents] = useState<EventDTO[]>([]);
   const [detailSignals, setDetailSignals] = useState<DashboardSignalItem[]>([]);
   const [err, setErr] = useState("");
   const [expandedContainers, setExpandedContainers] = useState<Record<string, boolean>>({});
   const [envQueryByContainer, setEnvQueryByContainer] = useState<Record<string, string>>({});
   const [envShowRawByContainer, setEnvShowRawByContainer] = useState<Record<string, boolean>>({});
-  const [eventsContainerFilter, setEventsContainerFilter] = useState<string>("");
   const [networkingServices, setNetworkingServices] = useState<PodNetworkingService[]>([]);
   const [networkingServicesLoading, setNetworkingServicesLoading] = useState(false);
   const [networkingServicesLoaded, setNetworkingServicesLoaded] = useState(false);
@@ -555,6 +543,7 @@ export default function PodDrawer(props: {
   const [logLines, setLogLines] = useState<string[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const logScrollRef = useRef<HTMLDivElement | null>(null);
+  const containerRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const ns = props.namespace;
   const name = props.podName;
@@ -812,14 +801,13 @@ export default function PodDrawer(props: {
     }
   };
 
-  // Load pod details + events when opened
+  // Load pod details when opened. Events are paged lazily by EventsPanel.
   useEffect(() => {
     if (!props.open || !name || offline) return;
 
     setTab(0);
     setErr("");
     setDetails(null);
-    setEvents([]);
     setDetailSignals([]);
     setLogLines([]);
     setLogsFilter("");
@@ -828,7 +816,6 @@ export default function PodDrawer(props: {
     setExpandedContainers({});
     setEnvQueryByContainer({});
     setEnvShowRawByContainer({});
-    setEventsContainerFilter("");
     setNetworkingServices([]);
     setNetworkingServicesLoading(false);
     setNetworkingServicesLoaded(false);
@@ -883,13 +870,6 @@ export default function PodDrawer(props: {
       });
       setEnvQueryByContainer({});
       setEnvShowRawByContainer({});
-      setEventsContainerFilter("");
-
-      const ev = await apiGet<ApiListResponse<EventDTO>>(
-        `/api/namespaces/${encodeURIComponent(ns)}/pods/${encodeURIComponent(name)}/events`,
-        props.token
-      );
-      setEvents(ev?.items || []);
     })()
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false));
@@ -1059,10 +1039,14 @@ export default function PodDrawer(props: {
     return opts.sort((a, b) => Number(a.value) - Number(b.value));
   }, [details]);
   const eventContainers = (details?.containers || []).map((c) => c.name).filter((n): n is string => !!n);
-  const filteredEvents = useMemo(() => {
-    if (!eventsContainerFilter) return events;
-    return events.filter((e) => parseContainerFromFieldPath(e.fieldPath) === eventsContainerFilter);
-  }, [events, eventsContainerFilter]);
+  const openContainerFromEvent = (containerName: string) => {
+    if (!eventContainers.includes(containerName)) return;
+    setTab(1);
+    setExpandedContainers((prev) => ({ ...prev, [containerName]: true }));
+    window.requestAnimationFrame(() => {
+      containerRefs.current[containerName]?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+  };
 
   // Merge detail-level signals (served inline with the pod details response,
   // e.g. pod_young_frequent_restarts, pod_succeeded_with_issues) with
@@ -1504,6 +1488,9 @@ export default function PodDrawer(props: {
                       return (
                         <Box
                           key={containerKey}
+                          ref={(node: HTMLDivElement | null) => {
+                            containerRefs.current[containerKey] = node;
+                          }}
                           sx={{
                             ...panelBoxSx,
                             border: unhealthy ? "1px solid var(--chip-error-border)" : "1px solid var(--panel-border)",
@@ -2161,51 +2148,16 @@ export default function PodDrawer(props: {
               {/* EVENTS */}
               {tab === 4 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto", pt: 1 }}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <FormControl size="small" sx={{ minWidth: 220 }}>
-                      <InputLabel id="events-container-label" shrink>Container</InputLabel>
-                      <Select
-                        labelId="events-container-label"
-                        label="Container"
-                        displayEmpty
-                        value={eventsContainerFilter}
-                        onChange={(e) => setEventsContainerFilter(String(e.target.value))}
-                      >
-                        <MenuItem value="">All containers</MenuItem>
-                        {eventContainers.map((c) => (
-                          <MenuItem key={c} value={c}>
-                            {c}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Box>
-
-                  {filteredEvents.length === 0 ? (
-                    <EmptyState message="No events found for this Pod." />
-                  ) : (
-                    filteredEvents.map((e, idx) => (
-                      <Box key={idx} sx={panelBoxCompactSx}>
-                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                            <Chip size="small" label={e.type || "Unknown"} color={eventChipColor(e.type)} />
-                            <Typography variant="subtitle2">
-                              {valueOrDash(e.reason)} (x{valueOrDash(e.count)})
-                            </Typography>
-                            {parseContainerFromFieldPath(e.fieldPath) && (
-                              <Chip size="small" label={parseContainerFromFieldPath(e.fieldPath)} />
-                            )}
-                          </Box>
-                          <Typography variant="caption" color="text.secondary">
-                            {fmtTimeAgo(e.lastSeen)}
-                          </Typography>
-                        </Box>
-                        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", mt: 0.5 }}>
-                          {valueOrDash(e.message)}
-                        </Typography>
-                      </Box>
-                    ))
-                  )}
+                  <EventsPanel
+                    endpoint={`/api/namespaces/${encodeURIComponent(ns)}/pods/${encodeURIComponent(name || "")}/events`}
+                    token={props.token}
+                    emptyMessage="No events found for this Pod."
+                    filterPlaceholder="Filter events"
+                    subResourceLabel="Container"
+                    subResourceOptions={eventContainers.map((name) => ({ label: name, value: name }))}
+                    getEventSubResource={(event) => parseContainerFromFieldPath(event.fieldPath)}
+                    onSubResourceClick={openContainerFromEvent}
+                  />
                 </Box>
               )}
 

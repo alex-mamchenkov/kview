@@ -1,10 +1,6 @@
 import React from "react";
-import { Box, Typography } from "@mui/material";
-import { fmtTimeAgo, valueOrDash } from "../../utils/format";
-import { eventChipColor } from "../../utils/k8sUi";
-import { panelBoxCompactSx } from "../../theme/sxTokens";
 import EmptyState from "./EmptyState";
-import StatusChip from "./StatusChip";
+import EventCard from "./EventCard";
 
 type EventDTO = {
   type: string;
@@ -21,12 +17,20 @@ type EventsListProps = {
   events: EventDTO[];
   emptyMessage?: string;
   showTarget?: boolean;
+  getEventTarget?: (event: EventDTO) => {
+    kind?: string;
+    name?: string;
+    label: string;
+    title?: string;
+    onClick?: (event: React.MouseEvent<HTMLDivElement>) => void;
+  } | null;
 };
 
 export default function EventsList({
   events,
   emptyMessage = "No events found.",
   showTarget = false,
+  getEventTarget,
 }: EventsListProps) {
   if (events.length === 0) {
     return <EmptyState message={emptyMessage} />;
@@ -34,34 +38,21 @@ export default function EventsList({
 
   return (
     <>
-      {events.map((e, idx) => (
-        <Box key={idx} sx={panelBoxCompactSx}>
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 1,
-              flexWrap: "wrap",
-            }}
-          >
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-              <StatusChip size="small" label={e.type || "Unknown"} color={eventChipColor(e.type)} />
-              <Typography variant="subtitle2">
-                {valueOrDash(e.reason)} (x{valueOrDash(e.count)})
-              </Typography>
-              {showTarget && (e.involvedKind || e.involvedName) ? (
-                <StatusChip size="small" variant="outlined" label={`${valueOrDash(e.involvedKind)} ${valueOrDash(e.involvedName)}`} />
-              ) : null}
-            </Box>
-            <Typography variant="caption" color="text.secondary">
-              {fmtTimeAgo(e.lastSeen)}
-            </Typography>
-          </Box>
-          <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", mt: 0.5 }}>
-            {valueOrDash(e.message)}
-          </Typography>
-        </Box>
-      ))}
+      {events.map((event, idx) => {
+        const target = getEventTarget?.(event);
+        return (
+          <EventCard
+            key={`${event.lastSeen || "event"}-${event.reason || ""}-${idx}`}
+            event={event}
+            showTarget={showTarget}
+            targetKind={target?.kind}
+            targetName={target?.name}
+            targetLabel={target?.label}
+            targetTitle={target?.title}
+            onTargetClick={target?.onClick}
+          />
+        );
+      })}
     </>
   );
 }

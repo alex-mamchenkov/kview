@@ -139,7 +139,7 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForPod(ctx, clients, ns, name)
+		result, err := kubeevents.ListEventsForPodPage(ctx, clients, ns, name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -149,7 +149,7 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/namespaces/{ns}/pods/{name}/services", func(w http.ResponseWriter, r *http.Request) {
@@ -237,7 +237,7 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "Deployment", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, ns, "Deployment", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -247,7 +247,7 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/namespaces/{ns}/daemonsets", dataplaneNamespacedListHandler(s, s.dp.DaemonSetsSnapshot, func(items []dto.DaemonSetDTO) any {
@@ -299,7 +299,7 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "DaemonSet", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, ns, "DaemonSet", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -309,7 +309,7 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/namespaces/{ns}/daemonsets/{name}/yaml", func(w http.ResponseWriter, r *http.Request) {
@@ -387,7 +387,7 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "StatefulSet", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, ns, "StatefulSet", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -397,7 +397,7 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/namespaces/{ns}/statefulsets/{name}/yaml", func(w http.ResponseWriter, r *http.Request) {
@@ -475,7 +475,7 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "ReplicaSet", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, ns, "ReplicaSet", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -485,7 +485,7 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/namespaces/{ns}/jobs", dataplaneNamespacedListHandler(s, s.dp.JobsSnapshot, func(items []dto.JobDTO) any {
@@ -537,7 +537,7 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "Job", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, ns, "Job", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -547,7 +547,7 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/namespaces/{ns}/cronjobs", dataplaneNamespacedListHandler(s, s.dp.CronJobsSnapshot, func(items []dto.CronJobDTO) any {
@@ -599,7 +599,7 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "CronJob", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, ns, "CronJob", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -609,7 +609,7 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/namespaces/{ns}/horizontalpodautoscalers", dataplaneNamespacedListHandler(s, s.dp.HPAsSnapshot, func(items []dto.HorizontalPodAutoscalerDTO) any {
@@ -655,7 +655,7 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "HorizontalPodAutoscaler", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, ns, "HorizontalPodAutoscaler", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -665,6 +665,6 @@ func (s *Server) registerWorkloadRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 }

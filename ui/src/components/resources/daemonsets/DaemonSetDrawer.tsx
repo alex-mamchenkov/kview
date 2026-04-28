@@ -30,6 +30,7 @@ import MetadataSection from "../../shared/MetadataSection";
 import AttentionSummary from "../../shared/AttentionSummary";
 import HealthConditionsPanel from "../../shared/HealthConditionsPanel";
 import EventsList from "../../shared/EventsList";
+import EventsPanel from "../../shared/EventsPanel";
 import CodeBlock from "../../shared/CodeBlock";
 import WorkloadSpecPanels from "../../shared/WorkloadSpecPanels";
 import RightDrawer from "../../layout/RightDrawer";
@@ -194,7 +195,7 @@ export default function DaemonSetDrawer(props: {
       setDetailSignals(Array.isArray(det?.detailSignals) ? det.detailSignals : []);
 
       const ev = await apiGet<ApiListResponse<EventDTO>>(
-        `/api/namespaces/${encodeURIComponent(ns)}/daemonsets/${encodeURIComponent(name)}/events`,
+        `/api/namespaces/${encodeURIComponent(ns)}/daemonsets/${encodeURIComponent(name)}/events?limit=5&type=Warning`,
         props.token
       );
       setEvents(ev?.items || []);
@@ -364,7 +365,7 @@ export default function DaemonSetDrawer(props: {
               {/* EVENTS */}
               {tab === 3 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  <EventsList events={events} emptyMessage="No events found for this DaemonSet." />
+                  <EventsPanel endpoint={`/api/namespaces/${encodeURIComponent(ns)}/daemonsets/${encodeURIComponent(name || "")}/events`} token={props.token} emptyMessage="No events found for this DaemonSet." />
                 </Box>
               )}
 

@@ -25,7 +25,7 @@ import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import AccessDeniedState from "../../shared/AccessDeniedState";
 import MetadataSection from "../../shared/MetadataSection";
-import EventsList from "../../shared/EventsList";
+import EventsPanel from "../../shared/EventsPanel";
 import ResourceYamlPanel from "../../shared/ResourceYamlPanel";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import ScopedCountChip from "../../shared/ScopedCountChip";
@@ -41,7 +41,7 @@ import AttentionSummary, {
 } from "../../shared/AttentionSummary";
 import GaugeBar, { type GaugeTone } from "../../shared/GaugeBar";
 import GaugeTableRow from "../../shared/GaugeTableRow";
-import type { ApiItemResponse, ApiListResponse, EventDTO } from "../../../types/api";
+import type { ApiItemResponse } from "../../../types/api";
 import { drawerBodySx, drawerTabContentCompactSx, loadingCenterSx, panelBoxSx } from "../../../theme/sxTokens";
 
 const tabs = ["Signals", "Events", "Metadata", "YAML"] as const;
@@ -161,7 +161,6 @@ export default function HorizontalPodAutoscalerDrawer(props: {
   const { retryNonce } = useConnectionState();
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<HPADetails | null>(null);
-  const [events, setEvents] = useState<EventDTO[]>([]);
   const [err, setErr] = useState("");
   const [denied, setDenied] = useState(false);
   const [tab, setTab] = useState(0);
@@ -190,7 +189,6 @@ export default function HorizontalPodAutoscalerDrawer(props: {
     setDrawerNamespace(null);
     setLinkedTarget(null);
     setDetails(null);
-    setEvents([]);
 
     (async () => {
       const det = await apiGet<ApiItemResponse<HPADetails>>(
@@ -198,11 +196,6 @@ export default function HorizontalPodAutoscalerDrawer(props: {
         props.token,
       );
       setDetails(det.item || null);
-      const ev = await apiGet<ApiListResponse<EventDTO>>(
-        `/api/namespaces/${encodeURIComponent(ns)}/horizontalpodautoscalers/${encodeURIComponent(name)}/events`,
-        props.token,
-      );
-      setEvents(ev.items || []);
     })()
       .catch((e: unknown) => {
         const status = (e as { status?: number } | undefined)?.status;
@@ -361,7 +354,11 @@ export default function HorizontalPodAutoscalerDrawer(props: {
 
               {tab === eventsTabIndex && (
                 <Box sx={drawerTabContentCompactSx}>
-                  <EventsList events={events} />
+                  <EventsPanel
+                    endpoint={`/api/namespaces/${encodeURIComponent(ns)}/horizontalpodautoscalers/${encodeURIComponent(name || "")}/events`}
+                    token={props.token}
+                    emptyMessage="No events found for this HPA."
+                  />
                 </Box>
               )}
 

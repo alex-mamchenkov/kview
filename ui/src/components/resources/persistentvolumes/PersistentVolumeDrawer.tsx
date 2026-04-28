@@ -20,6 +20,7 @@ import AttentionSummary from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import ConditionsTable from "../../shared/ConditionsTable";
 import EventsList from "../../shared/EventsList";
+import EventsPanel from "../../shared/EventsPanel";
 import ResourceYamlPanel from "../../shared/ResourceYamlPanel";
 import PersistentVolumeClaimDrawer from "../persistentvolumeclaims/PersistentVolumeClaimDrawer";
 import PVActions from "./PVActions";
@@ -158,7 +159,7 @@ export default function PersistentVolumeDrawer(props: {
       const item: PersistentVolumeDetails | null = det?.item ?? null;
       setDetails(item);
 
-      const ev = await apiGet<ApiListResponse<EventDTO>>(`/api/persistentvolumes/${encodeURIComponent(name)}/events`, props.token);
+      const ev = await apiGet<ApiListResponse<EventDTO>>(`/api/persistentvolumes/${encodeURIComponent(name)}/events?limit=5&type=Warning`, props.token);
       setEvents(ev?.items || []);
     })()
       .catch((e) => setErr(String(e)))
@@ -329,7 +330,7 @@ export default function PersistentVolumeDrawer(props: {
               {/* EVENTS */}
               {tab === 2 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  <EventsList events={events} emptyMessage="No events found for this PV." />
+                  <EventsPanel endpoint={`/api/persistentvolumes/${encodeURIComponent(name || "")}/events`} token={props.token} emptyMessage="No events found for this PV." />
                 </Box>
               )}
 

@@ -64,7 +64,7 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "Service", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, ns, "Service", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -74,7 +74,7 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/namespaces/{ns}/services/{name}/ingresses", func(w http.ResponseWriter, r *http.Request) {
@@ -146,7 +146,7 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "ConfigMap", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, ns, "ConfigMap", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -156,7 +156,7 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/namespaces/{ns}/serviceaccounts", dataplaneNamespacedListHandler(s, s.dp.ServiceAccountsSnapshot, func(items []dto.ServiceAccountListItemDTO) any {
@@ -202,7 +202,7 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "ServiceAccount", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, ns, "ServiceAccount", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -212,7 +212,7 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/namespaces/{ns}/serviceaccounts/{name}/yaml", func(w http.ResponseWriter, r *http.Request) {
@@ -310,7 +310,7 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "Role", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, ns, "Role", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -320,7 +320,7 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/namespaces/{ns}/roles/{name}/yaml", func(w http.ResponseWriter, r *http.Request) {
@@ -392,7 +392,7 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "RoleBinding", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, ns, "RoleBinding", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -402,7 +402,7 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/namespaces/{ns}/rolebindings/{name}/yaml", func(w http.ResponseWriter, r *http.Request) {
@@ -474,7 +474,7 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "PersistentVolumeClaim", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, ns, "PersistentVolumeClaim", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -484,7 +484,7 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/namespaces/{ns}/persistentvolumeclaims/{name}/yaml", func(w http.ResponseWriter, r *http.Request) {
@@ -556,7 +556,7 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "Secret", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, ns, "Secret", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -566,7 +566,7 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/namespaces/{ns}/ingresses", dataplaneNamespacedListHandler(s, s.dp.IngressesSnapshot, func(items []dto.IngressListItemDTO) any {
@@ -612,7 +612,7 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, ns, "Ingress", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, ns, "Ingress", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -622,6 +622,6 @@ func (s *Server) registerNamespacedResourceRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 }

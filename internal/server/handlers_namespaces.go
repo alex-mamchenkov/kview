@@ -147,7 +147,7 @@ func (s *Server) registerNamespaceRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForNamespace(ctx, clients, name)
+		result, err := kubeevents.ListEventsForNamespacePage(ctx, clients, name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -157,7 +157,7 @@ func (s *Server) registerNamespaceRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	// Per-resource signals — namespace-scoped.

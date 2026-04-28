@@ -172,7 +172,7 @@ func (s *Server) registerClusterResourceRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, "", "ClusterRole", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, "", "ClusterRole", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -182,7 +182,7 @@ func (s *Server) registerClusterResourceRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/clusterroles/{name}/yaml", func(w http.ResponseWriter, r *http.Request) {
@@ -263,7 +263,7 @@ func (s *Server) registerClusterResourceRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, "", "ClusterRoleBinding", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, "", "ClusterRoleBinding", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -273,7 +273,7 @@ func (s *Server) registerClusterResourceRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/clusterrolebindings/{name}/yaml", func(w http.ResponseWriter, r *http.Request) {
@@ -354,7 +354,7 @@ func (s *Server) registerClusterResourceRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, "", "CustomResourceDefinition", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, "", "CustomResourceDefinition", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -364,7 +364,7 @@ func (s *Server) registerClusterResourceRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/customresourcedefinitions/{name}/yaml", func(w http.ResponseWriter, r *http.Request) {
@@ -587,7 +587,7 @@ func (s *Server) registerClusterResourceRoutes(api chi.Router) {
 			return
 		}
 
-		evs, err := kubeevents.ListEventsForObject(ctx, clients, "", "PersistentVolume", name)
+		result, err := kubeevents.ListEventsForObjectPage(ctx, clients, "", "PersistentVolume", name, readEventListOptions(r))
 		if err != nil {
 			status := http.StatusInternalServerError
 			if apierrors.IsForbidden(err) {
@@ -597,7 +597,7 @@ func (s *Server) registerClusterResourceRoutes(api chi.Router) {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"active": active, "items": evs})
+		writeEventListResponse(w, active, result)
 	})
 
 	api.Get("/persistentvolumes/{name}/yaml", func(w http.ResponseWriter, r *http.Request) {

@@ -20,6 +20,7 @@ import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import AttentionSummary from "../../shared/AttentionSummary";
 import EventsList from "../../shared/EventsList";
+import EventsPanel from "../../shared/EventsPanel";
 import ResourceYamlPanel from "../../shared/ResourceYamlPanel";
 import Section from "../../shared/Section";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
@@ -109,7 +110,7 @@ export default function RoleDrawer(props: {
       setDetails(item);
 
       const ev = await apiGet<ApiListResponse<EventDTO>>(
-        `/api/namespaces/${encodeURIComponent(ns)}/roles/${encodeURIComponent(name)}/events`,
+        `/api/namespaces/${encodeURIComponent(ns)}/roles/${encodeURIComponent(name)}/events?limit=5&type=Warning`,
         props.token
       );
       setEvents(ev?.items || []);
@@ -243,7 +244,7 @@ export default function RoleDrawer(props: {
               {/* EVENTS */}
               {tab === 2 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  <EventsList events={events} emptyMessage="No events found for this Role." />
+                  <EventsPanel endpoint={`/api/namespaces/${encodeURIComponent(ns)}/roles/${encodeURIComponent(name || "")}/events`} token={props.token} emptyMessage="No events found for this Role." />
                 </Box>
               )}
 

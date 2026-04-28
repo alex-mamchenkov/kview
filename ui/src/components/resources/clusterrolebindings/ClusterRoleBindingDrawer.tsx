@@ -21,6 +21,7 @@ import EmptyState from "../../shared/EmptyState";
 import ErrorState from "../../shared/ErrorState";
 import AttentionSummary from "../../shared/AttentionSummary";
 import EventsList from "../../shared/EventsList";
+import EventsPanel from "../../shared/EventsPanel";
 import ResourceYamlPanel from "../../shared/ResourceYamlPanel";
 import Section from "../../shared/Section";
 import ClusterRoleDrawer from "../clusterroles/ClusterRoleDrawer";
@@ -96,7 +97,7 @@ export default function ClusterRoleBindingDrawer(props: {
       const item: ClusterRoleBindingDetails | null = det?.item ?? null;
       setDetails(item);
 
-      const ev = await apiGet<ApiListResponse<EventDTO>>(`/api/clusterrolebindings/${encodeURIComponent(name)}/events`, props.token);
+      const ev = await apiGet<ApiListResponse<EventDTO>>(`/api/clusterrolebindings/${encodeURIComponent(name)}/events?limit=5&type=Warning`, props.token);
       setEvents(ev?.items || []);
     })()
       .catch((e) => setErr(toApiError(e)))
@@ -244,7 +245,7 @@ export default function ClusterRoleBindingDrawer(props: {
               {/* EVENTS */}
               {tab === 3 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  <EventsList events={events} emptyMessage="No events found for this ClusterRoleBinding." />
+                  <EventsPanel endpoint={`/api/clusterrolebindings/${encodeURIComponent(name || "")}/events`} token={props.token} emptyMessage="No events found for this ClusterRoleBinding." />
                 </Box>
               )}
 

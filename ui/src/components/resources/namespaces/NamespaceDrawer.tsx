@@ -16,7 +16,6 @@ import {
 import { apiGet } from "../../../api";
 import type {
   ApiItemResponse,
-  ApiListResponse,
   DashboardSignalItem,
   EventDTO,
   LimitRangeItem,
@@ -59,7 +58,7 @@ import ScopedCountChip from "../../shared/ScopedCountChip";
 import StatusChip from "../../shared/StatusChip";
 import RightDrawer from "../../layout/RightDrawer";
 import Section from "../../shared/Section";
-import EventsList from "../../shared/EventsList";
+import EventsPanel from "../../shared/EventsPanel";
 import ResourceYamlPanel from "../../shared/ResourceYamlPanel";
 import NamespaceSignalsTab from "./NamespaceSignalsTab";
 import PodDrawer from "../pods/PodDrawer";
@@ -220,18 +219,26 @@ export default function NamespaceDrawer(props: {
   const [detailsErr, setDetailsErr] = useState("");
   const [details, setDetails] = useState<NamespaceDetails | null>(null);
   const [detailsRequested, setDetailsRequested] = useState(false);
-  const [eventsLoading, setEventsLoading] = useState(false);
-  const [eventsErr, setEventsErr] = useState("");
-  const [events, setEvents] = useState<EventDTO[]>([]);
-  const [eventsRequested, setEventsRequested] = useState(false);
-
   const [drawerPod, setDrawerPod] = useState<string | null>(null);
   const [drawerDeployment, setDrawerDeployment] = useState<string | null>(null);
   const [drawerJob, setDrawerJob] = useState<string | null>(null);
   const [drawerHelmRelease, setDrawerHelmRelease] = useState<string | null>(null);
+  const eventTargetFor = (event: EventDTO) => {
+    const kind = String(event.involvedKind || "").toLowerCase();
+    const resourceName = event.involvedName || "";
+    if (!resourceName) return null;
+    const label = [event.involvedKind, resourceName].filter(Boolean).join(" ");
+    const target = { kind: event.involvedKind, name: resourceName, label };
+    if (kind === "pod") return { ...target, onClick: () => setDrawerPod(resourceName) };
+    if (kind === "deployment") return { ...target, onClick: () => setDrawerDeployment(resourceName) };
+    if (kind === "job") return { ...target, onClick: () => setDrawerJob(resourceName) };
+    if (kind === "helmrelease" || kind === "helm release") {
+      return { ...target, onClick: () => setDrawerHelmRelease(resourceName) };
+    }
+    return target;
+  };
   const insightsCacheRef = useRef<Record<string, NamespaceInsights>>({});
   const detailsCacheRef = useRef<Record<string, NamespaceDetails>>({});
-  const eventsCacheRef = useRef<Record<string, EventDTO[]>>({});
 
   const name = props.namespaceName;
 
@@ -248,11 +255,6 @@ export default function NamespaceDrawer(props: {
     const cachedDetails = detailsCacheRef.current[name] || null;
     setDetails(cachedDetails);
     setDetailsRequested(!!cachedDetails);
-    setEventsLoading(false);
-    setEventsErr("");
-    const cachedEvents = eventsCacheRef.current[name] || [];
-    setEvents(cachedEvents);
-    setEventsRequested(!!eventsCacheRef.current[name]);
     setDrawerPod(null);
     setDrawerDeployment(null);
     setDrawerJob(null);
@@ -296,28 +298,6 @@ export default function NamespaceDrawer(props: {
       })
       .finally(() => setDetailsLoading(false));
   }, [props.open, name, props.token, tab, detailsRequested, detailsLoading, details, offline]);
-
-  useEffect(() => {
-    if (!props.open || !name || offline) return;
-    if (tab !== eventsTabIndex) return;
-    if (eventsRequested || eventsLoading) return;
-
-    setEventsRequested(true);
-    setEventsLoading(true);
-    setEventsErr("");
-
-    const encodedName = encodeURIComponent(name);
-    (async () => {
-      const res = await apiGet<ApiListResponse<EventDTO>>(`/api/namespaces/${encodedName}/events`, props.token);
-      const items = res?.items || [];
-      setEvents(items);
-      eventsCacheRef.current[name] = items;
-    })()
-      .catch((e) => {
-        if (!eventsCacheRef.current[name]) setEventsErr(String(e));
-      })
-      .finally(() => setEventsLoading(false));
-  }, [props.open, name, props.token, tab, eventsRequested, eventsLoading, offline]);
 
   const summary = details?.summary;
   const metadata = details?.metadata;
@@ -608,17 +588,13 @@ export default function NamespaceDrawer(props: {
 
               {tab === eventsTabIndex && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", overflow: "auto" }}>
-                  {eventsLoading ? (
-                    <Box sx={loadingCenterSx}>
-                      <CircularProgress />
-                    </Box>
-                  ) : eventsErr ? (
-                    <ErrorState message={eventsErr} />
-                  ) : (
-                    <Section title="Namespace events">
-                      <EventsList events={events} emptyMessage="No events found in this namespace." showTarget />
-                    </Section>
-                  )}
+                  <EventsPanel
+                    endpoint={name ? `/api/namespaces/${encodeURIComponent(name)}/events` : undefined}
+                    token={props.token}
+                    emptyMessage="No events found in this namespace."
+                    showTarget
+                    getEventTarget={eventTargetFor}
+                  />
                 </Box>
               )}
 

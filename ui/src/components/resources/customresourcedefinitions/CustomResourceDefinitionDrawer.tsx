@@ -23,6 +23,7 @@ import AttentionSummary from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import ConditionsTable from "../../shared/ConditionsTable";
 import EventsList from "../../shared/EventsList";
+import EventsPanel from "../../shared/EventsPanel";
 import ResourceYamlPanel from "../../shared/ResourceYamlPanel";
 import CRDActions from "./CRDActions";
 import RightDrawer from "../../layout/RightDrawer";
@@ -118,7 +119,7 @@ export default function CustomResourceDefinitionDrawer(props: {
       const item: CRDDetails | null = det?.item ?? null;
       setDetails(item);
 
-      const ev = await apiGet<ApiListResponse<EventDTO>>(`/api/customresourcedefinitions/${encodeURIComponent(name)}/events`, props.token);
+      const ev = await apiGet<ApiListResponse<EventDTO>>(`/api/customresourcedefinitions/${encodeURIComponent(name)}/events?limit=5&type=Warning`, props.token);
       setEvents(ev?.items || []);
     })()
       .catch((e) => setErr(String(e)))
@@ -283,7 +284,7 @@ export default function CustomResourceDefinitionDrawer(props: {
               {/* EVENTS */}
               {tab === 2 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  <EventsList events={events} emptyMessage="No events found for this CRD." />
+                  <EventsPanel endpoint={`/api/customresourcedefinitions/${encodeURIComponent(name || "")}/events`} token={props.token} emptyMessage="No events found for this CRD." />
                 </Box>
               )}
 

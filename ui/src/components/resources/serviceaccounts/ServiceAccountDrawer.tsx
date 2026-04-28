@@ -17,6 +17,7 @@ import { fmtAge, fmtTs, valueOrDash } from "../../../utils/format";
 import Section from "../../shared/Section";
 import MetadataSection from "../../shared/MetadataSection";
 import EventsList from "../../shared/EventsList";
+import EventsPanel from "../../shared/EventsPanel";
 import ResourceYamlPanel from "../../shared/ResourceYamlPanel";
 import KeyValueTable from "../../shared/KeyValueTable";
 import AccessDeniedState from "../../shared/AccessDeniedState";
@@ -132,7 +133,7 @@ export default function ServiceAccountDrawer(props: {
       setDetails(item);
 
       const ev = await apiGet<ApiListResponse<EventDTO>>(
-        `/api/namespaces/${encodeURIComponent(ns)}/serviceaccounts/${encodeURIComponent(name)}/events`,
+        `/api/namespaces/${encodeURIComponent(ns)}/serviceaccounts/${encodeURIComponent(name)}/events?limit=5&type=Warning`,
         props.token
       );
       setEvents(ev?.items || []);
@@ -300,7 +301,7 @@ export default function ServiceAccountDrawer(props: {
               {/* EVENTS */}
               {tab === 2 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  <EventsList events={events} emptyMessage="No events found for this ServiceAccount." />
+                  <EventsPanel endpoint={`/api/namespaces/${encodeURIComponent(ns)}/serviceaccounts/${encodeURIComponent(name || "")}/events`} token={props.token} emptyMessage="No events found for this ServiceAccount." />
                 </Box>
               )}
 

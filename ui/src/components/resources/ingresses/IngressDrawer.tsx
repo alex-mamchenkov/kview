@@ -25,6 +25,7 @@ import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import AttentionSummary from "../../shared/AttentionSummary";
 import MetadataSection from "../../shared/MetadataSection";
 import EventsList from "../../shared/EventsList";
+import EventsPanel from "../../shared/EventsPanel";
 import CodeBlock from "../../shared/CodeBlock";
 import IngressActions from "./IngressActions";
 import RightDrawer from "../../layout/RightDrawer";
@@ -164,7 +165,7 @@ export default function IngressDrawer(props: {
       setDetails(item);
 
       const ev = await apiGet<ApiListResponse<EventDTO>>(
-        `/api/namespaces/${encodeURIComponent(ns)}/ingresses/${encodeURIComponent(name)}/events`,
+        `/api/namespaces/${encodeURIComponent(ns)}/ingresses/${encodeURIComponent(name)}/events?limit=5&type=Warning`,
         props.token
       );
       setEvents(ev?.items || []);
@@ -394,7 +395,7 @@ export default function IngressDrawer(props: {
               {/* EVENTS */}
               {tab === 3 && (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", overflow: "auto" }}>
-                  <EventsList events={events} emptyMessage="No events found for this Ingress." />
+                  <EventsPanel endpoint={`/api/namespaces/${encodeURIComponent(ns)}/ingresses/${encodeURIComponent(name || "")}/events`} token={props.token} emptyMessage="No events found for this Ingress." />
                 </Box>
               )}
 
