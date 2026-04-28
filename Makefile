@@ -33,7 +33,7 @@ DOCKER_RUN=docker run --rm \
 
 .DEFAULT_GOAL := all
 
-.PHONY: all check lint-go coverage ui build build-webview build-release docker-image clean prepare-cache install-git-hooks release-tag local-check local-lint-go local-coverage local-ui local-build local-build-webview local-build-release
+.PHONY: all check lint-go coverage test-visibility ui build build-webview build-release docker-image clean prepare-cache install-git-hooks release-tag local-check local-lint-go local-coverage local-test-visibility local-ui local-build local-build-webview local-build-release
 
 all: install-git-hooks check build
 
@@ -70,6 +70,9 @@ lint-go: install-git-hooks docker-image prepare-cache
 coverage: install-git-hooks docker-image prepare-cache
 	$(DOCKER_RUN) make local-coverage COVERAGE_DIR=$(COVERAGE_DIR)
 
+test-visibility: install-git-hooks docker-image prepare-cache
+	$(DOCKER_RUN) make local-test-visibility
+
 ui: install-git-hooks docker-image prepare-cache
 	$(DOCKER_RUN) make local-ui
 
@@ -87,7 +90,16 @@ local-check: install-git-hooks
 	cd $(UI_DIR) && npm ci && npm run typecheck && npm run lint && npm run test
 	GO_PACKAGES=$$(go list ./... | grep -v '/$(UI_DIR)/node_modules/'); \
 		go vet $$GO_PACKAGES; \
-		go test $$GO_PACKAGES
+		test_output=$$(mktemp); \
+		if go test $$GO_PACKAGES > "$$test_output" 2>&1; then \
+			sed '/^[?][[:space:]].*\[no test files\]$$/d' "$$test_output"; \
+			rm -f "$$test_output"; \
+		else \
+			cat "$$test_output"; \
+			rm -f "$$test_output"; \
+			exit 1; \
+		fi
+	scripts/test-visibility.sh
 
 local-lint-go: install-git-hooks
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4 run
@@ -95,9 +107,22 @@ local-lint-go: install-git-hooks
 local-coverage: install-git-hooks
 	mkdir -p $(COVERAGE_DIR)
 	GO_PACKAGES=$$(go list ./... | grep -v '/$(UI_DIR)/node_modules/'); \
-		go test -covermode=atomic -coverprofile=$(COVERAGE_DIR)/go-coverage.out $$GO_PACKAGES
+		test_output=$$(mktemp); \
+		if go test -covermode=atomic -coverprofile=$(COVERAGE_DIR)/go-coverage.out $$GO_PACKAGES > "$$test_output" 2>&1; then \
+			sed '/^[?][[:space:]].*\[no test files\]$$/d' "$$test_output"; \
+			rm -f "$$test_output"; \
+		else \
+			cat "$$test_output"; \
+			rm -f "$$test_output"; \
+			exit 1; \
+		fi
 	go tool cover -func=$(COVERAGE_DIR)/go-coverage.out | tee $(COVERAGE_DIR)/go-coverage-summary.txt
-	printf "%s\n" "Frontend coverage not generated: no dedicated Vitest coverage config/script is currently defined." > $(COVERAGE_DIR)/frontend-coverage-skipped.txt
+	cd $(UI_DIR) && npm ci && npm run test:coverage -- --coverage.reportsDirectory=../$(COVERAGE_DIR)/frontend
+	cp $(COVERAGE_DIR)/frontend/coverage-summary.json $(COVERAGE_DIR)/frontend-coverage-summary.json
+	scripts/test-visibility.sh | tee $(COVERAGE_DIR)/test-visibility.txt
+
+local-test-visibility: install-git-hooks
+	scripts/test-visibility.sh
 
 local-ui: install-git-hooks
 	cd $(UI_DIR) && npm ci && npm run build
