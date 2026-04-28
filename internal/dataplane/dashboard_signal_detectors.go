@@ -69,7 +69,10 @@ func detectAbnormalJobSignals(_ time.Time, ns string, s dashboardSnapshotSet) []
 	var out []ClusterDashboardSignal
 	for _, j := range EnrichJobListItemsForAPI(s.jobs.Items) {
 		if j.NeedsAttention {
-			out = append(out, dashboardSignalItem("abnormal_job", "Job", ns, j.Name, "high", 90, "Job is failed or has failed attempts.", "high", "jobs"))
+			f := dashboardSignalItem("abnormal_job", "Job", ns, j.Name, "high", 90, "Job is failed or has failed attempts.", "high", "jobs")
+			f.ActualData = fmt.Sprintf("status %s, active %d, succeeded %d, failed %d", j.Status, j.Active, j.Succeeded, j.Failed)
+			f.CalculatedData = "failed attempts or failed terminal status observed"
+			out = append(out, f)
 		}
 	}
 	return out
@@ -86,7 +89,10 @@ func detectLongRunningJobSignals(_ time.Time, ns string, s dashboardSnapshotSet)
 	var out []ClusterDashboardSignal
 	for _, j := range EnrichJobListItemsForAPI(s.jobs.Items) {
 		if !j.NeedsAttention && j.Status == "Running" && j.AgeSec >= int64(duration.Seconds()) {
-			out = append(out, dashboardSignalItem("long_running_job", "Job", ns, j.Name, "medium", 62, fmt.Sprintf("Job has been running for more than %s.", humanizeSignalDuration(duration)), "medium", "jobs"))
+			f := dashboardSignalItem("long_running_job", "Job", ns, j.Name, "medium", 62, fmt.Sprintf("Job has been running for more than %s.", humanizeSignalDuration(duration)), "medium", "jobs")
+			f.ActualData = fmt.Sprintf("status %s, age %s, active %d", j.Status, humanizeSignalDuration(time.Duration(j.AgeSec)*time.Second), j.Active)
+			f.CalculatedData = fmt.Sprintf("configured long-running threshold is %s", humanizeSignalDuration(duration))
+			out = append(out, f)
 		}
 	}
 	return out
@@ -99,7 +105,10 @@ func detectAbnormalCronJobSignals(_ time.Time, ns string, s dashboardSnapshotSet
 	var out []ClusterDashboardSignal
 	for _, cj := range EnrichCronJobListItemsForAPI(s.cjs.Items) {
 		if cj.NeedsAttention {
-			out = append(out, dashboardSignalItem("abnormal_cronjob", "CronJob", ns, cj.Name, "high", 88, "CronJob has an unusually large number of active jobs.", "high", "cronjobs"))
+			f := dashboardSignalItem("abnormal_cronjob", "CronJob", ns, cj.Name, "high", 88, "CronJob has an unusually large number of active jobs.", "high", "cronjobs")
+			f.ActualData = fmt.Sprintf("active jobs %d, schedule %s", cj.Active, cj.Schedule)
+			f.CalculatedData = "active job count is above the normal list-health range"
+			out = append(out, f)
 		}
 	}
 	return out
@@ -116,7 +125,10 @@ func detectCronJobNoRecentSuccessSignals(_ time.Time, ns string, s dashboardSnap
 	var out []ClusterDashboardSignal
 	for _, cj := range EnrichCronJobListItemsForAPI(s.cjs.Items) {
 		if !cj.NeedsAttention && !cj.Suspend && cj.AgeSec >= int64(duration.Seconds()) && cj.LastSuccessfulTime == 0 {
-			out = append(out, dashboardSignalItem("cronjob_no_recent_success", "CronJob", ns, cj.Name, "medium", 60, fmt.Sprintf("CronJob has no successful run recorded after more than %s.", humanizeSignalDuration(duration)), "medium", "cronjobs"))
+			f := dashboardSignalItem("cronjob_no_recent_success", "CronJob", ns, cj.Name, "medium", 60, fmt.Sprintf("CronJob has no successful run recorded after more than %s.", humanizeSignalDuration(duration)), "medium", "cronjobs")
+			f.ActualData = fmt.Sprintf("last successful run missing, age %s, schedule %s", humanizeSignalDuration(time.Duration(cj.AgeSec)*time.Second), cj.Schedule)
+			f.CalculatedData = fmt.Sprintf("successful run absent past %s threshold", humanizeSignalDuration(duration))
+			out = append(out, f)
 		}
 	}
 	return out
@@ -174,7 +186,10 @@ func detectStaleTransitionalHelmReleaseSignals(now time.Time, ns string, s dashb
 			age = fmt.Sprintf("status has been transitional for more than %s", humanizeSignalDuration(duration))
 		}
 		if stale {
-			out = append(out, dashboardSignalItem("stale_transitional_helm_release", "HelmRelease", ns, rel.Name, "high", 86, age, "medium", "helm"))
+			f := dashboardSignalItem("stale_transitional_helm_release", "HelmRelease", ns, rel.Name, "high", 86, age, "medium", "helm")
+			f.ActualData = fmt.Sprintf("status %s, revision %d", rel.Status, rel.Revision)
+			f.CalculatedData = fmt.Sprintf("stale threshold %s", humanizeSignalDuration(duration))
+			out = append(out, f)
 		}
 	}
 	return out
@@ -187,7 +202,10 @@ func detectServiceNoReadyEndpointsSignals(_ time.Time, ns string, s dashboardSna
 	var out []ClusterDashboardSignal
 	for _, svc := range EnrichServiceListItemsForAPI(s.svcs.Items) {
 		if svc.NeedsAttention {
-			out = append(out, dashboardSignalItem("service_no_ready_endpoints", "Service", ns, svc.Name, "medium", 66, "Service has no ready endpoints.", "medium", "services"))
+			f := dashboardSignalItem("service_no_ready_endpoints", "Service", ns, svc.Name, "medium", 66, "Service has no ready endpoints.", "medium", "services")
+			f.ActualData = fmt.Sprintf("ready %d, not ready %d endpoints", svc.EndpointsReady, svc.EndpointsNotReady)
+			f.CalculatedData = fmt.Sprintf("%s service exposure, endpoint health %s", svc.ExposureHint, svc.EndpointHealthBucket)
+			out = append(out, f)
 		}
 	}
 	return out
@@ -200,7 +218,10 @@ func detectIngressPendingAddressSignals(_ time.Time, ns string, s dashboardSnaps
 	var out []ClusterDashboardSignal
 	for _, ing := range EnrichIngressListItemsForAPI(s.ings.Items) {
 		if ing.NeedsAttention && ing.AddressState == "pending" {
-			out = append(out, dashboardSignalItem("ingress_pending_address", "Ingress", ns, ing.Name, "medium", 64, "Ingress has no assigned address yet.", "medium", "ingresses"))
+			f := dashboardSignalItem("ingress_pending_address", "Ingress", ns, ing.Name, "medium", 64, "Ingress has no assigned address yet.", "medium", "ingresses")
+			f.ActualData = fmt.Sprintf("%d host%s, 0 addresses", len(ing.Hosts), pluralSuffix(len(ing.Hosts)))
+			f.CalculatedData = fmt.Sprintf("address state %s, TLS %s", ing.AddressState, ing.TLSHint)
+			out = append(out, f)
 		}
 	}
 	return out
@@ -213,7 +234,10 @@ func detectIngressNeedsAttentionSignals(_ time.Time, ns string, s dashboardSnaps
 	var out []ClusterDashboardSignal
 	for _, ing := range EnrichIngressListItemsForAPI(s.ings.Items) {
 		if ing.NeedsAttention && ing.AddressState != "pending" {
-			out = append(out, dashboardSignalItem("ingress_needs_attention", "Ingress", ns, ing.Name, "medium", 64, "Ingress routing needs attention.", "medium", "ingresses"))
+			f := dashboardSignalItem("ingress_needs_attention", "Ingress", ns, ing.Name, "medium", 64, "Ingress routing needs attention.", "medium", "ingresses")
+			f.ActualData = fmt.Sprintf("%d host%s, %d address%s", len(ing.Hosts), pluralSuffix(len(ing.Hosts)), len(ing.Addresses), pluralSuffix(len(ing.Addresses)))
+			f.CalculatedData = fmt.Sprintf("routing health %s, TLS %s", ing.RoutingHealthBucket, ing.TLSHint)
+			out = append(out, f)
 		}
 	}
 	return out
@@ -236,7 +260,14 @@ func detectPVCNeedsAttentionSignals(_ time.Time, ns string, s dashboardSnapshotS
 			score = 84
 			reason = "PersistentVolumeClaim is in a degraded phase."
 		}
-		out = append(out, dashboardSignalItem("pvc_needs_attention", "PersistentVolumeClaim", ns, pvc.Name, severity, score, reason, "medium", "persistentvolumeclaims"))
+		f := dashboardSignalItem("pvc_needs_attention", "PersistentVolumeClaim", ns, pvc.Name, severity, score, reason, "medium", "persistentvolumeclaims")
+		f.ActualData = fmt.Sprintf("phase %s, requested %s, capacity %s", pvc.Phase, pvc.RequestedStorage, pvc.Capacity)
+		if pvc.ResizePending {
+			f.CalculatedData = "requested storage differs from current capacity"
+		} else {
+			f.CalculatedData = fmt.Sprintf("binding health %s", pvc.HealthBucket)
+		}
+		out = append(out, f)
 	}
 	return out
 }
@@ -248,7 +279,10 @@ func detectRolePermissionSurfaceSignals(_ time.Time, ns string, s dashboardSnaps
 	var out []ClusterDashboardSignal
 	for _, role := range EnrichRoleListItemsForAPI(s.roles.Items) {
 		if role.NeedsAttention {
-			out = append(out, dashboardSignalItem("role_permission_surface", "Role", ns, role.Name, "low", 42, "Role has an empty or broad rule surface.", "medium", "roles"))
+			f := dashboardSignalItem("role_permission_surface", "Role", ns, role.Name, "low", 42, "Role has an empty or broad rule surface.", "medium", "roles")
+			f.ActualData = fmt.Sprintf("%d rule%s", role.RulesCount, pluralSuffix(role.RulesCount))
+			f.CalculatedData = fmt.Sprintf("permission breadth %s", role.PrivilegeBreadth)
+			out = append(out, f)
 		}
 	}
 	return out
@@ -261,7 +295,10 @@ func detectRoleBindingSubjectSurfaceSignals(_ time.Time, ns string, s dashboardS
 	var out []ClusterDashboardSignal
 	for _, rb := range EnrichRoleBindingListItemsForAPI(s.roleBindings.Items) {
 		if rb.NeedsAttention {
-			out = append(out, dashboardSignalItem("rolebinding_subject_surface", "RoleBinding", ns, rb.Name, "low", 40, "RoleBinding has an empty or broad subject surface.", "medium", "rolebindings"))
+			f := dashboardSignalItem("rolebinding_subject_surface", "RoleBinding", ns, rb.Name, "low", 40, "RoleBinding has an empty or broad subject surface.", "medium", "rolebindings")
+			f.ActualData = fmt.Sprintf("%d subject%s, %s reference", rb.SubjectsCount, pluralSuffix(rb.SubjectsCount), rb.BindingHint)
+			f.CalculatedData = fmt.Sprintf("subject breadth %s", rb.SubjectBreadth)
+			out = append(out, f)
 		}
 	}
 	return out
@@ -339,7 +376,10 @@ func detectPotentiallyUnusedPVCSignals(_ time.Time, ns string, s dashboardSnapsh
 	var out []ClusterDashboardSignal
 	for _, pvc := range EnrichPVCListItemsForAPI(s.pvcs.Items) {
 		if !pvc.NeedsAttention && pvc.AgeSec >= int64(minAge.Seconds()) {
-			out = append(out, dashboardSignalItem("potentially_unused_pvc", "PersistentVolumeClaim", ns, pvc.Name, "low", 30, "Potentially unused: no pods are present in the cached namespace snapshot.", "low", "persistentvolumeclaims"))
+			f := dashboardSignalItem("potentially_unused_pvc", "PersistentVolumeClaim", ns, pvc.Name, "low", 30, "Potentially unused: no pods are present in the cached namespace snapshot.", "low", "persistentvolumeclaims")
+			f.ActualData = fmt.Sprintf("0 pods in namespace snapshot, PVC age %s", humanizeSignalDuration(time.Duration(pvc.AgeSec)*time.Second))
+			f.CalculatedData = fmt.Sprintf("unused-candidate age threshold %s", humanizeSignalDuration(minAge))
+			out = append(out, f)
 		}
 	}
 	return out
@@ -356,7 +396,10 @@ func detectPotentiallyUnusedServiceAccountSignals(_ time.Time, ns string, s dash
 	var out []ClusterDashboardSignal
 	for _, sa := range s.sas.Items {
 		if sa.Name != "default" && sa.AgeSec >= int64(minAge.Seconds()) {
-			out = append(out, dashboardSignalItem("potentially_unused_serviceaccount", "ServiceAccount", ns, sa.Name, "low", 25, "Potentially unused: no pods are present in the cached namespace snapshot.", "low", "serviceaccounts"))
+			f := dashboardSignalItem("potentially_unused_serviceaccount", "ServiceAccount", ns, sa.Name, "low", 25, "Potentially unused: no pods are present in the cached namespace snapshot.", "low", "serviceaccounts")
+			f.ActualData = fmt.Sprintf("0 pods in namespace snapshot, service account age %s", humanizeSignalDuration(time.Duration(sa.AgeSec)*time.Second))
+			f.CalculatedData = fmt.Sprintf("unused-candidate age threshold %s", humanizeSignalDuration(minAge))
+			out = append(out, f)
 		}
 	}
 	return out

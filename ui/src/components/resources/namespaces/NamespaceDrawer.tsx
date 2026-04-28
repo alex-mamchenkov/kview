@@ -56,6 +56,7 @@ import ResourceDrawerShell from "../../shared/ResourceDrawerShell";
 import ResourceLinkChip from "../../shared/ResourceLinkChip";
 import ScopedCountChip from "../../shared/ScopedCountChip";
 import StatusChip from "../../shared/StatusChip";
+import { signalSeverityColor, signalTooltipText } from "../../shared/signalFormat";
 import RightDrawer from "../../layout/RightDrawer";
 import Section from "../../shared/Section";
 import EventsPanel from "../../shared/EventsPanel";
@@ -91,13 +92,6 @@ const sectionMap: Record<string, string> = {
   roleBindings: "rolebindings",
 };
 
-function signalSeverityColor(severity?: string): "error" | "warning" | "info" | "default" {
-  if (severity === "high") return "error";
-  if (severity === "medium") return "warning";
-  if (severity === "low") return "info";
-  return "default";
-}
-
 function namespaceConditionChipColor(status?: string): "success" | "warning" | "error" | "default" {
   if (status === "True") return "error";
   if (status === "False") return "success";
@@ -127,15 +121,6 @@ function summarizeQuotaPressure(quotas: NamespaceResourceQuota[]): { critical: n
     }
   }
   return { critical, warning };
-}
-
-function signalNote(signal: DashboardSignalItem): string {
-  const actual = signal.actualData || signal.reason;
-  const parts = [actual];
-  if (signal.calculatedData && signal.calculatedData !== actual) parts.push(`Calculated: ${signal.calculatedData}`);
-  if (signal.likelyCause) parts.push(`Likely cause: ${signal.likelyCause}`);
-  if (signal.suggestedAction) parts.push(`Next step: ${signal.suggestedAction}`);
-  return parts.join(" ");
 }
 
 function resourceSignalKey(kind: string, name: string, scope = "namespace", scopeLocation = ""): string {
@@ -172,7 +157,7 @@ function ResourceSignalsChip({ signals, label }: { signals: DashboardSignalItem[
   const severity = worstSignalSeverity(signals);
   const chipLabel = label || (severity ? formatChipLabel(severity) : "Signals");
   return (
-    <Tooltip title={signals.map(signalNote).join(" ")}>
+    <Tooltip title={signals.map(signalTooltipText).join(" ")}>
       <ScopedCountChip size="small" color={signalSeverityColor(severity)} label={chipLabel} count={signals.length} />
     </Tooltip>
   );

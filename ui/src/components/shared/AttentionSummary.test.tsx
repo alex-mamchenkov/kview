@@ -54,14 +54,21 @@ describe("AttentionSummary", () => {
     render(
       <AttentionSummary
         signals={[
-          signal({ severity: "high", reason: "ImagePullBackOff", actualData: "ImagePullBackOff: myimg" }),
+          signal({
+            severity: "high",
+            reason: "ImagePullBackOff",
+            actualData: "ImagePullBackOff",
+            calculatedData: "image myimg",
+          }),
         ]}
       />,
     );
-    const row = screen.getByText(/ImagePullBackOff: myimg/).closest("[data-signal-row]");
+    const row = screen.getByText("ImagePullBackOff").closest("[data-signal-row]");
     expect(row).toBeTruthy();
     if (row) {
-      expect(within(row as HTMLElement).getByText(/high/i)).toBeTruthy();
+      const rowText = row.textContent || "";
+      expect(rowText.indexOf("High")).toBeLessThan(rowText.indexOf("ImagePullBackOff"));
+      expect(within(row as HTMLElement).getByText("image myimg")).toBeTruthy();
     }
   });
 });

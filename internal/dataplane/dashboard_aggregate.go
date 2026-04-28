@@ -321,9 +321,6 @@ func dashboardSignalItem(signalType, kind, namespace, name, severity string, sco
 	if def.ActualData == "" {
 		def.ActualData = reason
 	}
-	if def.CalculatedData == "" {
-		def.CalculatedData = reason
-	}
 	resourceName := name
 	scope := "namespace"
 	scopeLocation := namespace

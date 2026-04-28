@@ -1,12 +1,11 @@
 import React from "react";
-import { Box, Chip, Typography } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import type { DashboardSignalItem } from "../../types/api";
 import type { ChipColor } from "../../utils/k8sUi";
-import { fmtTimeAgo } from "../../utils/format";
-import Section from "./Section";
 import SignalHintIcons from "./SignalHintIcons";
 import StatusChip from "./StatusChip";
+import { signalCalculatedText, signalMetaText, signalSeverityColor } from "./signalFormat";
 
 export type AttentionHealth = {
   label: string;
@@ -35,22 +34,6 @@ export type AttentionSummaryProps = {
   onJumpToSpec?: () => void;
 };
 
-function severityColor(severity?: string): "error" | "warning" | "info" | "default" {
-  if (severity === "high" || severity === "error") return "error";
-  if (severity === "medium" || severity === "warning") return "warning";
-  if (severity === "low" || severity === "info") return "info";
-  return "default";
-}
-
-function signalText(signal: DashboardSignalItem): string {
-  const actual = signal.actualData || signal.reason;
-  const parts = [actual];
-  if (signal.calculatedData && signal.calculatedData !== actual) parts.push(`Calculated: ${signal.calculatedData}`);
-  if (signal.firstSeenAt) parts.push(`First seen ${fmtTimeAgo(signal.firstSeenAt)}`);
-  if (signal.lastSeenAt) parts.push(`Last verified ${fmtTimeAgo(signal.lastSeenAt)}`);
-  return parts.join(" · ");
-}
-
 function isEmpty(props: AttentionSummaryProps): boolean {
   const { signals } = props;
   if (signals && signals.length > 0) return false;
@@ -75,7 +58,7 @@ export default function AttentionSummary(props: AttentionSummaryProps) {
   const { signals = [] } = props;
 
   return (
-    <Section title="Attention" divider={false} headerSx={{ mb: 0.5 }}>
+    <Box>
       <Box
         sx={{
           border: "1px solid var(--chip-warning-border)",
@@ -89,26 +72,42 @@ export default function AttentionSummary(props: AttentionSummaryProps) {
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
           <WarningAmberIcon sx={{ color: "warning.main", fontSize: 20 }} />
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+            Attention
+          </Typography>
         </Box>
 
         {signals.length > 0 ? (
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
-            {signals.slice(0, 3).map((signal, idx) => (
-              <Box
-                key={`${signal.signalType || signal.kind}-${signal.name || idx}`}
-                data-signal-row
-                sx={{ color: "text.primary", display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}
-              >
-                <StatusChip size="small" color={severityColor(signal.severity)} label={signal.severity || "info"} />
-                <Typography component="span" variant="body2">
-                  {signalText(signal)}
-                </Typography>
-                <SignalHintIcons
-                  likelyCause={signal.likelyCause}
-                  suggestedAction={signal.suggestedAction}
-                />
-              </Box>
-            ))}
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+            {signals.slice(0, 3).map((signal, idx) => {
+              const calculated = signalCalculatedText(signal);
+              const meta = signalMetaText(signal, true);
+              return (
+                <Box
+                  key={`${signal.signalType || signal.kind}-${signal.name || idx}`}
+                  data-signal-row
+                  sx={{ color: "text.primary", display: "flex", flexDirection: "column", gap: 0.25 }}
+                >
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+                    <StatusChip size="small" color={signalSeverityColor(signal.severity)} label={signal.severity || "info"} />
+                    <Typography component="span" variant="body2">
+                      {signal.reason}
+                    </Typography>
+                    {calculated ? (
+                      <Typography component="span" variant="body2" color="text.secondary">
+                        {calculated}
+                      </Typography>
+                    ) : null}
+                    <SignalHintIcons likelyCause={signal.likelyCause} suggestedAction={signal.suggestedAction} />
+                  </Box>
+                  {meta ? (
+                    <Typography variant="caption" color="text.secondary">
+                      {meta}
+                    </Typography>
+                  ) : null}
+                </Box>
+              );
+            })}
             {signals.length > 3 ? (
               <Typography variant="caption" color="text.secondary">
                 +{signals.length - 3} more signal{signals.length - 3 === 1 ? "" : "s"}
@@ -117,6 +116,6 @@ export default function AttentionSummary(props: AttentionSummaryProps) {
           </Box>
         ) : null}
       </Box>
-    </Section>
+    </Box>
   );
 }

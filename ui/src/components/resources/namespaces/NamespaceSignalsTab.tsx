@@ -30,6 +30,13 @@ import GaugeTableRow from "../../shared/GaugeTableRow";
 import ScopedCountChip from "../../shared/ScopedCountChip";
 import StatusChip from "../../shared/StatusChip";
 import {
+  signalCalculatedText,
+  signalFirstSeenText,
+  signalLastSeenText,
+  signalSeverityColor,
+  signalTooltipText,
+} from "../../shared/signalFormat";
+import {
   GAUGE_COLOR_HEALTHY,
   GAUGE_COLOR_WARNING,
   GAUGE_COLOR_ERROR,
@@ -38,29 +45,10 @@ import {
 } from "../../../theme/sxTokens";
 import NamespaceActions from "./NamespaceActions";
 import { dataplaneCoarseStateChipColor, formatChipLabel } from "../../../utils/k8sUi";
-import { fmtTimeAgo } from "../../../utils/format";
-
-function signalSeverityColor(severity?: string): "error" | "warning" | "info" | "default" {
-  if (severity === "high") return "error";
-  if (severity === "medium") return "warning";
-  if (severity === "low") return "info";
-  return "default";
-}
 
 function signalTarget(signal: DashboardSignalItem): string {
   if (!signal.name) return signal.namespace || signal.kind;
   return signal.namespace ? `${signal.namespace}/${signal.name}` : signal.name;
-}
-
-function signalNote(signal: DashboardSignalItem): string {
-  const actual = signal.actualData || signal.reason;
-  const parts = [actual];
-  if (signal.calculatedData && signal.calculatedData !== actual) parts.push(`Calculated: ${signal.calculatedData}`);
-  if (signal.likelyCause) parts.push(`Likely cause: ${signal.likelyCause}`);
-  if (signal.suggestedAction) parts.push(`Next step: ${signal.suggestedAction}`);
-  if (signal.firstSeenAt) parts.push(`First seen: ${fmtTimeAgo(signal.firstSeenAt)}`);
-  if (signal.lastSeenAt) parts.push(`Last verified: ${fmtTimeAgo(signal.lastSeenAt)}`);
-  return parts.join(" ");
 }
 
 function problematicSignalColor(reason: string): "warning" | "error" {
@@ -348,7 +336,7 @@ export default function NamespaceSignalsTab({
                 <TableCell sx={{ width: 96 }}>Kind</TableCell>
                 <TableCell sx={{ width: 168 }}>Target</TableCell>
                 <TableCell sx={{ width: 96 }}>Signal</TableCell>
-                <TableCell sx={{ width: 84, whiteSpace: "nowrap" }}>
+                <TableCell sx={{ width: 92, whiteSpace: "nowrap" }}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
                     <span>Seen</span>
                     <IconButton
@@ -371,7 +359,7 @@ export default function NamespaceSignalsTab({
                   hover
                   sx={{ cursor: "pointer" }}
                   onClick={() => handleSignal(signal)}
-                  title={signalNote(signal)}
+                  title={signalTooltipText(signal)}
                 >
                   <TableCell>
                     <Chip size="small" label={signal.kind} />
@@ -382,25 +370,21 @@ export default function NamespaceSignalsTab({
                   <TableCell>
                     <StatusChip size="small" color={signalSeverityColor(signal.severity)} label={signal.severity} />
                   </TableCell>
-                  <TableCell sx={{ width: 84, whiteSpace: "nowrap" }}>
-                    {signal.firstSeenAt || signal.lastSeenAt ? (
-                      <Box sx={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
-                        <Typography variant="caption" color="text.secondary">
-                          {signal.firstSeenAt ? `F ${fmtTimeAgo(signal.firstSeenAt)}` : "F -"}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {signal.lastSeenAt ? `L ${fmtTimeAgo(signal.lastSeenAt)}` : "L -"}
-                        </Typography>
-                      </Box>
-                    ) : (
-                      <Typography variant="caption" color="text.secondary">-</Typography>
-                    )}
+                  <TableCell sx={{ width: 92, whiteSpace: "nowrap" }}>
+                    <Box sx={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        F {signalFirstSeenText(signal)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        L {signalLastSeenText(signal)}
+                      </Typography>
+                    </Box>
                   </TableCell>
                   <TableCell sx={{ width: "auto" }}>
-                    <Typography variant="body2">{signal.actualData || signal.reason}</Typography>
-                    {signal.calculatedData && signal.calculatedData !== (signal.actualData || signal.reason) ? (
+                    <Typography variant="body2">{signal.reason}</Typography>
+                    {signalCalculatedText(signal) ? (
                       <Typography variant="caption" color="text.secondary" display="block">
-                        {signal.calculatedData}
+                        {signalCalculatedText(signal)}
                       </Typography>
                     ) : null}
                   </TableCell>

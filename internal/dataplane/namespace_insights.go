@@ -147,7 +147,16 @@ func NamespaceInsightSignalsFromDashboard(items []ClusterDashboardSignal) []dto.
 
 func namespaceInsightSignalsFromDashboard(items []ClusterDashboardSignal) []dto.NamespaceInsightSignalDTO {
 	out := make([]dto.NamespaceInsightSignalDTO, 0, len(items))
+	observedAt := time.Now().UTC().Unix()
 	for _, item := range items {
+		firstSeenAt := item.FirstSeenAt
+		if firstSeenAt <= 0 {
+			firstSeenAt = observedAt
+		}
+		lastSeenAt := item.LastSeenAt
+		if lastSeenAt <= 0 {
+			lastSeenAt = observedAt
+		}
 		out = append(out, dto.NamespaceInsightSignalDTO{
 			Kind:            item.Kind,
 			Namespace:       item.Namespace,
@@ -166,8 +175,8 @@ func namespaceInsightSignalsFromDashboard(items []ClusterDashboardSignal) []dto.
 			ScopeLocation:   item.ScopeLocation,
 			ActualData:      item.ActualData,
 			CalculatedData:  item.CalculatedData,
-			FirstSeenAt:     item.FirstSeenAt,
-			LastSeenAt:      item.LastSeenAt,
+			FirstSeenAt:     firstSeenAt,
+			LastSeenAt:      lastSeenAt,
 		})
 	}
 	return out

@@ -448,7 +448,7 @@ func TestDashboardSignalDefinitionRegistryPreservesKnownMetadata(t *testing.T) {
 	if secret.Type != "empty_secret" || secret.Label != "Empty Secrets" {
 		t.Fatalf("secret signal identity mismatch: %+v", secret)
 	}
-	if secret.ActualData != "0 data keys" || secret.CalculatedData != "empty Secret" {
+	if secret.ActualData != "0 data keys" || secret.CalculatedData != "" {
 		t.Fatalf("secret signal data mismatch: %+v", secret)
 	}
 	if secret.LikelyCause == "" || secret.SuggestedAction == "" {

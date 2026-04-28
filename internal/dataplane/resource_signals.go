@@ -147,13 +147,25 @@ func fallbackSignalsForResource(now time.Time, scope, namespace, kind, name stri
 	if plane == nil || kind == "" || name == "" {
 		return nil
 	}
+	var out []dto.NamespaceInsightSignalDTO
 	if scope == ResourceSignalsScopeNamespace {
-		return fallbackNamespaceSignals(now, namespace, kind, name, plane)
+		out = fallbackNamespaceSignals(now, namespace, kind, name, plane)
+	} else if scope == ResourceSignalsScopeCluster {
+		out = fallbackClusterSignals(now, kind, name, plane, restartThreshold)
 	}
-	if scope == ResourceSignalsScopeCluster {
-		return fallbackClusterSignals(now, kind, name, plane, restartThreshold)
+	if len(out) == 0 {
+		return nil
 	}
-	return nil
+	observedAt := now.UTC().Unix()
+	for i := range out {
+		if out[i].FirstSeenAt <= 0 {
+			out[i].FirstSeenAt = observedAt
+		}
+		if out[i].LastSeenAt <= 0 {
+			out[i].LastSeenAt = observedAt
+		}
+	}
+	return out
 }
 
 func fallbackNamespaceSignals(_ time.Time, namespace, kind, name string, plane *clusterPlane) []dto.NamespaceInsightSignalDTO {
@@ -405,19 +417,18 @@ func fallbackSignal(kind, namespace, name, severity string, score int, reason st
 		scopeLocation = namespace
 	}
 	return dto.NamespaceInsightSignalDTO{
-		Kind:           kind,
-		Namespace:      namespace,
-		Name:           name,
-		Severity:       severity,
-		Score:          score,
-		Reason:         reason,
-		SignalType:     "resource_needs_attention_fallback",
-		ResourceKind:   kind,
-		ResourceName:   name,
-		Scope:          scope,
-		ScopeLocation:  scopeLocation,
-		ActualData:     reason,
-		CalculatedData: reason,
+		Kind:          kind,
+		Namespace:     namespace,
+		Name:          name,
+		Severity:      severity,
+		Score:         score,
+		Reason:        reason,
+		SignalType:    "resource_needs_attention_fallback",
+		ResourceKind:  kind,
+		ResourceName:  name,
+		Scope:         scope,
+		ScopeLocation: scopeLocation,
+		ActualData:    reason,
 	}
 }
 

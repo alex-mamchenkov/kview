@@ -210,6 +210,7 @@ func detectPodSucceededWithIssuesSignal(namespace string, details dto.PodDetails
 		reason, "medium", "pods",
 	)
 	sig.ActualData = "phase Succeeded · " + strings.Join(issues, ", ")
+	sig.CalculatedData = strings.Join(issues, ", ")
 	return &sig
 }
 
@@ -428,7 +429,7 @@ func detectMissingTemplateReferenceSignal(kind, namespace, name string, missing 
 		reason, "high", "workloads",
 	)
 	sig.ActualData = strings.Join(refs, ", ")
-	sig.CalculatedData = "pod template imagePullSecrets and Secret/ConfigMap volumes were checked by the backend"
+	sig.CalculatedData = fmt.Sprintf("%d missing template reference%s checked from pod template", len(refs), pluralSuffix(len(refs)))
 	return &sig
 }
 

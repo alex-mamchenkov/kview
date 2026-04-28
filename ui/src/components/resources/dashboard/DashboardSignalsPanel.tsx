@@ -23,8 +23,13 @@ import SignalHintIcons from "../../shared/SignalHintIcons";
 import InfoHint from "../../shared/InfoHint";
 import ScopedCountChip, { activeChipSx } from "../../shared/ScopedCountChip";
 import StatusChip from "../../shared/StatusChip";
+import {
+  signalCalculatedText,
+  signalFirstSeenText,
+  signalLastSeenText,
+  signalSeverityColor,
+} from "../../shared/signalFormat";
 import type { InspectTarget } from "./dashboardTypes";
-import { fmtTimeAgo } from "../../../utils/format";
 
 type DerivedData = NonNullable<NonNullable<ApiDashboardClusterResponse["item"]>["derived"]>;
 
@@ -58,14 +63,6 @@ function signalLocation(f: DashboardSignalItem): string {
 
 function signalResourceName(f: DashboardSignalItem): string {
   return f.resourceName || f.name || f.namespace || f.kind;
-}
-
-function signalCalculatedText(f: DashboardSignalItem): string {
-  return f.calculatedData || f.reason;
-}
-
-function signalActualText(f: DashboardSignalItem): string {
-  return f.actualData || f.reason;
 }
 
 function signalSortDirection(sort: string, descValue: string, ascValue: string): "asc" | "desc" | undefined {
@@ -598,7 +595,7 @@ export default function DashboardSignalsPanel({
                     sx={target ? { cursor: "pointer" } : undefined}
                   >
                     <TableCell sx={statusCellSx}>
-                      <StatusChip size="small" color={severityColor(f.severity)} label={f.severity} />
+                      <StatusChip size="small" color={signalSeverityColor(f.severity)} label={f.severity} />
                     </TableCell>
                     <TableCell sx={kindCellSx}>
                       <Chip size="small" variant="outlined" label={f.resourceKind || f.kind} />
@@ -613,21 +610,23 @@ export default function DashboardSignalsPanel({
                     </TableCell>
                     <TableCell sx={detailCellSx}>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {signalCalculatedText(f)}
+                        {f.reason}
                         <SignalHintIcons likelyCause={f.likelyCause} suggestedAction={f.suggestedAction} />
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {signalActualText(f)}
-                      </Typography>
+                      {signalCalculatedText(f) ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {signalCalculatedText(f)}
+                        </Typography>
+                      ) : null}
                     </TableCell>
                     <TableCell sx={seenCellSx}>
                       <Typography variant="caption" color="text.secondary">
-                        {f.firstSeenAt ? fmtTimeAgo(f.firstSeenAt) : "-"}
+                        {signalFirstSeenText(f)}
                       </Typography>
                     </TableCell>
                     <TableCell sx={lastSeenCellSx}>
                       <Typography variant="caption" color="text.secondary">
-                        {f.lastSeenAt ? fmtTimeAgo(f.lastSeenAt) : "-"}
+                        {signalLastSeenText(f)}
                       </Typography>
                     </TableCell>
                   </TableRow>
