@@ -28,6 +28,7 @@ import type { Theme } from "@mui/material/styles";
 import CloseIcon from "@mui/icons-material/Close";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
+import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import {
@@ -129,6 +130,23 @@ const sections: Array<{ id: SettingsSection; label: string }> = [
 ];
 
 const headerRowSx = { display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" };
+const denseSelectMenuProps = {
+  PaperProps: {
+    sx: {
+      "& .MuiMenuItem-root": {
+        minHeight: 30,
+        py: 0.25,
+        fontSize: "0.875rem",
+      },
+      "& .MuiCheckbox-root": {
+        py: 0.25,
+      },
+      "& .MuiListItemText-root": {
+        my: 0,
+      },
+    },
+  },
+};
 
 const settingsShellSx = {
   flex: 1,
@@ -271,6 +289,42 @@ function stripUndefinedDeep<T>(value: T): T | undefined {
   return Object.keys(next).length > 0 ? (next as T) : undefined;
 }
 
+function settingsValueEqual(left: unknown, right: unknown): boolean {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((item, index) => settingsValueEqual(item, right[index]));
+  }
+  if (isPlainObject(left) || isPlainObject(right)) {
+    if (!isPlainObject(left) || !isPlainObject(right)) return false;
+    const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+    for (const key of keys) {
+      if (!settingsValueEqual(left[key], right[key])) return false;
+    }
+    return true;
+  }
+  return left === right;
+}
+
+function pruneContextOverrideValue(value: unknown, globalValue: unknown): unknown {
+  if (Array.isArray(value)) return settingsValueEqual(value, globalValue) ? undefined : value;
+  if (!isPlainObject(value)) return settingsValueEqual(value, globalValue) ? undefined : value;
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    const pruned = pruneContextOverrideValue(child, isPlainObject(globalValue) ? globalValue[key] : undefined);
+    if (pruned === undefined) continue;
+    if (isPlainObject(pruned) && Object.keys(pruned).length === 0) continue;
+    out[key] = pruned;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function pruneContextOverride(
+  override: DataplaneContextOverrideSettings,
+  global: DataplaneSettings,
+): DataplaneContextOverrideSettings | undefined {
+  return pruneContextOverrideValue(override, global) as DataplaneContextOverrideSettings | undefined;
+}
+
 function rulePatternError(rule: SmartFilterRule): string | null {
   if (!rule.pattern.trim()) return "Pattern is required.";
   try {
@@ -405,7 +459,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
     if (!contextName) return prev;
     const contextOverrides = { ...prev.dataplane.contextOverrides };
     const current = contextOverrides[contextName] || {};
-    const next = stripUndefinedDeep(updater(current));
+    const next = stripUndefinedDeep(pruneContextOverride(updater(current), prev.dataplane.global));
     if (next) contextOverrides[contextName] = next;
     else delete contextOverrides[contextName];
     return { ...prev, dataplane: { ...prev.dataplane, contextOverrides } };
@@ -498,19 +552,22 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
           signals: sanitizeSignals(deepMerge(prev.dataplane.global.signals, patch)),
         });
       }
+      const contextSignals = dataplaneSettingsForContext(prev.dataplane, activeContext).signals;
       return updateContextDataplaneOverride(prev, (current) => ({
         ...current,
         signals: sanitizeSignals(
-          deepMerge(
-            (current.signals || { overrides: {} }) as DataplaneSettings["signals"],
-            patch,
-          ),
+          deepMerge(contextSignals, patch),
         ),
       }));
     });
   };
 
-  const setSignalOverride = (signalType: string, scope: "global" | "context", patch: Partial<SignalOverride>) => {
+  const setSignalOverride = (
+    signalType: string,
+    scope: "global" | "context",
+    patch: Partial<SignalOverride>,
+    inherited: Partial<SignalOverride> = {},
+  ) => {
     if (!signalType) return;
     setSettings((prev) => {
       const signals = prev.dataplane.global.signals;
@@ -519,6 +576,9 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
         if (next.enabled === undefined) delete next.enabled;
         if (next.severity === undefined) delete next.severity;
         if (next.priority === undefined) delete next.priority;
+        if (next.enabled !== undefined && next.enabled === inherited.enabled) delete next.enabled;
+        if (next.severity !== undefined && next.severity === inherited.severity) delete next.severity;
+        if (next.priority !== undefined && next.priority === inherited.priority) delete next.priority;
         return Object.keys(next).length > 0 ? next : null;
       };
       if (scope === "global") {
@@ -619,13 +679,14 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
       <Box sx={{ maxWidth: 320 }}>
         <SettingField
           label="Initial activity panel state"
-          helperText="Used when the app starts. The current panel can still be opened or collapsed manually."
+          hint="Used when the app starts. The current panel can still be opened or collapsed manually."
         >
           <TextField
             select
             size="small"
             fullWidth
             value={settings.appearance.activityPanelInitiallyOpen ? "expanded" : "collapsed"}
+            SelectProps={{ MenuProps: denseSelectMenuProps }}
             onChange={(e) =>
               setSettings((prev) =>
                 updateAppearance(prev, { activityPanelInitiallyOpen: e.target.value === "expanded" }),
@@ -674,6 +735,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               size="small"
               fullWidth
               value={rule.context || "__all"}
+              SelectProps={{ MenuProps: denseSelectMenuProps }}
               onChange={(e) => setRule(index, { context: e.target.value === "__all" ? "" : e.target.value })}
             >
               <MenuItem value="__all">All contexts</MenuItem>
@@ -690,6 +752,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               size="small"
               fullWidth
               value={rule.scope}
+              SelectProps={{ MenuProps: denseSelectMenuProps }}
               onChange={(e) => {
                 const scope = e.target.value as SettingsScopeMode;
                 const allowed = new Set(smartFilterResourceKeysForScope(scope));
@@ -706,13 +769,14 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
           </SettingField>
           <SettingField
             label="Namespace"
-            helperText={rule.scope === "namespace" ? "Leave as Any namespace for all namespace-scoped lists." : "Only used for namespace-scoped rules."}
+            hint={rule.scope === "namespace" ? "Leave as Any namespace for all namespace-scoped lists." : "Only used for namespace-scoped rules."}
           >
             <TextField
               select
               size="small"
               fullWidth
               value={rule.namespace || "__any"}
+              SelectProps={{ MenuProps: denseSelectMenuProps }}
               onChange={(e) => setRule(index, { namespace: e.target.value === "__any" ? "" : e.target.value })}
               disabled={rule.scope !== "namespace"}
             >
@@ -730,6 +794,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               size="small"
               fullWidth
               value={rule.resourceScope}
+              SelectProps={{ MenuProps: denseSelectMenuProps }}
               onChange={(e) => setRule(index, { resourceScope: e.target.value as SettingsResourceScopeMode })}
             >
               <MenuItem value="any">Any resource</MenuItem>
@@ -740,11 +805,17 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
         {rule.resourceScope === "selected" ? (
           <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
             <FormControl size="small" fullWidth>
-              <InputLabel id={`resources-${rule.id}`}>Resources</InputLabel>
+              <InputLabel id={`resources-${rule.id}`}>
+                <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+                  Resources
+                  <InfoHint title={smartFilterResourceHelperText(rule.scope)} />
+                </Box>
+              </InputLabel>
               <Select
                 labelId={`resources-${rule.id}`}
                 label="Resources"
                 multiple
+                MenuProps={denseSelectMenuProps}
                 value={rule.resources}
                 onChange={(e: SelectChangeEvent<ListResourceKey[]>) => {
                   const value = e.target.value;
@@ -760,9 +831,6 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                 ))}
               </Select>
             </FormControl>
-            <Typography variant="caption" color="text.secondary">
-              {smartFilterResourceHelperText(rule.scope)}
-            </Typography>
           </Box>
         ) : null}
         <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "minmax(260px, 2fr) minmax(120px, 0.6fr) minmax(180px, 1fr)" }}>
@@ -772,19 +840,19 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
             value={rule.pattern}
             onChange={(v) => setRule(index, { pattern: v })}
             error={error ?? undefined}
-            helperText="Matched against the row name."
+            hint="Matched against the row name."
           />
           <SettingField
             label="Flags"
             value={rule.flags}
             onChange={(v) => setRule(index, { flags: sanitizeRegexFlags(v) })}
-            helperText="Allowed: d g i m s u v y"
+            hint="Allowed: d g i m s u v y"
           />
           <SettingField
             label="Display template"
             value={rule.display}
             onChange={(v) => setRule(index, { display: v })}
-            helperText="JavaScript replacement syntax, e.g. $1."
+            hint="JavaScript replacement syntax, e.g. $1."
           />
         </Box>
       </Paper>
@@ -794,6 +862,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
   const renderSmartFilters = () => (
     <SettingSection
       title="Smart Filters"
+      hint="Rules are evaluated in order; each row stops at the first matching rule. Current quick filter chips are generated from these rules when smart filters are enabled."
       actions={
         <Button
           variant="contained"
@@ -807,9 +876,6 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
         </Button>
       }
     >
-      <Typography variant="body2" color="text.secondary">
-        Rules are evaluated in order — each row stops at the first matching rule. Current quick filter chips are generated from these rules when smart filters are enabled.
-      </Typography>
       <Box sx={{ maxWidth: 240 }}>
         <SettingField
           label="Minimum rows per chip"
@@ -822,7 +888,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               }),
             )
           }
-          helperText="Range: 1–50"
+          hint="Range: 1-50"
           min={1}
           max={50}
         />
@@ -876,20 +942,20 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
             label="Name"
             value={command.name}
             onChange={(v) => setCommand(index, { name: v })}
-            helperText="Shown in the container command menu."
+            hint="Shown in the container command menu."
           />
           <SettingField
             label="Container pattern"
             value={command.containerPattern}
             onChange={(v) => setCommand(index, { containerPattern: v })}
             error={patternError ?? undefined}
-            helperText="Optional regex matched against the container name."
+            hint="Optional regex matched against the container name."
           />
           <SettingField
             label="Workdir"
             value={command.workdir}
             onChange={(v) => setCommand(index, { workdir: v })}
-            helperText="Optional. Leave blank to use the container default."
+            hint="Optional. Leave blank to use the container default."
           />
         </SettingGrid>
         <SettingField
@@ -898,7 +964,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
           value={command.command}
           onChange={(v) => setCommand(index, { command: v })}
           error={!command.command.trim() ? "Required." : undefined}
-          helperText="Executed with /bin/sh -lc inside the selected container."
+          hint="Executed with /bin/sh -lc inside the selected container."
         />
         <SettingGrid variant="auto">
           <SettingField label="Output type">
@@ -907,6 +973,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               size="small"
               fullWidth
               value={command.outputType}
+              SelectProps={{ MenuProps: denseSelectMenuProps }}
               onChange={(e) => setCommand(index, { outputType: e.target.value as CustomCommandOutputType })}
             >
               <MenuItem value="text">Free text</MenuItem>
@@ -918,13 +985,14 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
           </SettingField>
           <SettingField
             label="Safety"
-            helperText="Dangerous commands require typed confirmation before execution."
+            hint="Dangerous commands require typed confirmation before execution."
           >
             <TextField
               select
               size="small"
               fullWidth
               value={command.safety}
+              SelectProps={{ MenuProps: denseSelectMenuProps }}
               onChange={(e) => setCommand(index, { safety: e.target.value as CustomCommandSafety })}
             >
               <MenuItem value="safe">Safe: simple confirmation</MenuItem>
@@ -938,7 +1006,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               label="Code language"
               value={command.codeLanguage}
               onChange={(v) => setCommand(index, { codeLanguage: v })}
-              helperText="Examples: json, yaml, php, shell. Leave blank to auto-detect."
+              hint="Examples: json, yaml, php, shell. Leave blank to auto-detect."
             />
           </FieldGroup>
         )}
@@ -948,7 +1016,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               label="File name"
               value={command.fileName}
               onChange={(v) => setCommand(index, { fileName: v })}
-              helperText="Used for the downloaded output."
+              hint="Used for the downloaded output."
             />
             <SettingRow
               label="Compress with gzip"
@@ -964,6 +1032,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
   const renderCustomCommands = () => (
     <SettingSection
       title="Custom Commands"
+      hint="Commands are stored in this browser profile and become available on matching Pod containers."
       actions={
         <Button
           variant="contained"
@@ -979,9 +1048,6 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
         </Button>
       }
     >
-      <Typography variant="body2" color="text.secondary">
-        Commands are stored in this browser profile and become available on matching Pod containers.
-      </Typography>
       {settings.customCommands.commands.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           No custom commands are defined.
@@ -1027,6 +1093,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               size="small"
               fullWidth
               value={action.action}
+              SelectProps={{ MenuProps: denseSelectMenuProps }}
               onChange={(e) => {
                 const nextAction = e.target.value as CustomActionKind;
                 setAction(index, {
@@ -1040,12 +1107,13 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               <MenuItem value="patch">Patch</MenuItem>
             </TextField>
           </SettingField>
-          <SettingField label="Safety" helperText="Dangerous actions require typed confirmation before execution.">
+          <SettingField label="Safety" hint="Dangerous actions require typed confirmation before execution.">
             <TextField
               select
               size="small"
               fullWidth
               value={action.safety}
+              SelectProps={{ MenuProps: denseSelectMenuProps }}
               onChange={(e) => setAction(index, { safety: e.target.value as CustomCommandSafety })}
             >
               <MenuItem value="safe">Safe: simple confirmation</MenuItem>
@@ -1059,6 +1127,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
             labelId={`action-resources-${action.id}`}
             label="Resources"
             multiple
+            MenuProps={denseSelectMenuProps}
             value={action.resources}
             onChange={(e: SelectChangeEvent<ListResourceKey[]>) => {
               const value = e.target.value;
@@ -1083,6 +1152,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                   size="small"
                   fullWidth
                   value={action.patchType}
+                  SelectProps={{ MenuProps: denseSelectMenuProps }}
                   onChange={(e) => setAction(index, { patchType: e.target.value as CustomActionPatchType })}
                 >
                   <MenuItem value="merge">Merge patch</MenuItem>
@@ -1093,7 +1163,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
             <SettingField
               label="Patch body JSON"
               error={patchError ?? undefined}
-              helperText="Use JSON. JSON patch expects an array of operations; merge patch expects an object."
+              hint="Use JSON. JSON patch expects an array of operations; merge patch expects an object."
             >
               <TextField
                 size="small"
@@ -1116,6 +1186,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                   size="small"
                   fullWidth
                   value={action.target}
+                  SelectProps={{ MenuProps: denseSelectMenuProps }}
                   onChange={(e) => setAction(index, { target: e.target.value as CustomActionTarget })}
                 >
                   <MenuItem value="env">Environment variable</MenuItem>
@@ -1134,7 +1205,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                 value={action.containerPattern}
                 onChange={(v) => setAction(index, { containerPattern: v })}
                 error={patternError ?? undefined}
-                helperText="Optional regex. Leave blank for all containers."
+                hint="Optional regex. Leave blank for all containers."
               />
             </SettingGrid>
             {action.action === "set" && (
@@ -1147,6 +1218,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                 />
                 <SettingRow
                   label="Ask at runtime"
+                  hint="If enabled, the user is prompted for the actual value during action execution."
                   checked={action.runtimeValue}
                   onChange={(v) => setAction(index, { runtimeValue: v })}
                 />
@@ -1161,6 +1233,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
   const renderCustomActions = () => (
     <SettingSection
       title="Custom Actions"
+      hint="Custom actions are browser-local presets for patch-capable workload resources."
       actions={
         <Button
           variant="contained"
@@ -1170,9 +1243,6 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
         </Button>
       }
     >
-      <Typography variant="body2" color="text.secondary">
-        Actions are browser-local presets for patch-capable workload resources.
-      </Typography>
       {settings.customActions.actions.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           No custom actions are defined.
@@ -1402,13 +1472,15 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
 
     return (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25, maxWidth: 900 }}>
-        <Box>
-          <Typography variant="h6">Dataplane</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Dataplane controls cached Kubernetes snapshots, namespace enrichment, metrics sampling cadence, and the signals derived
-            from that data.
-          </Typography>
-          <Box sx={{ mt: 1 }}>
+        <SettingSection
+          title="Dataplane"
+          hint={
+            dataplaneEditScope === "context" && activeContext
+              ? `Dataplane controls cached Kubernetes snapshots, namespace enrichment, metrics sampling cadence, and derived signals. Editing sparse overrides for ${activeContext}; unchanged fields inherit from global defaults.`
+              : "Dataplane controls cached Kubernetes snapshots, namespace enrichment, metrics sampling cadence, and derived signals. Editing global defaults shared by all contexts without local overrides."
+          }
+        >
+          <Box>
             <ToggleButtonGroup
               exclusive
               size="small"
@@ -1421,15 +1493,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               <ToggleButton value="global">Global defaults</ToggleButton>
               <ToggleButton value="context" disabled={!activeContext}>This context</ToggleButton>
             </ToggleButtonGroup>
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-              {dataplaneEditScope === "context" && activeContext
-                ? `Editing sparse overrides for ${activeContext}. Unchanged fields inherit from global defaults.`
-                : "Editing global defaults shared by all contexts without local overrides."}
-            </Typography>
           </Box>
-        </Box>
-
-        <Paper variant="outlined" sx={{ px: 1, pt: 0.5 }}>
           <Tabs
             value={dataplaneTab}
             onChange={(_, value: DataplaneTab) => setDataplaneTab(value)}
@@ -1443,7 +1507,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
             <Tab value="signals" label="Signals" />
             <Tab value="cache" label="Cache" />
           </Tabs>
-        </Paper>
+        </SettingSection>
 
         {dataplaneTab === "overview" && (
           <>
@@ -1469,7 +1533,6 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                 <SettingField
                   label="Dataplane profile"
                   hint="Choose the overall dataplane behavior. Profile changes preserve operator-tuned metrics, signals, and persistence settings."
-                  helperText="Manual keeps dataplane snapshots but disables background enhancement."
                   overrideState={os(["profile"])}
                   onReset={() => resetOverridePath(["profile"])}
                 >
@@ -1478,6 +1541,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                     size="small"
                     fullWidth
                     value={dp.profile}
+                    SelectProps={{ MenuProps: denseSelectMenuProps }}
                     onChange={(e) => {
                       const nextProfile = e.target.value as DataplaneProfile;
                       if (dataplaneEditScope === "global") {
@@ -1515,8 +1579,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                 />
                 <SettingField
                   label="Long-run notice"
-                  hint="How long snapshot work can run before the activity panel calls attention to it."
-                  helperText="0 disables long-running snapshot activity notices."
+                  hint="How long snapshot work can run before the activity panel calls attention to it. 0 disables long-running snapshot activity notices."
                   type="number"
                   unit="s"
                   value={dp.backgroundBudget.longRunNoticeSec}
@@ -1561,9 +1624,8 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
           <>
             <SettingSection
               title={`${profileLabel} Namespace Enrichment`}
-              hint="Enrichment warms namespace snapshots ahead of direct navigation. Profile defaults set the breadth; these controls let you tune the current browser profile."
+              hint={`Enrichment warms namespace snapshots ahead of direct navigation. Profile defaults set the breadth; these controls let you tune the current browser profile. ${profileEnrichmentText}`}
             >
-              <Typography variant="body2" color="text.secondary">{profileEnrichmentText}</Typography>
               <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
                 <SettingRow label="Enabled" hint="Allows automatic namespace enrichment for selected targets. Manual profile disables this by default." checked={ne.enabled} onChange={autoToggle((v) => setNamespaceEnrichment({ enabled: v }), ["namespaceEnrichment", "enabled"])} overrideState={os(["namespaceEnrichment", "enabled"])} onReset={() => resetOverridePath(["namespaceEnrichment", "enabled"])} />
                 <SettingRow label="Current namespace" hint="Keep the active namespace at the front of the enrichment queue." checked={ne.includeFocus} onChange={autoToggle((v) => setNamespaceEnrichment({ includeFocus: v }), ["namespaceEnrichment", "includeFocus"])} overrideState={os(["namespaceEnrichment", "includeFocus"])} onReset={() => resetOverridePath(["namespaceEnrichment", "includeFocus"])} />
@@ -1594,13 +1656,14 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                   <InputLabel id="namespace-warm-kinds-label">
                     <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
                       Resource snapshots warmed by enrichment
-                      <InfoHint title="Namespaced list kinds that enrichment will keep warm for selected namespace targets." />
+                      <InfoHint title="Namespaced list kinds that enrichment will keep warm for selected namespace targets. Wide and diagnostic profiles warm every namespaced dataplane list kind slowly within the same target and sweep caps." />
                     </Box>
                   </InputLabel>
                   <Select
                     labelId="namespace-warm-kinds-label"
                     multiple
                     label="Resource snapshots warmed by enrichment"
+                    MenuProps={denseSelectMenuProps}
                     value={ne.warmResourceKinds}
                     onChange={(e: SelectChangeEvent<string[]>) => {
                       const value = e.target.value;
@@ -1615,9 +1678,6 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                       </MenuItem>
                     ))}
                   </Select>
-                  <Typography variant="caption" color="text.secondary">
-                    Focused defaults to pods and deployments. Wide and diagnostic warm every namespaced dataplane list kind slowly within the same target and sweep caps.
-                  </Typography>
                 </FormControl>
               </Box>
             </SettingSection>
@@ -1737,7 +1797,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
               label="Filter signals"
               value={signalCatalogQuery}
               onChange={(v) => setSignalCatalogQuery(v)}
-              helperText={dataplaneEditScope === "context" && activeContext ? `Editing context overrides for ${activeContext}.` : "Editing global defaults."}
+              hint={dataplaneEditScope === "context" && activeContext ? `Editing context overrides for ${activeContext}.` : "Editing global defaults."}
             />
             {signalCatalogError ? <Alert severity="warning">{signalCatalogError}</Alert> : null}
             {filteredSignalCatalog.length === 0 ? (
@@ -1747,94 +1807,179 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
             ) : (
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                 {filteredSignalCatalog.map((item) => {
-                  const globalOverride = dp.signals.overrides[item.type] || {};
+                  const globalOverride = settings.dataplane.global.signals.overrides[item.type] || {};
                   const contextOverride = activeContextSignalOverrides[item.type] || {};
                   const override = dataplaneEditScope === "global" ? globalOverride : contextOverride;
                   const inheritedEnabled = dataplaneEditScope === "context" ? (globalOverride.enabled ?? item.defaultEnabled) : item.defaultEnabled;
                   const inheritedSeverity = dataplaneEditScope === "context" ? (globalOverride.severity || item.defaultSeverity || "low") : (item.defaultSeverity || "low");
+                  const inheritedPriority = dataplaneEditScope === "context" ? (globalOverride.priority ?? item.defaultPriority) : item.defaultPriority;
                   const effectiveSeverity = contextOverride.severity || globalOverride.severity || item.defaultSeverity;
                   const enabledChecked = override.enabled ?? inheritedEnabled;
-                  const severityValue = override.severity || "inherit";
+                  const severityValue = override.severity || inheritedSeverity;
+                  const priorityValue = override.priority ?? inheritedPriority;
                   const changed = Object.keys(override).length > 0 || signalThresholdCustomized(item.type);
+                  const inheritedSignalOverride: Partial<SignalOverride> = {
+                    enabled: inheritedEnabled,
+                    severity: inheritedSeverity as SignalOverride["severity"],
+                    priority: inheritedPriority,
+                  };
+                  const signalThresholdChangedLabels = (): string[] => {
+                    const contextPathChanged = (path: string[]) => dataplaneEditScope === "context" && isContextEditing && hasOverrideAtPath(path);
+                    switch (item.type) {
+                      case "pod_restarts":
+                        return contextPathChanged(["signals", "detectors", "pod_restarts", "restartCount"]) ||
+                          (dataplaneEditScope === "global" && signalDetectors.pod_restarts.restartCount !== signalDefaults.detectors.pod_restarts.restartCount)
+                          ? ["restart count"]
+                          : [];
+                      case "container_near_limit":
+                        return contextPathChanged(["signals", "detectors", "container_near_limit", "percent"]) ||
+                          (dataplaneEditScope === "global" && signalDetectors.container_near_limit.percent !== signalDefaults.detectors.container_near_limit.percent)
+                          ? ["container percent"]
+                          : [];
+                      case "node_resource_pressure":
+                        return contextPathChanged(["signals", "detectors", "node_resource_pressure", "percent"]) ||
+                          (dataplaneEditScope === "global" && signalDetectors.node_resource_pressure.percent !== signalDefaults.detectors.node_resource_pressure.percent)
+                          ? ["node percent"]
+                          : [];
+                      case "resource_quota_pressure": {
+                        const labels: string[] = [];
+                        if (
+                          contextPathChanged(["signals", "detectors", "resource_quota_pressure", "warnPercent"]) ||
+                          (dataplaneEditScope === "global" && signalDetectors.resource_quota_pressure.warnPercent !== signalDefaults.detectors.resource_quota_pressure.warnPercent)
+                        ) labels.push("warn percent");
+                        if (
+                          contextPathChanged(["signals", "detectors", "resource_quota_pressure", "criticalPercent"]) ||
+                          (dataplaneEditScope === "global" && signalDetectors.resource_quota_pressure.criticalPercent !== signalDefaults.detectors.resource_quota_pressure.criticalPercent)
+                        ) labels.push("critical percent");
+                        return labels;
+                      }
+                      case "long_running_job":
+                        return contextPathChanged(["signals", "longRunningJobSec"]) ||
+                          (dataplaneEditScope === "global" && dp.signals.longRunningJobSec !== signalDefaults.longRunningJobSec)
+                          ? ["long running job"]
+                          : [];
+                      case "cronjob_no_recent_success":
+                        return contextPathChanged(["signals", "cronJobNoRecentSuccessSec"]) ||
+                          (dataplaneEditScope === "global" && dp.signals.cronJobNoRecentSuccessSec !== signalDefaults.cronJobNoRecentSuccessSec)
+                          ? ["no recent success"]
+                          : [];
+                      case "stale_transitional_helm_release":
+                        return contextPathChanged(["signals", "staleHelmReleaseSec"]) ||
+                          (dataplaneEditScope === "global" && dp.signals.staleHelmReleaseSec !== signalDefaults.staleHelmReleaseSec)
+                          ? ["stale release"]
+                          : [];
+                      case "potentially_unused_pvc":
+                      case "potentially_unused_serviceaccount":
+                        return contextPathChanged(["signals", "unusedResourceAgeSec"]) ||
+                          (dataplaneEditScope === "global" && dp.signals.unusedResourceAgeSec !== signalDefaults.unusedResourceAgeSec)
+                          ? ["unused age"]
+                          : [];
+                      case "pod_young_frequent_restarts":
+                        return contextPathChanged(["signals", "podYoungRestartWindowSec"]) ||
+                          (dataplaneEditScope === "global" && dp.signals.podYoungRestartWindowSec !== signalDefaults.podYoungRestartWindowSec)
+                          ? ["young restart window"]
+                          : [];
+                      case "deployment_unavailable":
+                        return contextPathChanged(["signals", "deploymentUnavailableSec"]) ||
+                          (dataplaneEditScope === "global" && dp.signals.deploymentUnavailableSec !== signalDefaults.deploymentUnavailableSec)
+                          ? ["unavailable duration"]
+                          : [];
+                      default:
+                        return [];
+                    }
+                  };
+                  const changedControls = [
+                    ...(override.enabled !== undefined ? ["enabled state"] : []),
+                    ...(override.severity !== undefined ? ["severity"] : []),
+                    ...(override.priority !== undefined ? ["display priority"] : []),
+                    ...signalThresholdChangedLabels(),
+                  ];
+                  const customTooltip = `Custom settings: ${changedControls.join(", ")}. Reset returns this signal to ${dataplaneEditScope === "context" ? "global" : "default"} values.`;
                   const renderSignalThresholdControls = () => {
                     switch (item.type) {
                       case "pod_restarts":
-                        return <SettingField label="Restart count" type="number" value={signalDetectors.pod_restarts.restartCount} onChange={numChange((v) => setDataplaneSignals({ detectors: { ...signalDetectors, pod_restarts: { restartCount: v } } }))} helperText={`Default: ${signalDefaults.detectors.pod_restarts.restartCount}`} />;
+                        return <SettingField label="Restart count" hint={`Default: ${signalDefaults.detectors.pod_restarts.restartCount}.`} type="number" value={signalDetectors.pod_restarts.restartCount} onChange={numChange((v) => setDataplaneSignals({ detectors: { ...signalDetectors, pod_restarts: { restartCount: v } } }))} />;
                       case "container_near_limit":
-                        return <SettingField label="Percent" type="number" unit="%" value={signalDetectors.container_near_limit.percent} onChange={numChange((v) => setDataplaneSignals({ detectors: { ...signalDetectors, container_near_limit: { percent: v } } }))} helperText={`Default: ${signalDefaults.detectors.container_near_limit.percent}`} />;
+                        return <SettingField label="Percent" hint={`Default: ${signalDefaults.detectors.container_near_limit.percent}%.`} type="number" unit="%" value={signalDetectors.container_near_limit.percent} onChange={numChange((v) => setDataplaneSignals({ detectors: { ...signalDetectors, container_near_limit: { percent: v } } }))} />;
                       case "node_resource_pressure":
-                        return <SettingField label="Percent" type="number" unit="%" value={signalDetectors.node_resource_pressure.percent} onChange={numChange((v) => setDataplaneSignals({ detectors: { ...signalDetectors, node_resource_pressure: { percent: v } } }))} helperText={`Default: ${signalDefaults.detectors.node_resource_pressure.percent}`} />;
+                        return <SettingField label="Percent" hint={`Default: ${signalDefaults.detectors.node_resource_pressure.percent}%.`} type="number" unit="%" value={signalDetectors.node_resource_pressure.percent} onChange={numChange((v) => setDataplaneSignals({ detectors: { ...signalDetectors, node_resource_pressure: { percent: v } } }))} />;
                       case "resource_quota_pressure":
                         return (
                           <SettingGrid variant="auto">
-                            <SettingField label="Warn percent" type="number" unit="%" value={signalDetectors.resource_quota_pressure.warnPercent} onChange={numChange((v) => setDataplaneSignals({ detectors: { ...signalDetectors, resource_quota_pressure: { ...signalDetectors.resource_quota_pressure, warnPercent: v } } }))} helperText={`Default: ${signalDefaults.detectors.resource_quota_pressure.warnPercent}`} />
-                            <SettingField label="Critical percent" type="number" unit="%" value={signalDetectors.resource_quota_pressure.criticalPercent} onChange={numChange((v) => setDataplaneSignals({ detectors: { ...signalDetectors, resource_quota_pressure: { ...signalDetectors.resource_quota_pressure, criticalPercent: v } } }))} helperText={`Default: ${signalDefaults.detectors.resource_quota_pressure.criticalPercent}`} />
+                            <SettingField label="Warn percent" hint={`Default: ${signalDefaults.detectors.resource_quota_pressure.warnPercent}%.`} type="number" unit="%" value={signalDetectors.resource_quota_pressure.warnPercent} onChange={numChange((v) => setDataplaneSignals({ detectors: { ...signalDetectors, resource_quota_pressure: { ...signalDetectors.resource_quota_pressure, warnPercent: v } } }))} />
+                            <SettingField label="Critical percent" hint={`Default: ${signalDefaults.detectors.resource_quota_pressure.criticalPercent}%.`} type="number" unit="%" value={signalDetectors.resource_quota_pressure.criticalPercent} onChange={numChange((v) => setDataplaneSignals({ detectors: { ...signalDetectors, resource_quota_pressure: { ...signalDetectors.resource_quota_pressure, criticalPercent: v } } }))} />
                           </SettingGrid>
                         );
                       case "long_running_job":
-                        return <SettingField label="Long running job" type="number" unit="s" value={dp.signals.longRunningJobSec} onChange={numChange((v) => setDataplaneSignals({ longRunningJobSec: v }))} helperText={`Default: ${signalDefaults.longRunningJobSec}`} />;
+                        return <SettingField label="Long running job" hint={`Default: ${signalDefaults.longRunningJobSec}s.`} type="number" unit="s" value={dp.signals.longRunningJobSec} onChange={numChange((v) => setDataplaneSignals({ longRunningJobSec: v }))} />;
                       case "cronjob_no_recent_success":
-                        return <SettingField label="No recent success" type="number" unit="s" value={dp.signals.cronJobNoRecentSuccessSec} onChange={numChange((v) => setDataplaneSignals({ cronJobNoRecentSuccessSec: v }))} helperText={`Default: ${signalDefaults.cronJobNoRecentSuccessSec}`} />;
+                        return <SettingField label="No recent success" hint={`Default: ${signalDefaults.cronJobNoRecentSuccessSec}s.`} type="number" unit="s" value={dp.signals.cronJobNoRecentSuccessSec} onChange={numChange((v) => setDataplaneSignals({ cronJobNoRecentSuccessSec: v }))} />;
                       case "stale_transitional_helm_release":
-                        return <SettingField label="Stale release" type="number" unit="s" value={dp.signals.staleHelmReleaseSec} onChange={numChange((v) => setDataplaneSignals({ staleHelmReleaseSec: v }))} helperText={`Default: ${signalDefaults.staleHelmReleaseSec}`} />;
+                        return <SettingField label="Stale release" hint={`Default: ${signalDefaults.staleHelmReleaseSec}s.`} type="number" unit="s" value={dp.signals.staleHelmReleaseSec} onChange={numChange((v) => setDataplaneSignals({ staleHelmReleaseSec: v }))} />;
                       case "potentially_unused_pvc":
                       case "potentially_unused_serviceaccount":
-                        return <SettingField label="Unused age" type="number" unit="s" value={dp.signals.unusedResourceAgeSec} onChange={numChange((v) => setDataplaneSignals({ unusedResourceAgeSec: v }))} helperText={`Default: ${signalDefaults.unusedResourceAgeSec}`} />;
+                        return <SettingField label="Unused age" hint={`Default: ${signalDefaults.unusedResourceAgeSec}s.`} type="number" unit="s" value={dp.signals.unusedResourceAgeSec} onChange={numChange((v) => setDataplaneSignals({ unusedResourceAgeSec: v }))} />;
                       case "pod_young_frequent_restarts":
-                        return <SettingField label="Young restart window" type="number" unit="s" value={dp.signals.podYoungRestartWindowSec} onChange={numChange((v) => setDataplaneSignals({ podYoungRestartWindowSec: v }))} helperText={`Default: ${signalDefaults.podYoungRestartWindowSec}`} />;
+                        return <SettingField label="Young restart window" hint={`Default: ${signalDefaults.podYoungRestartWindowSec}s.`} type="number" unit="s" value={dp.signals.podYoungRestartWindowSec} onChange={numChange((v) => setDataplaneSignals({ podYoungRestartWindowSec: v }))} />;
                       case "deployment_unavailable":
-                        return <SettingField label="Unavailable duration" type="number" unit="s" value={dp.signals.deploymentUnavailableSec} onChange={numChange((v) => setDataplaneSignals({ deploymentUnavailableSec: v }))} helperText={`Default: ${signalDefaults.deploymentUnavailableSec}`} />;
+                        return <SettingField label="Unavailable duration" hint={`Default: ${signalDefaults.deploymentUnavailableSec}s.`} type="number" unit="s" value={dp.signals.deploymentUnavailableSec} onChange={numChange((v) => setDataplaneSignals({ deploymentUnavailableSec: v }))} />;
                       default:
                         return null;
                     }
                   };
                   return (
-                    <Paper key={item.type} variant="outlined" sx={{ p: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+                    <Paper key={item.type} variant="outlined" sx={{ p: 1, display: "flex", flexDirection: "column", gap: 1.25 }}>
                       <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
-                        <Box sx={{ minWidth: 0 }}>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
-                            <Typography variant="subtitle2">{item.label}</Typography>
-                            <Chip size="small" variant="outlined" label={item.type} />
-                          </Box>
-                          <Typography variant="body2" color="text.secondary">
-                            {item.likelyCause || item.calculatedData || "Backend-defined dataplane signal."}
-                          </Typography>
+                        <Box sx={{ minWidth: 0, display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap" }}>
+                          <Typography variant="subtitle2">{item.label}</Typography>
+                          <InfoHint title={`Signal type: ${item.type}. Reason: ${item.likelyCause || item.calculatedData || "Backend-defined dataplane signal."}`} />
                           {item.suggestedAction ? (
-                            <Typography variant="caption" color="text.secondary">{item.suggestedAction}</Typography>
+                            <Tooltip title={`Next step: ${item.suggestedAction}`}>
+                              <IconButton size="small" sx={{ p: 0.25 }} aria-label={`${item.label} suggested action`}>
+                                <BuildOutlinedIcon fontSize="inherit" />
+                              </IconButton>
+                            </Tooltip>
                           ) : null}
+                          {changed ? <ScopeTag state="overridden" onReset={() => resetSignalCard(item.type)} tooltip={customTooltip} /> : null}
                         </Box>
                         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexWrap: "wrap" }}>
                           <ScopedCountChip size="small" color={severityColor(item.defaultSeverity)} label="Default" count={formatChipLabel(item.defaultSeverity || "dynamic")} />
                           <ScopedCountChip size="small" color={severityColor(effectiveSeverity)} label="Effective" count={formatChipLabel(effectiveSeverity || "dynamic")} />
-                          <ScopeTag state={changed ? "overridden" : "inherited"} onReset={() => resetSignalCard(item.type)} />
                         </Box>
                       </Box>
-                      <SettingGrid variant="auto">
-                        <Box>
-                          <SettingRow
-                            label="Enabled"
-                            checked={enabledChecked}
-                            onChange={(v) => setSignalOverride(item.type, dataplaneEditScope, { enabled: v })}
-                          />
-                          <ScopeTag state={override.enabled !== undefined ? "overridden" : "inherited"} />
+                      <Box sx={{ pt: 0.25 }}>
+                        <SettingGrid variant="auto">
+                        <Box sx={{ display: "flex", alignItems: "center", minHeight: 40 }}>
+                          <ToggleButtonGroup
+                            exclusive
+                            size="small"
+                            value={enabledChecked ? "enabled" : "disabled"}
+                            onChange={(_, value: "enabled" | "disabled" | null) => {
+                              if (!value) return;
+                              setSignalOverride(item.type, dataplaneEditScope, { enabled: value === "enabled" }, inheritedSignalOverride);
+                            }}
+                          >
+                            <ToggleButton value="enabled">Enabled</ToggleButton>
+                            <ToggleButton value="disabled">Disabled</ToggleButton>
+                          </ToggleButtonGroup>
                         </Box>
                         <SettingField
                           label="Severity"
-                          helperText={severityValue === "inherit" ? `Inherits ${inheritedSeverity}` : "Forces emitted severity for this signal."}
+                          hint={`Inherited value: ${inheritedSeverity}.`}
                         >
                           <TextField
                             select
                             size="small"
                             fullWidth
                             value={severityValue}
+                            SelectProps={{ MenuProps: denseSelectMenuProps }}
                             onChange={(e) => {
                               const value = e.target.value;
                               setSignalOverride(item.type, dataplaneEditScope, {
-                                severity: value === "inherit" ? undefined : value as SignalOverride["severity"],
-                              });
+                                severity: value as SignalOverride["severity"],
+                              }, inheritedSignalOverride);
                             }}
                           >
-                            <MenuItem value="inherit">Inherit</MenuItem>
                             <MenuItem value="low">Low</MenuItem>
                             <MenuItem value="medium">Medium</MenuItem>
                             <MenuItem value="high">High</MenuItem>
@@ -1843,14 +1988,17 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                         <SettingField
                           label="Display priority"
                           type="number"
-                          value={override.priority ?? ""}
+                          value={priorityValue}
                           onChange={(v) => setSignalOverride(item.type, dataplaneEditScope, {
-                            priority: v === "" ? undefined : Math.round(Number(v) || 0),
-                          })}
-                          helperText={`Inherits ${dataplaneEditScope === "context" ? (globalOverride.priority ?? item.defaultPriority) : item.defaultPriority}`}
+                            priority: Math.round(Number(v) || 0),
+                          }, inheritedSignalOverride)}
+                          hint={`Inherits ${inheritedPriority}.`}
                         />
                       </SettingGrid>
-                      {renderSignalThresholdControls()}
+                      </Box>
+                      <Box sx={{ pt: 0.25 }}>
+                        {renderSignalThresholdControls()}
+                      </Box>
                     </Paper>
                   );
                 })}
@@ -1863,10 +2011,10 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
   };
 
   const renderImportExport = () => (
-    <SettingSection title="Import / Export">
-      <Typography variant="body2" color="text.secondary">
-        This exports user settings only. Active context, namespace history, favourites, and theme are not included.
-      </Typography>
+    <SettingSection
+      title="Import / Export"
+      hint="This exports user settings only. Active context, namespace history, favourites, and theme are not included."
+    >
       <Box sx={actionRowSx}>
         <Button
           variant="contained"
@@ -1953,12 +2101,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
         </List>
       </Paper>
       <Box sx={settingsMainSurfaceSx}>
-        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.25, mb: 1.25 }}>
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="body2" color="text.secondary">
-              Changes are saved automatically in this browser profile.
-            </Typography>
-          </Box>
+        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1.25 }}>
           <Tooltip title="Close settings">
             <IconButton aria-label="Close settings" onClick={onClose} size="small">
               <CloseIcon fontSize="small" />

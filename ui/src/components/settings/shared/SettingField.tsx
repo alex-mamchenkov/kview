@@ -72,7 +72,9 @@ export default function SettingField(props: SettingFieldProps) {
     error ??
     (overrideState === "inherited" && globalValue !== undefined
       ? `Global: ${globalValue}`
-      : helperText);
+      : hint
+        ? undefined
+        : helperText);
 
   // ReactNode label: text + required marker + hint icon, used as MUI's label prop
   // so it renders embedded in the outlined input border (floating label).
