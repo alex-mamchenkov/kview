@@ -117,10 +117,10 @@ List rows for **pods**, **deployments**, and workload controllers can include sm
 
 ## Observers
 
-- **Activation:** `EnsureObservers` runs when the UI touches dataplane-backed endpoints for the **active** context (e.g. namespaces list)—so only actively used clusters pay observation cost.
+- **Activation:** `EnsureObservers` runs when the UI touches dataplane-backed endpoints for the **active** context (e.g. namespaces list)—so only actively used clusters pay observation cost by default.
 - Namespaces and nodes observers refresh on an interval; state is coarse (`starting`, `active`, backoff classes, etc.) and transitions are logged under the **`dataplane`** runtime source.
 - Observer intervals and enablement are policy-controlled. Manual profile keeps dataplane snapshots but disables observers and namespace enrichment.
-- There is **no** global warm-up of every kube context in the kubeconfig.
+- Optional **all-context background enrichment** can cycle slowly through kube contexts. It is disabled by default, bounded by interval and contexts-per-cycle caps, pauses on user activity/busy scheduler by default, and each context still follows its effective profile: manual stays quiet, focused keeps namespace/node snapshots warm, and wide/diagnostic can run their configured sweep.
 
 ---
 
@@ -136,6 +136,7 @@ Current policy knobs include:
 - namespace and node observer intervals/backoff
 - focused namespace enrichment: current/recent/favourite inclusion, caps, parallelism, idle quiet window, and stage toggles for namespace details, pods, deployments
 - optional background namespace sweep: per-cycle cap, per-hour cap, re-enrich interval, idle gate, system namespace inclusion
+- optional all-context background enrichment: disabled-by-default cross-context cycling, idle gate, busy-scheduler pause, context-per-cycle cap, and per-context profile/override behavior
 - scheduler budget: per-cluster concurrency, transient retries, long-run snapshot activity threshold
 - dashboard projection hints: restart threshold and signal limit
 - metrics integration: enable/disable metrics.k8s.io polling, pod/node metrics TTLs, container near-limit threshold, node resource pressure threshold

@@ -4,11 +4,12 @@ import "context"
 
 // Well-known dataplane work source labels for scheduler / live work UI (HTTP handlers may set via context).
 const (
-	WorkSourceAPI        = "api" // default: list/detail HTTP handlers
-	WorkSourceObserver   = "observer"
-	WorkSourceEnrichment = "enrichment"
-	WorkSourceDashboard  = "dashboard"
-	WorkSourceProjection = "projection" // namespace summary / drawer-led projections
+	WorkSourceAPI         = "api" // default: list/detail HTTP handlers
+	WorkSourceObserver    = "observer"
+	WorkSourceEnrichment  = "enrichment"
+	WorkSourceAllContexts = "all-context-enrichment"
+	WorkSourceDashboard   = "dashboard"
+	WorkSourceProjection  = "projection" // namespace summary / drawer-led projections
 )
 
 type workSourceKey struct{}

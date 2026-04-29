@@ -62,6 +62,7 @@ export type DataplaneContextOverrideSettings = {
   namespaceEnrichment?: Partial<DataplaneSettings["namespaceEnrichment"]> & {
     sweep?: Partial<DataplaneSettings["namespaceEnrichment"]["sweep"]>;
   };
+  allContextEnrichment?: Partial<DataplaneSettings["allContextEnrichment"]>;
   backgroundBudget?: Partial<DataplaneSettings["backgroundBudget"]>;
   dashboard?: Partial<DataplaneSettings["dashboard"]>;
   metrics?: {
@@ -134,6 +135,14 @@ export type DataplaneSettings = {
       pauseOnRateLimitOrConnectivityIssues: boolean;
       includeSystemNamespaces: boolean;
     };
+  };
+  allContextEnrichment: {
+    enabled: boolean;
+    intervalSec: number;
+    maxContextsPerCycle: number;
+    idleQuietMs: number;
+    pauseOnUserActivity: boolean;
+    pauseWhenSchedulerBusy: boolean;
   };
   backgroundBudget: {
     maxConcurrentPerCluster: number;
@@ -474,6 +483,14 @@ export function defaultDataplaneSettings(): DataplaneSettings {
         includeSystemNamespaces: false,
       },
     },
+    allContextEnrichment: {
+      enabled: false,
+      intervalSec: 300,
+      maxContextsPerCycle: 1,
+      idleQuietMs: 30000,
+      pauseOnUserActivity: true,
+      pauseWhenSchedulerBusy: true,
+    },
     backgroundBudget: {
       maxConcurrentPerCluster: 4,
       maxBackgroundConcurrentPerCluster: 2,
@@ -572,6 +589,7 @@ export function applyDataplaneProfile(current: DataplaneSettings, profile: Datap
   return {
     ...next,
     persistence: { ...current.persistence },
+    allContextEnrichment: { ...current.allContextEnrichment },
     // Operator-tuned metrics knobs survive profile changes so a switch
     // doesn't unexpectedly re-enable polling or reset the alert thresholds.
     metrics: { ...current.metrics },
@@ -856,6 +874,7 @@ function normalizeDataplaneSettings(input: unknown): DataplaneSettings {
   const rawPersistence = (raw.persistence ?? {}) as Partial<DataplaneSettings["persistence"]>;
   const rawObservers = (raw.observers ?? {}) as Partial<DataplaneSettings["observers"]>;
   const rawEnrichment = (raw.namespaceEnrichment ?? {}) as Partial<DataplaneSettings["namespaceEnrichment"]>;
+  const rawAllContext = (raw.allContextEnrichment ?? {}) as Partial<DataplaneSettings["allContextEnrichment"]>;
   const rawSweep = (rawEnrichment.sweep ?? {}) as Partial<DataplaneSettings["namespaceEnrichment"]["sweep"]>;
   const rawBudget = (raw.backgroundBudget ?? {}) as Partial<DataplaneSettings["backgroundBudget"]>;
   const rawDashboard = (raw.dashboard ?? {}) as Partial<DataplaneSettings["dashboard"]>;
@@ -1000,6 +1019,26 @@ function normalizeDataplaneSettings(input: unknown): DataplaneSettings {
             : defaults.namespaceEnrichment.sweep.includeSystemNamespaces,
       },
     },
+    allContextEnrichment: {
+      enabled:
+        typeof rawAllContext.enabled === "boolean" ? rawAllContext.enabled : defaults.allContextEnrichment.enabled,
+      intervalSec: validNumber(rawAllContext.intervalSec, 60, 3600, defaults.allContextEnrichment.intervalSec),
+      maxContextsPerCycle: validNumber(
+        rawAllContext.maxContextsPerCycle,
+        1,
+        25,
+        defaults.allContextEnrichment.maxContextsPerCycle,
+      ),
+      idleQuietMs: validNumber(rawAllContext.idleQuietMs, 5000, 300000, defaults.allContextEnrichment.idleQuietMs),
+      pauseOnUserActivity:
+        typeof rawAllContext.pauseOnUserActivity === "boolean"
+          ? rawAllContext.pauseOnUserActivity
+          : defaults.allContextEnrichment.pauseOnUserActivity,
+      pauseWhenSchedulerBusy:
+        typeof rawAllContext.pauseWhenSchedulerBusy === "boolean"
+          ? rawAllContext.pauseWhenSchedulerBusy
+          : defaults.allContextEnrichment.pauseWhenSchedulerBusy,
+    },
     backgroundBudget: {
       maxConcurrentPerCluster: maxConcurrent,
       maxBackgroundConcurrentPerCluster: validNumber(
@@ -1110,6 +1149,7 @@ function normalizeDataplaneSettings(input: unknown): DataplaneSettings {
     normalized.observers.enabled = false;
     normalized.namespaceEnrichment.enabled = false;
     normalized.namespaceEnrichment.sweep.enabled = false;
+    normalized.allContextEnrichment.enabled = false;
   }
 
   return normalized;
@@ -1216,6 +1256,7 @@ function normalizeDataplaneContextOverrides(input: unknown): Record<string, Data
     if (typed.observers) next.observers = { ...typed.observers };
     if (typed.backgroundBudget) next.backgroundBudget = { ...typed.backgroundBudget };
     if (typed.dashboard) next.dashboard = { ...typed.dashboard };
+    if (typed.allContextEnrichment) next.allContextEnrichment = { ...typed.allContextEnrichment };
     if (typed.namespaceEnrichment) {
       next.namespaceEnrichment = {
         ...typed.namespaceEnrichment,
@@ -1242,6 +1283,7 @@ function normalizeDataplaneContextOverrides(input: unknown): Record<string, Data
       !next.persistence &&
       !next.observers &&
       !next.namespaceEnrichment &&
+      !next.allContextEnrichment &&
       !next.backgroundBudget &&
       !next.dashboard &&
       !next.metrics &&
@@ -1314,6 +1356,9 @@ function mergeDataplaneContextOverride(
             : {}),
         },
       }
+      : {}),
+    ...(override.allContextEnrichment
+      ? { allContextEnrichment: { ...global.allContextEnrichment, ...override.allContextEnrichment } }
       : {}),
     ...(override.backgroundBudget
       ? { backgroundBudget: { ...global.backgroundBudget, ...override.backgroundBudget } }

@@ -499,6 +499,10 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
     });
   };
 
+  const setAllContextEnrichment = (patch: Partial<DataplaneSettings["allContextEnrichment"]>) => {
+    patchDataplaneSection("allContextEnrichment", patch);
+  };
+
   const setDataplaneSnapshots = (patch: Partial<DataplaneSettings["snapshots"]>) => {
     patchDataplaneSection("snapshots", patch);
   };
@@ -1292,6 +1296,7 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
       : settings.dataplane.global;
     const ne = dp.namespaceEnrichment;
     const sweep = ne.sweep;
+    const allContext = dp.allContextEnrichment;
     const signalDefaults = defaultDataplaneSettings().signals;
     const signalDetectors = {
       pod_restarts: {
@@ -1615,6 +1620,22 @@ export default function SettingsView({ token, contexts, namespaces, activeContex
                 <SettingField label="Node backoff max" hint="Maximum node observer backoff after access or connectivity failures." type="number" unit="s" value={dp.observers.nodesBackoffMaxSec} onChange={autoNum((v) => setDataplaneObservers({ nodesBackoffMaxSec: v }), ["observers", "nodesBackoffMaxSec"])} overrideState={os(["observers", "nodesBackoffMaxSec"])} onReset={() => resetOverridePath(["observers", "nodesBackoffMaxSec"])} />
                 <SettingField label="Dashboard refresh" hint="Dataplane dashboard refresh interval in seconds." type="number" unit="s" value={dp.dashboard.refreshSec} onChange={autoNum((v) => setDataplaneDashboard({ refreshSec: v }), ["dashboard", "refreshSec"])} overrideState={os(["dashboard", "refreshSec"])} onReset={() => resetOverridePath(["dashboard", "refreshSec"])} />
                 <SettingField label="Signal limit" hint="Maximum number of top dashboard signals shown by default." type="number" value={dp.dashboard.signalLimit} onChange={autoNum((v) => setDataplaneDashboard({ signalLimit: v }), ["dashboard", "signalLimit"])} overrideState={os(["dashboard", "signalLimit"])} onReset={() => resetOverridePath(["dashboard", "signalLimit"])} />
+              </SettingGrid>
+            </SettingSection>
+
+            <SettingSection
+              title="All Context Background"
+              hint="Optionally cycles through kube contexts with low-priority background work. Each context still follows its own effective dataplane profile, so manual contexts stay quiet and wide/diagnostic contexts may run their configured namespace sweep."
+            >
+              <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                <SettingRow label="Enable all contexts" hint="Keeps non-current contexts warm enough that switching contexts can reuse recent dataplane snapshots." checked={allContext.enabled} onChange={autoToggle((v) => setAllContextEnrichment({ enabled: v }), ["allContextEnrichment", "enabled"])} overrideState={os(["allContextEnrichment", "enabled"])} onReset={() => resetOverridePath(["allContextEnrichment", "enabled"])} />
+                <SettingRow label="Pause on activity" hint="Waits for the UI to be idle before touching non-current contexts." checked={allContext.pauseOnUserActivity} onChange={autoToggle((v) => setAllContextEnrichment({ pauseOnUserActivity: v }), ["allContextEnrichment", "pauseOnUserActivity"])} overrideState={os(["allContextEnrichment", "pauseOnUserActivity"])} onReset={() => resetOverridePath(["allContextEnrichment", "pauseOnUserActivity"])} />
+                <SettingRow label="Pause when busy" hint="Skips a context when its dataplane scheduler already has queued or running work." checked={allContext.pauseWhenSchedulerBusy} onChange={autoToggle((v) => setAllContextEnrichment({ pauseWhenSchedulerBusy: v }), ["allContextEnrichment", "pauseWhenSchedulerBusy"])} overrideState={os(["allContextEnrichment", "pauseWhenSchedulerBusy"])} onReset={() => resetOverridePath(["allContextEnrichment", "pauseWhenSchedulerBusy"])} />
+              </Box>
+              <SettingGrid variant="auto">
+                <SettingField label="Cycle interval" hint="Seconds between all-context background cycles." type="number" unit="s" value={allContext.intervalSec} onChange={autoNum((v) => setAllContextEnrichment({ intervalSec: v }), ["allContextEnrichment", "intervalSec"])} overrideState={os(["allContextEnrichment", "intervalSec"])} onReset={() => resetOverridePath(["allContextEnrichment", "intervalSec"])} />
+                <SettingField label="Contexts / cycle" hint="Maximum kube contexts touched per cycle. Keep this low when contexts point at separate API servers." type="number" value={allContext.maxContextsPerCycle} onChange={autoNum((v) => setAllContextEnrichment({ maxContextsPerCycle: v }), ["allContextEnrichment", "maxContextsPerCycle"])} overrideState={os(["allContextEnrichment", "maxContextsPerCycle"])} onReset={() => resetOverridePath(["allContextEnrichment", "maxContextsPerCycle"])} />
+                <SettingField label="Idle quiet" hint="How long the app should be quiet before all-context background work starts." type="number" unit="ms" value={allContext.idleQuietMs} onChange={autoNum((v) => setAllContextEnrichment({ idleQuietMs: v }), ["allContextEnrichment", "idleQuietMs"])} overrideState={os(["allContextEnrichment", "idleQuietMs"])} onReset={() => resetOverridePath(["allContextEnrichment", "idleQuietMs"])} />
               </SettingGrid>
             </SettingSection>
           </>

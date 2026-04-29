@@ -42,6 +42,13 @@ describe("user settings", () => {
     expect(validateUserSettings({ v: 1 })?.dataplane.global.persistence.enabled).toBe(true);
   });
 
+  it("keeps all-context enrichment disabled by default", () => {
+    const defaults = defaultUserSettings().dataplane.global.allContextEnrichment;
+    expect(defaults.enabled).toBe(false);
+    expect(defaults.maxContextsPerCycle).toBe(1);
+    expect(validateUserSettings({ v: 1 })?.dataplane.global.allContextEnrichment.enabled).toBe(false);
+  });
+
   it("applies dataplane signal defaults on first startup", () => {
     const defaults = defaultDataplaneSettings().signals;
     expect(defaultUserSettings().dataplane.global.signals).toEqual(defaults);
@@ -182,6 +189,24 @@ describe("user settings", () => {
       },
     });
     expect(parsed?.dataplane.contextOverrides["stage-us"]?.metrics?.enabled).toBe(false);
+  });
+
+  it("supports sparse all-context enrichment overrides in v2 imports", () => {
+    const parsed = validateUserSettings({
+      ...defaultUserSettings(),
+      dataplane: {
+        ...defaultUserSettings().dataplane,
+        contextOverrides: {
+          "stage-us": {
+            allContextEnrichment: {
+              enabled: false,
+              intervalSec: 900,
+            },
+          },
+        },
+      },
+    });
+    expect(parsed?.dataplane.contextOverrides["stage-us"]?.allContextEnrichment?.intervalSec).toBe(900);
   });
 
   it("keeps global metrics TTL unchanged when context override is created", () => {

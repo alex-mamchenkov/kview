@@ -156,6 +156,47 @@ func TestPolicyBundleManualProfileDisablesObserversAndEnrichment(t *testing.T) {
 	if got.NamespaceEnrichment.Sweep.Enabled {
 		t.Fatalf("expected namespace sweep disabled for manual profile")
 	}
+	if got.AllContextEnrichment.Enabled {
+		t.Fatalf("expected all-context enrichment disabled for manual profile")
+	}
+}
+
+func TestAllContextEnrichmentPolicyIsValidatedAndOverridable(t *testing.T) {
+	enabled := true
+	interval := 600
+	maxContexts := 2
+	idle := 60000
+	pause := false
+	bundle := ValidateDataplanePolicyBundle(DataplanePolicyBundle{
+		Global: DefaultDataplanePolicy(),
+		ContextOverrides: map[string]DataplanePolicyOverride{
+			"ctx": {
+				AllContextEnrichment: &AllContextEnrichmentPolicyOverride{
+					Enabled:                &enabled,
+					IntervalSec:            &interval,
+					MaxContextsPerCycle:    &maxContexts,
+					IdleQuietMs:            &idle,
+					PauseWhenSchedulerBusy: &pause,
+				},
+			},
+		},
+	})
+	got := bundle.EffectivePolicy("ctx").AllContextEnrichment
+	if !got.Enabled {
+		t.Fatalf("expected all-context enrichment enabled")
+	}
+	if got.IntervalSec != 600 {
+		t.Fatalf("expected interval override 600 seconds, got %d", got.IntervalSec)
+	}
+	if got.MaxContextsPerCycle != 2 {
+		t.Fatalf("expected max contexts override 2, got %d", got.MaxContextsPerCycle)
+	}
+	if got.IdleQuietMs != 60000 {
+		t.Fatalf("expected idle quiet override 60000ms, got %d", got.IdleQuietMs)
+	}
+	if got.PauseWhenSchedulerBusy {
+		t.Fatalf("expected pause-when-busy override to be false")
+	}
 }
 
 func TestManagerSetPolicyBundlePreservesOverridesAndScopedMetrics(t *testing.T) {

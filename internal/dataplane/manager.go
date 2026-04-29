@@ -193,6 +193,8 @@ type DataPlaneManager interface {
 
 	// EnsureObservers makes sure observers are running for the given cluster.
 	EnsureObservers(ctx context.Context, clusterName string)
+	// WarmClusterBackground performs one low-priority background pass for a cluster.
+	WarmClusterBackground(ctx context.Context, clusterName string) error
 
 	// DashboardSummary returns a minimal cluster dashboard backed by dataplane snapshots.
 	DashboardSummary(ctx context.Context, clusterName string, opts ClusterDashboardListOptions) ClusterDashboardSummary
@@ -528,6 +530,44 @@ func (m *manager) PlaneForCluster(_ context.Context, clusterName string) (Cluste
 		m.ensureSignalHistory(clusterName)
 	}
 	return p, nil
+}
+
+func (m *manager) WarmClusterBackground(ctx context.Context, clusterName string) error {
+	if strings.TrimSpace(clusterName) == "" || m.clients == nil {
+		return nil
+	}
+	policy := m.EffectivePolicy(clusterName)
+	allContexts := policy.AllContextEnrichment
+	if policy.Profile == DataplaneProfileManual || !allContexts.Enabled {
+		return nil
+	}
+	if allContexts.PauseWhenSchedulerBusy && m.schedulerHasWork(clusterName) {
+		return nil
+	}
+	if allContexts.PauseOnUserActivity {
+		if err := m.waitAPIQuiet(ctx, time.Duration(allContexts.IdleQuietMs)*time.Millisecond); err != nil {
+			return err
+		}
+	}
+	ctx = ContextWithWorkSourceIfUnset(ctx, WorkSourceAllContexts)
+	m.EnsureObservers(ctx, clusterName)
+	planeAny, err := m.PlaneForCluster(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	plane := planeAny.(*clusterPlane)
+
+	nsSnap, err := plane.NamespacesSnapshot(ctx, m.scheduler, m.clients, WorkPriorityLow)
+	if policy.Observers.Enabled && policy.Observers.NodesEnabled {
+		_, _ = plane.NodesSnapshot(ctx, m.scheduler, m.clients, WorkPriorityLow)
+	}
+	if err != nil {
+		return err
+	}
+	if policy.NamespaceEnrichment.Enabled && policy.NamespaceEnrichment.Sweep.Enabled && len(nsSnap.Items) > 0 && !m.hasNamespaceEnrichmentInFlight(clusterName) {
+		m.BeginNamespaceListProgressiveEnrichment(clusterName, nsSnap.Items, NamespaceEnrichHints{})
+	}
+	return nil
 }
 
 type clusterPlane struct {

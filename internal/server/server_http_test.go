@@ -152,9 +152,10 @@ func newStubDataplane() *stubDataplane {
 	return &stubDataplane{policy: bundle.Global, bundle: bundle, effective: map[string]dataplane.DataplanePolicy{}}
 }
 
-func (s *stubDataplane) NoteUserActivity()                           {}
-func (s *stubDataplane) EnsureObservers(_ context.Context, _ string) {}
-func (s *stubDataplane) Policy() dataplane.DataplanePolicy           { return s.policy }
+func (s *stubDataplane) NoteUserActivity()                                       {}
+func (s *stubDataplane) EnsureObservers(_ context.Context, _ string)             {}
+func (s *stubDataplane) WarmClusterBackground(_ context.Context, _ string) error { return nil }
+func (s *stubDataplane) Policy() dataplane.DataplanePolicy                       { return s.policy }
 func (s *stubDataplane) PolicyBundle() dataplane.DataplanePolicyBundle {
 	return s.bundle
 }

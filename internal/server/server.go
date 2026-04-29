@@ -62,6 +62,7 @@ func New(mgr *cluster.Manager, rt runtime.RuntimeManager, token string) *Server 
 	}
 	// Best-effort runtime manager startup; failures are logged via regular logs.
 	_ = s.rt.Start(context.Background())
+	s.startAllContextEnrichmentLoop()
 	return s
 }
 

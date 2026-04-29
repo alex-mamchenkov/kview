@@ -65,7 +65,7 @@ func observerStateForError(n NormalizedError) ObserverState {
 	}
 }
 
-func (p *clusterPlane) EnsureObservers(ctx context.Context, sched *workScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
+func (p *clusterPlane) EnsureObservers(_ context.Context, sched *workScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {
 	policy := p.currentPolicy()
 	if !policy.Observers.Enabled {
 		return
@@ -78,8 +78,9 @@ func (p *clusterPlane) EnsureObservers(ctx context.Context, sched *workScheduler
 	p.observers = &clusterObservers{}
 	p.obsMu.Unlock()
 
-	go p.runNamespaceObserver(ctx, sched, clients, rt)
-	go p.runNodeObserver(ctx, sched, clients, rt)
+	observerCtx := context.Background()
+	go p.runNamespaceObserver(observerCtx, sched, clients, rt)
+	go p.runNodeObserver(observerCtx, sched, clients, rt)
 }
 
 func (p *clusterPlane) namespaceObserverTick(ctx context.Context, sched *workScheduler, clients ClientsProvider, rt runtime.RuntimeManager) {

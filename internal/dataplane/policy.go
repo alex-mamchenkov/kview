@@ -19,14 +19,15 @@ const (
 type DataplanePolicy struct {
 	Profile DataplaneProfile `json:"profile"`
 
-	Snapshots           SnapshotPolicy            `json:"snapshots"`
-	Persistence         PersistencePolicy         `json:"persistence"`
-	Observers           ObserverPolicy            `json:"observers"`
-	NamespaceEnrichment NamespaceEnrichmentPolicy `json:"namespaceEnrichment"`
-	BackgroundBudget    BackgroundBudgetPolicy    `json:"backgroundBudget"`
-	Dashboard           DashboardPolicy           `json:"dashboard"`
-	Metrics             MetricsPolicy             `json:"metrics"`
-	Signals             SignalsPolicy             `json:"signals"`
+	Snapshots            SnapshotPolicy             `json:"snapshots"`
+	Persistence          PersistencePolicy          `json:"persistence"`
+	Observers            ObserverPolicy             `json:"observers"`
+	NamespaceEnrichment  NamespaceEnrichmentPolicy  `json:"namespaceEnrichment"`
+	AllContextEnrichment AllContextEnrichmentPolicy `json:"allContextEnrichment"`
+	BackgroundBudget     BackgroundBudgetPolicy     `json:"backgroundBudget"`
+	Dashboard            DashboardPolicy            `json:"dashboard"`
+	Metrics              MetricsPolicy              `json:"metrics"`
+	Signals              SignalsPolicy              `json:"signals"`
 }
 
 type DataplanePolicyBundle struct {
@@ -36,14 +37,15 @@ type DataplanePolicyBundle struct {
 }
 
 type DataplanePolicyOverride struct {
-	Profile             *DataplaneProfile                  `json:"profile,omitempty"`
-	Snapshots           *SnapshotPolicyOverride            `json:"snapshots,omitempty"`
-	Observers           *ObserverPolicyOverride            `json:"observers,omitempty"`
-	NamespaceEnrichment *NamespaceEnrichmentPolicyOverride `json:"namespaceEnrichment,omitempty"`
-	BackgroundBudget    *BackgroundBudgetPolicyOverride    `json:"backgroundBudget,omitempty"`
-	Metrics             *MetricsPolicyOverride             `json:"metrics,omitempty"`
-	Signals             *SignalsPolicyOverride             `json:"signals,omitempty"`
-	Persistence         *PersistencePolicyOverride         `json:"persistence,omitempty"`
+	Profile              *DataplaneProfile                   `json:"profile,omitempty"`
+	Snapshots            *SnapshotPolicyOverride             `json:"snapshots,omitempty"`
+	Observers            *ObserverPolicyOverride             `json:"observers,omitempty"`
+	NamespaceEnrichment  *NamespaceEnrichmentPolicyOverride  `json:"namespaceEnrichment,omitempty"`
+	AllContextEnrichment *AllContextEnrichmentPolicyOverride `json:"allContextEnrichment,omitempty"`
+	BackgroundBudget     *BackgroundBudgetPolicyOverride     `json:"backgroundBudget,omitempty"`
+	Metrics              *MetricsPolicyOverride              `json:"metrics,omitempty"`
+	Signals              *SignalsPolicyOverride              `json:"signals,omitempty"`
+	Persistence          *PersistencePolicyOverride          `json:"persistence,omitempty"`
 }
 
 type SnapshotPolicyOverride struct {
@@ -90,6 +92,15 @@ type NamespaceSweepPolicyOverride struct {
 	PauseWhenSchedulerBusy         *bool `json:"pauseWhenSchedulerBusy,omitempty"`
 	PauseOnRateLimitOrConnectivity *bool `json:"pauseOnRateLimitOrConnectivityIssues,omitempty"`
 	IncludeSystemNamespaces        *bool `json:"includeSystemNamespaces,omitempty"`
+}
+
+type AllContextEnrichmentPolicyOverride struct {
+	Enabled                *bool `json:"enabled,omitempty"`
+	IntervalSec            *int  `json:"intervalSec,omitempty"`
+	MaxContextsPerCycle    *int  `json:"maxContextsPerCycle,omitempty"`
+	IdleQuietMs            *int  `json:"idleQuietMs,omitempty"`
+	PauseOnUserActivity    *bool `json:"pauseOnUserActivity,omitempty"`
+	PauseWhenSchedulerBusy *bool `json:"pauseWhenSchedulerBusy,omitempty"`
 }
 
 type BackgroundBudgetPolicyOverride struct {
@@ -265,6 +276,15 @@ type NamespaceSweepPolicy struct {
 	IncludeSystemNamespaces        bool `json:"includeSystemNamespaces"`
 }
 
+type AllContextEnrichmentPolicy struct {
+	Enabled                bool `json:"enabled"`
+	IntervalSec            int  `json:"intervalSec"`
+	MaxContextsPerCycle    int  `json:"maxContextsPerCycle"`
+	IdleQuietMs            int  `json:"idleQuietMs"`
+	PauseOnUserActivity    bool `json:"pauseOnUserActivity"`
+	PauseWhenSchedulerBusy bool `json:"pauseWhenSchedulerBusy"`
+}
+
 type BackgroundBudgetPolicy struct {
 	MaxConcurrentPerCluster           int `json:"maxConcurrentPerCluster"`
 	MaxBackgroundConcurrentPerCluster int `json:"maxBackgroundConcurrentPerCluster"`
@@ -361,6 +381,14 @@ func DefaultDataplanePolicy() DataplanePolicy {
 			LongRunNoticeSec:                  2,
 			TransientRetries:                  3,
 		},
+		AllContextEnrichment: AllContextEnrichmentPolicy{
+			Enabled:                false,
+			IntervalSec:            300,
+			MaxContextsPerCycle:    1,
+			IdleQuietMs:            30000,
+			PauseOnUserActivity:    true,
+			PauseWhenSchedulerBusy: true,
+		},
 		Dashboard: DashboardPolicy{
 			RefreshSec:               10,
 			UseCachedTotalsOnly:      true,
@@ -447,6 +475,11 @@ func ValidateDataplanePolicy(in DataplanePolicy) DataplanePolicy {
 	ne.Sweep.MaxNamespacesPerHour = clampInt(ne.Sweep.MaxNamespacesPerHour, 1, 500, def.NamespaceEnrichment.Sweep.MaxNamespacesPerHour)
 	ne.Sweep.MinReenrichIntervalMinutes = clampInt(ne.Sweep.MinReenrichIntervalMinutes, 5, 1440, def.NamespaceEnrichment.Sweep.MinReenrichIntervalMinutes)
 	ne.Sweep.MaxParallel = clampInt(ne.Sweep.MaxParallel, 1, 4, def.NamespaceEnrichment.Sweep.MaxParallel)
+
+	ace := &out.AllContextEnrichment
+	ace.IntervalSec = clampInt(ace.IntervalSec, 60, 3600, def.AllContextEnrichment.IntervalSec)
+	ace.MaxContextsPerCycle = clampInt(ace.MaxContextsPerCycle, 1, 25, def.AllContextEnrichment.MaxContextsPerCycle)
+	ace.IdleQuietMs = clampInt(ace.IdleQuietMs, 5000, 300000, def.AllContextEnrichment.IdleQuietMs)
 
 	out.BackgroundBudget.MaxConcurrentPerCluster = clampInt(out.BackgroundBudget.MaxConcurrentPerCluster, 1, 16, def.BackgroundBudget.MaxConcurrentPerCluster)
 	out.BackgroundBudget.MaxBackgroundConcurrentPerCluster = clampInt(out.BackgroundBudget.MaxBackgroundConcurrentPerCluster, 1, out.BackgroundBudget.MaxConcurrentPerCluster, def.BackgroundBudget.MaxBackgroundConcurrentPerCluster)
@@ -712,6 +745,26 @@ func applyDataplanePolicyOverride(global DataplanePolicy, override DataplanePoli
 			if ov.Sweep.IncludeSystemNamespaces != nil {
 				out.NamespaceEnrichment.Sweep.IncludeSystemNamespaces = *ov.Sweep.IncludeSystemNamespaces
 			}
+		}
+	}
+	if ov := override.AllContextEnrichment; ov != nil {
+		if ov.Enabled != nil {
+			out.AllContextEnrichment.Enabled = *ov.Enabled
+		}
+		if ov.IntervalSec != nil {
+			out.AllContextEnrichment.IntervalSec = *ov.IntervalSec
+		}
+		if ov.MaxContextsPerCycle != nil {
+			out.AllContextEnrichment.MaxContextsPerCycle = *ov.MaxContextsPerCycle
+		}
+		if ov.IdleQuietMs != nil {
+			out.AllContextEnrichment.IdleQuietMs = *ov.IdleQuietMs
+		}
+		if ov.PauseOnUserActivity != nil {
+			out.AllContextEnrichment.PauseOnUserActivity = *ov.PauseOnUserActivity
+		}
+		if ov.PauseWhenSchedulerBusy != nil {
+			out.AllContextEnrichment.PauseWhenSchedulerBusy = *ov.PauseWhenSchedulerBusy
 		}
 	}
 	if ov := override.BackgroundBudget; ov != nil {
