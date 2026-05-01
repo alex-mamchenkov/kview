@@ -569,6 +569,8 @@ function AppInner() {
                 <NamespacesTable
                   token={token}
                   listApiPath={namespacesListPath}
+                  favourites={favourites}
+                  onToggleFavourite={onToggleFavourite}
                   onNavigate={(sec, ns) => {
                     onSelectNamespace(ns);
                     onSelectSection(sec as Section);

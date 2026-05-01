@@ -101,12 +101,13 @@ export default function ResourceListPage<TRow extends { id: string }>({
     if (!columns.some((col) => col.field === "listSignalSeverity")) return columns;
     const fieldPriority = (field: string): number => {
       const f = field.toLowerCase();
-      if (f === "name") return 0;
-      if (f === "listsignalseverity") return 1;
-      if (f === "liststatus" || f === "status" || f === "phase" || f === "health") return 2;
+      if (f === "isfavourite") return 0;
+      if (f === "name") return 1;
+      if (f === "listsignalseverity") return 2;
+      if (f === "liststatus" || f === "status" || f === "phase" || f === "health") return 3;
       if (f.includes("age")) return 6;
       if (f.includes("time") || f.includes("last") || f.includes("seen") || f.includes("updated")) return 5;
-      return 3;
+      return 4;
     };
     return [...columns].sort((a, b) => {
       const pa = fieldPriority(String(a.field));

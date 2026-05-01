@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Box, Tooltip, Typography } from "@mui/material";
+import { Box, IconButton, Tooltip, Typography } from "@mui/material";
+import StarIcon from "@mui/icons-material/Star";
+import StarBorderIcon from "@mui/icons-material/StarBorder";
 import { GridColDef } from "@mui/x-data-grid";
 import { apiGet, apiGetWithContext } from "../../../api";
 import {
@@ -23,7 +25,7 @@ import ScopedCountChip from "../../shared/ScopedCountChip";
 type Namespace = NonNullable<ApiNamespacesListResponse["items"]>[number];
 type NamespaceProjectionUpdate = ApiNamespacesEnrichmentPoll["updates"][number];
 
-type Row = Namespace & { id: string };
+type Row = Namespace & { id: string; isFavourite: boolean };
 
 const resourceLabel = getResourceLabel("namespaces");
 
@@ -80,7 +82,7 @@ function mergeNamespaceProjection<T extends NamespaceProjectionUpdate>(base: T |
   return { ...base, ...patch };
 }
 
-const columns: GridColDef<Row>[] = [
+const baseColumns: GridColDef<Row>[] = [
   { field: "name", headerName: "Name", flex: 1, minWidth: 200 },
   {
     field: "listSignalSeverity",
@@ -199,11 +201,15 @@ const columns: GridColDef<Row>[] = [
 export default function NamespacesTable({
   token,
   listApiPath,
+  favourites,
+  onToggleFavourite,
   onNavigate,
 }: {
   token: string;
   /** GET path for the namespaces list (optional query hints for prioritized row details). */
   listApiPath: string;
+  favourites: string[];
+  onToggleFavourite: (namespace: string) => void;
   onNavigate?: (section: string, namespace: string) => void;
 }) {
   const [rowProjection, setRowProjection] = useState<ApiNamespacesListResponse["rowProjection"] | null>(null);
@@ -216,6 +222,48 @@ export default function NamespacesTable({
   const { health } = useConnectionState();
   const { settings } = useUserSettings();
   const namespaceRowDetailsPollMs = settings.dataplane.global.namespaceEnrichment.pollMs;
+  const favouriteSet = useMemo(() => new Set(favourites), [favourites]);
+
+  const columns = useMemo<GridColDef<Row>[]>(
+    () => [
+      {
+        field: "isFavourite",
+        headerName: "Favourite",
+        width: 56,
+        align: "center",
+        headerAlign: "center",
+        sortable: true,
+        valueGetter: (_value, row) => row.isFavourite,
+        sortComparator: (a, b) => Number(Boolean(a)) - Number(Boolean(b)),
+        renderHeader: () => (
+          <Tooltip title="Favourite">
+            <StarIcon fontSize="small" sx={{ color: "text.secondary" }} />
+          </Tooltip>
+        ),
+        renderCell: (p) => {
+          const isFavourite = Boolean(p.row.isFavourite);
+          const label = isFavourite ? `Remove ${p.row.name} from favourites` : `Add ${p.row.name} to favourites`;
+          return (
+            <Tooltip title={label}>
+              <IconButton
+                size="small"
+                aria-label={label}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleFavourite(p.row.name);
+                }}
+                sx={{ color: isFavourite ? "warning.main" : "text.secondary" }}
+              >
+                {isFavourite ? <StarIcon fontSize="small" /> : <StarBorderIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          );
+        },
+      },
+      ...baseColumns,
+    ],
+    [onToggleFavourite],
+  );
 
   useEffect(() => {
     setEnrichRows(null);
@@ -233,15 +281,17 @@ export default function NamespacesTable({
     setRowProjection(res.rowProjection ?? null);
     const items = res.items || [];
     return {
-      rows: items.map((n) => ({ ...n, id: n.name })),
+      rows: items.map((n) => ({ ...n, id: n.name, isFavourite: favouriteSet.has(n.name) })),
       dataplaneMeta: dataplaneListMetaFromResponse({ meta: res.meta, observed: res.observed }),
     };
-  }, [token, listApiPath]);
+  }, [token, listApiPath, favouriteSet]);
 
   const mapRows = useCallback(
     (rows: Row[]) => {
       const listRev = rowProjection?.revision ?? 0;
-      if (enrichedRowsByName.size === 0 && !enrichRows?.length) return rows;
+      if (enrichedRowsByName.size === 0 && !enrichRows?.length) {
+        return rows.map((r) => ({ ...r, isFavourite: favouriteSet.has(r.name) }));
+      }
       const currentRevisionRows =
         listRev && enrichPoll != null && enrichPoll.revision === listRev && enrichRows?.length
           ? new Map(enrichRows.map((n) => [n.name, n]))
@@ -249,10 +299,11 @@ export default function NamespacesTable({
       return rows.map((r) => {
         const current = currentRevisionRows?.get(r.name);
         const ex = current?.rowEnriched ? current : enrichedRowsByName.get(r.name);
-        return ex ? ({ ...r, ...ex, id: r.name } as Row) : r;
+        const isFavourite = favouriteSet.has(r.name);
+        return ex ? ({ ...r, ...ex, id: r.name, isFavourite } as Row) : { ...r, isFavourite };
       });
     },
-    [enrichRows, enrichPoll, enrichedRowsByName, rowProjection?.revision],
+    [enrichRows, enrichPoll, enrichedRowsByName, favouriteSet, rowProjection?.revision],
   );
 
   const revision = rowProjection?.revision ?? 0;
@@ -365,7 +416,7 @@ export default function NamespacesTable({
       title={title}
       dataplaneMetaPrefix={listStatusPrefix}
       mapRows={mapRows}
-      mapRowsDeps={[enrichRows, enrichPoll, enrichedRowsByName, rowProjection?.revision]}
+      mapRowsDeps={[enrichRows, enrichPoll, enrichedRowsByName, favouriteSet, rowProjection?.revision]}
       columns={columns}
       fetchRows={fetchRows}
       dataplaneRevisionPoll={{
