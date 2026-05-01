@@ -20,6 +20,7 @@ export type ResourceTableToolbarProps = {
   filterLabel: string;
   filter: string;
   onFilterChange: (value: string) => void;
+  filterInputRef?: React.Ref<HTMLInputElement>;
   selectedQuickFilter: string | null;
   onQuickFilterToggle: (value: string) => void;
   refreshSec: number;
@@ -33,6 +34,7 @@ export default function ResourceTableToolbar({
   filterLabel,
   filter,
   onFilterChange,
+  filterInputRef,
   selectedQuickFilter,
   onQuickFilterToggle,
   refreshSec,
@@ -49,6 +51,7 @@ export default function ResourceTableToolbar({
           label={filterLabel}
           value={filter}
           onChange={(e) => onFilterChange(e.target.value)}
+          inputRef={filterInputRef}
           sx={{ minWidth: 340 }}
           disabled={disabled}
           InputProps={{

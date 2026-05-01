@@ -24,6 +24,7 @@ type Props = {
   token: string;
   activeContext: string;
   disabled?: boolean;
+  focusNonce?: number;
   onOpenResult: (item: ApiDataplaneSearchItem) => void;
 };
 
@@ -42,7 +43,7 @@ function isAbortError(error: unknown): boolean {
   return (error as { name?: unknown }).name === "AbortError";
 }
 
-export default function DataplaneQuickSearch({ token, activeContext, disabled, onOpenResult }: Props) {
+export default function DataplaneQuickSearch({ token, activeContext, disabled, focusNonce = 0, onOpenResult }: Props) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<ApiDataplaneSearchItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -51,6 +52,7 @@ export default function DataplaneQuickSearch({ token, activeContext, disabled, o
   const [error, setError] = useState("");
   const [hasMore, setHasMore] = useState(false);
   const anchorRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
   const loadMoreAbortRef = useRef<AbortController | null>(null);
   const searchSeqRef = useRef(0);
@@ -121,6 +123,13 @@ export default function DataplaneQuickSearch({ token, activeContext, disabled, o
     };
   }, []);
 
+  useEffect(() => {
+    if (!focusNonce || disabled || !activeContext) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+    setOpen(true);
+  }, [activeContext, disabled, focusNonce]);
+
   const loadMore = React.useCallback(() => {
     if (!canSearch || loading || loadingMore) return;
     const searchQuery = trimmed;
@@ -188,6 +197,7 @@ export default function DataplaneQuickSearch({ token, activeContext, disabled, o
           placeholder="Search cached dataplane"
           value={query}
           disabled={disabled || !activeContext}
+          inputRef={inputRef}
           onChange={(e) => {
             setQuery(e.target.value);
             setOpen(true);

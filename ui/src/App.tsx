@@ -60,6 +60,7 @@ import { POLL_STATUS_INTERVAL_MS } from "./constants/pollIntervals";
 import { dataplaneSearchSectionByKind } from "./constants/resourceSections";
 import { dataplaneSettingsForContext } from "./settings";
 import { buildDataplaneBundleForSync } from "./dataplaneSync";
+import KeyboardProvider from "./keyboard/KeyboardProvider";
 import "./styles/theme.css";
 
 function getToken(): string {
@@ -131,6 +132,7 @@ function AppInner() {
   const [section, setSection] = useState<Section>("pods");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchDrawerItem, setSearchDrawerItem] = useState<ApiDataplaneSearchItem | null>(null);
+  const [searchFocusNonce, setSearchFocusNonce] = useState(0);
 
   const [favourites, setFavourites] = useState<string[]>([]);
 
@@ -450,9 +452,21 @@ function AppInner() {
 
   return (
     <ActiveContextProvider value={activeContext}>
-        <MutationProvider>
-        <DataplaneSettingsSync token={token} />
-        <Box
+      <MutationProvider>
+        <KeyboardProvider
+          namespaces={namespaces}
+          contexts={contexts.map((ctx) => ctx.name)}
+          settingsOpen={settingsOpen}
+          onFocusGlobalSearch={() => setSearchFocusNonce((nonce) => nonce + 1)}
+          onSelectSection={onSelectSection}
+          onSelectNamespace={onSelectNamespace}
+          onSelectContext={(name) => {
+            void onSelectContext(name);
+          }}
+          onOpenSettings={() => setSettingsOpen(true)}
+        >
+          <DataplaneSettingsSync token={token} />
+          <Box
           sx={{
             display: "flex",
             height: "100dvh",
@@ -498,6 +512,7 @@ function AppInner() {
                     token={token}
                     activeContext={activeContext}
                     disabled={health === "unhealthy"}
+                    focusNonce={searchFocusNonce}
                     onOpenResult={onOpenSearchResult}
                   />
                 </Box>
@@ -646,7 +661,8 @@ function AppInner() {
             }}
           />
         </Box>
-        </MutationProvider>
+        </KeyboardProvider>
+      </MutationProvider>
     </ActiveContextProvider>
   );
 }

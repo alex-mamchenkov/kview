@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Paper, Typography, Box } from "@mui/material";
 import { DataGrid, GridColDef, GridRowSelectionModel } from "@mui/x-data-grid";
 import useListQuery from "../../utils/useListQuery";
@@ -13,6 +13,7 @@ import ResourceTableToolbar, { type ResourceTableToolbarProps } from "./Resource
 import DataplaneListMetaStrip from "./DataplaneListMetaStrip";
 import { useActiveContext } from "../../activeContext";
 import { useConnectionState } from "../../connectionState";
+import { useKeyboardControls } from "../../keyboard/KeyboardProvider";
 
 const defaultDataplaneRefreshSec = 10;
 
@@ -126,9 +127,11 @@ export default function ResourceListPage<TRow extends { id: string }>({
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Id of the row shown in the drawer (set when opening via Open or double-click). */
   const [drawerSelectedId, setDrawerSelectedId] = useState<string | null>(null);
+  const filterInputRef = useRef<HTMLInputElement | null>(null);
   const [refreshSec, setRefreshSec] = useState<number>(initialRefreshSec ?? 0);
   const activeContext = useActiveContext();
   const { health } = useConnectionState();
+  const { registerTableControls } = useKeyboardControls();
   const offline = health === "unhealthy";
 
   useEffect(() => {
@@ -189,10 +192,28 @@ export default function ResourceListPage<TRow extends { id: string }>({
     setDrawerOpen(true);
   }, []);
 
+  const handleOpenSelectedRow = useCallback(() => {
+    if (!selectedId) return false;
+    setDrawerSelectedId(selectedId);
+    setDrawerOpen(true);
+    return true;
+  }, [selectedId]);
+
   const handleCloseDrawer = useCallback(() => {
     setDrawerOpen(false);
     setDrawerSelectedId(null);
   }, []);
+
+  useEffect(() => {
+    return registerTableControls({
+      focusFilter: () => {
+        filterInputRef.current?.focus();
+        filterInputRef.current?.select();
+        return !!filterInputRef.current;
+      },
+      openSelectedRow: handleOpenSelectedRow,
+    });
+  }, [handleOpenSelectedRow, registerTableControls]);
 
   const emptyMessage = `No ${resourceLabel} found.`;
   const filteredEmptyMessage = `No ${resourceLabel} match the current filter. Clear or change the filter to see ${rows.length === 1 ? "the existing item" : `the ${rows.length} existing items`}.`;
@@ -246,6 +267,7 @@ export default function ResourceListPage<TRow extends { id: string }>({
               filterLabel,
               filter,
               onFilterChange: setFilter,
+              filterInputRef,
               selectedQuickFilter,
               onQuickFilterToggle: toggleQuickFilter,
               refreshSec,
