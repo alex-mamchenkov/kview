@@ -6,6 +6,7 @@ DIST_DIR=dist
 GOOS?=linux
 GOARCH?=amd64
 DOCKER_IMAGE=kview-build:go1.26.2-node22.20.0
+DOCKER_BUILD?=1
 COVERAGE_DIR=.artifacts/coverage
 VERSION?=$(shell sh -c 'tag=""; \
 	if [ "$$GITHUB_REF_TYPE" = "tag" ] && [ -n "$$GITHUB_REF_NAME" ]; then \
@@ -145,7 +146,16 @@ local-build-release: install-git-hooks local-ui
 	@echo "Built $(OUTPUT) ($(GOOS)/$(GOARCH); browser/server modes; default: browser)"
 
 docker-image: install-git-hooks
+ifeq ($(DOCKER_BUILD),0)
+	@if docker image inspect "$(DOCKER_IMAGE)" >/dev/null 2>&1; then \
+		echo "Using Docker image $(DOCKER_IMAGE)"; \
+	else \
+		echo "Pulling Docker image $(DOCKER_IMAGE)"; \
+		docker pull "$(DOCKER_IMAGE)"; \
+	fi
+else
 	docker build -t $(DOCKER_IMAGE) .
+endif
 
 clean: install-git-hooks
 	rm -rf $(UI_DIR)/dist

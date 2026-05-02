@@ -1,0 +1,35 @@
+name: Toolchain Image
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "Dockerfile"
+      - ".github/workflows/toolchain-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Publish toolchain image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set toolchain image
+        run: echo "TOOLCHAIN_IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/toolchain:${{ hashFiles('Dockerfile') }}" >> "$GITHUB_ENV"
+
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build toolchain image
+        run: docker build -t "$TOOLCHAIN_IMAGE" .
+
+      - name: Publish toolchain image
+        run: docker push "$TOOLCHAIN_IMAGE"
